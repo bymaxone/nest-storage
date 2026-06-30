@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 📋 ToDo · **Progress**: 0 / 14 tasks · **Last updated**: 2026-06-23
+> **Status**: 🔄 In Progress · **Progress**: 0 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
