@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "noUnusedParameters": false,
+    "baseUrl": ".",
+    "types": ["node", "jest", "reflect-metadata"],
+    "paths": {
+      "@bymax-one/nest-storage": ["./src/server/index.ts"],
+      "@bymax-one/nest-storage/shared": ["./src/shared/index.ts"]
+    }
+  },
+  "include": ["test/e2e/**/*.ts"],
+  "exclude": ["node_modules", "dist", "coverage"]
+}
