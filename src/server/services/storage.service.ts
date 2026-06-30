@@ -7,7 +7,12 @@
  * @layer server/services
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { HeadObjectCommand, PutObjectCommand, type PutObjectCommandInput } from '@aws-sdk/client-s3'
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  type PutObjectCommandInput,
+} from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import {
   BYMAX_STORAGE_IDEMPOTENCY_CACHE,
@@ -15,6 +20,7 @@ import {
 } from '../bymax-storage.constants'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
+import type { DownloadOptions } from '../interfaces/download-options.interface'
 import type { ObjectMetadata, UploadResult } from '../../shared/types/storage-types'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
@@ -47,6 +53,11 @@ interface S3ObjectResponse {
 /** Per-call options that only need to override the target bucket. */
 interface BucketScopedOptions {
   bucket?: string
+}
+
+/** The Node `GetObject` body carries the sdk-stream-mixin's byte materializer. */
+interface SdkByteStream {
+  transformToByteArray(): Promise<Uint8Array>
 }
 
 @Injectable()
@@ -163,6 +174,62 @@ export class StorageService {
     const finalKey = this.keyResolver.normalize(key)
     const bucket = this.resolveBucket(options?.bucket)
     return this.buildPublicUrl(finalKey, bucket)
+  }
+
+  /**
+   * Streams an object. The returned `stream` is a Node `Readable` consumable via
+   * `for await` or `.pipe()`. `range` / `ifNoneMatch` / `ifMatch` are forwarded as
+   * conditional/partial GET headers.
+   *
+   * @param options - The download request.
+   * @returns The object stream and its metadata.
+   * @throws StorageException `STORAGE_OBJECT_NOT_FOUND` when the body is absent.
+   */
+  async download(
+    options: DownloadOptions,
+  ): Promise<{ stream: NodeJS.ReadableStream; metadata: ObjectMetadata }> {
+    this.assertConfigured()
+    const finalKey = this.keyResolver.normalize(options.key)
+    const bucket = this.resolveBucket(options.bucket)
+    try {
+      const response = await this.s3Provider.getClient().send(
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: finalKey,
+          Range: options.range,
+          IfNoneMatch: options.ifNoneMatch,
+          IfMatch: options.ifMatch,
+        }),
+      )
+      if (!response.Body) {
+        throw new StorageException(STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND, undefined, {
+          key: finalKey,
+          bucket,
+        })
+      }
+      const stream = response.Body as unknown as NodeJS.ReadableStream
+      return { stream, metadata: this.toObjectMetadata(response, finalKey, bucket) }
+    } catch (err) {
+      if (err instanceof StorageException) {
+        throw err
+      }
+      throw mapAwsError(err, { key: finalKey, bucket, op: 'download' })
+    }
+  }
+
+  /**
+   * Materializes an object fully into memory via the sdk-stream-mixin. NOT
+   * recommended for files larger than 10 MB — use {@link download} for those.
+   *
+   * @param options - The download request.
+   * @returns The object buffer and its metadata.
+   */
+  async downloadBuffer(
+    options: DownloadOptions,
+  ): Promise<{ buffer: Buffer; metadata: ObjectMetadata }> {
+    const { stream, metadata } = await this.download(options)
+    const bytes = await (stream as unknown as SdkByteStream).transformToByteArray()
+    return { buffer: Buffer.from(bytes), metadata }
   }
 
   /** Throws when the S3 client was never built (missing credentials). */

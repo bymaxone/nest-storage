@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 🔄 In Progress · **Progress**: 7 / 14 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 8 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
@@ -55,7 +55,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 | 2.5 | StorageService base (assertConfigured, resolveBucket, head, exists, getPublicUrl) | ✅ Done | P0 | M | 1.13, 1.14, 2.1, 2.4 |
 | 2.6 | StorageService.upload (single-shot path) | ✅ Done | P0 | M | 2.2, 2.3, 2.5 |
 | 2.7 | StorageService.uploadMultipart (lib-storage Upload) | ✅ Done | P0 | M | 2.6 |
-| 2.8 | StorageService.download + downloadBuffer | 📋 ToDo | P0 | M | 2.5 |
+| 2.8 | StorageService.download + downloadBuffer | ✅ Done | P0 | M | 2.5 |
 | 2.9 | StorageService.delete (idempotent) | 📋 ToDo | P1 | S | 2.5 |
 | 2.10 | Module wiring — register StorageService + IdempotencyCache + barrel | 📋 ToDo | P0 | S | 1.15, 2.1, 2.6, 2.7, 2.8, 2.9 |
 | 2.11 | Tests — utilities (idempotency-cache, stream-utils, upload-strategy, header-utils) | 📋 ToDo | P0 | L | 2.1, 2.2, 2.3, 2.4 |
@@ -663,7 +663,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.8 — StorageService.download + downloadBuffer
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 2.5
@@ -674,13 +674,13 @@ Completion Protocol (after you finish):
 
 #### Acceptance criteria
 
-- [ ] `download()` returns `{ stream, metadata }` for an existing key.
-- [ ] `download()` propagates `Range`, `IfNoneMatch`, and `IfMatch` to the GetObject command.
-- [ ] `download()` throws `STORAGE_OBJECT_NOT_FOUND` when the response has no `Body`.
-- [ ] The returned `stream` is a Node `Readable` consumable via `for await` / `.pipe()`.
-- [ ] `downloadBuffer()` materializes the object into a `Buffer` via `transformToByteArray()`.
-- [ ] Errors map through `mapAwsError(err, { key, bucket, op: 'download' })`; `downloadBuffer` JSDoc warns it is not for files > 10 MB.
-- [ ] File header present; `pnpm typecheck` passes; coverage finalized in 2.13.
+- [x] `download()` returns `{ stream, metadata }` for an existing key.
+- [x] `download()` propagates `Range`, `IfNoneMatch`, and `IfMatch` to the GetObject command.
+- [x] `download()` throws `STORAGE_OBJECT_NOT_FOUND` when the response has no `Body`.
+- [x] The returned `stream` is a Node `Readable` consumable via `for await` / `.pipe()`.
+- [x] `downloadBuffer()` materializes the object into a `Buffer` via `transformToByteArray()`.
+- [x] Errors map through `mapAwsError(err, { key, bucket, op: 'download' })`; `downloadBuffer` JSDoc warns it is not for files > 10 MB.
+- [x] File header present; `pnpm typecheck` passes; coverage finalized in 2.13.
 
 #### Files to create / modify
 
@@ -1212,3 +1212,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 2.5 ✅ 2026-06-30 — StorageService base: DI constructor, assertConfigured/resolveBucket/buildPublicUrl helpers, head/exists/getPublicUrl.
 - 2.6 ✅ 2026-06-30 — upload(): validation, key/bucket resolution, idempotency dedup, strategy dispatch, single-shot PutObject + automatic headers + progress.
 - 2.7 ✅ 2026-06-30 — uploadMultipart: lib-storage Upload (leavePartsOnError:false auto-abort), httpUploadProgress events, STORAGE_MULTIPART_ABORTED on failure.
+- 2.8 ✅ 2026-06-30 — download(): Node Readable stream + metadata, Range/If-(None-)Match propagation, empty-body NOT_FOUND; downloadBuffer() via transformToByteArray().
