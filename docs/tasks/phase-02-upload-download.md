@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 🔄 In Progress · **Progress**: 10 / 14 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 11 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
@@ -58,7 +58,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 | 2.8 | StorageService.download + downloadBuffer | ✅ Done | P0 | M | 2.5 |
 | 2.9 | StorageService.delete (idempotent) | ✅ Done | P1 | S | 2.5 |
 | 2.10 | Module wiring — register StorageService + IdempotencyCache + barrel | ✅ Done | P0 | S | 1.15, 2.1, 2.6, 2.7, 2.8, 2.9 |
-| 2.11 | Tests — utilities (idempotency-cache, stream-utils, upload-strategy, header-utils) | 📋 ToDo | P0 | L | 2.1, 2.2, 2.3, 2.4 |
+| 2.11 | Tests — utilities (idempotency-cache, stream-utils, upload-strategy, header-utils) | ✅ Done | P0 | L | 2.1, 2.2, 2.3, 2.4 |
 | 2.12 | Tests — StorageService (single-shot + head/exists/delete/getPublicUrl) | 📋 ToDo | P0 | L | 2.9, 2.10 |
 | 2.13 | Tests — StorageService multipart + download/downloadBuffer | 📋 ToDo | P1 | M | 2.12 |
 | 2.14 | Phase validation + smoke test against MinIO | 📋 ToDo | P0 | M | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13 |
@@ -891,7 +891,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.11 — Tests — utilities (idempotency-cache, stream-utils, upload-strategy, header-utils)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 2.1, 2.2, 2.3, 2.4
@@ -902,12 +902,12 @@ Unit specs that bring all four phase utilities to 100% line/branch coverage and 
 
 #### Acceptance criteria
 
-- [ ] Four spec files created (one per utility).
-- [ ] `idempotency-cache.spec.ts`: set/get round-trip, TTL expiry (injected clock), eviction over cap, the critical LRU-touch test (A, B, C, A → over cap removes B not A), `computeKey` determinism, `clear()`.
-- [ ] `stream-utils.spec.ts`: type guards, `getBodySize` for Buffer/Uint8Array/stream, `peekFirstBytes` zero-copy for buffers, `peekFirstBytes` tee for streams with a fully consumable `replacementBody`, `bufferToReadable`.
-- [ ] `upload-strategy.spec.ts`: the full decision table (small/large buffer, stream with/without size, Uint8Array).
-- [ ] `header-utils.spec.ts`: each builder including the SSE `'NONE'` short-circuit and both ACL branches.
-- [ ] `pnpm test src/server/utils/` passes; every util file at 100% line/branch; Stryker mutation ≥ 95 (break 95).
+- [x] Four spec files created (one per utility).
+- [x] `idempotency-cache.spec.ts`: set/get round-trip, TTL expiry (injected clock), eviction over cap, the critical LRU-touch test (A, B, C, A → over cap removes B not A), `computeKey` determinism, `clear()`.
+- [x] `stream-utils.spec.ts`: type guards, `getBodySize` for Buffer/Uint8Array/stream, `peekFirstBytes` zero-copy for buffers, `peekFirstBytes` tee for streams with a fully consumable `replacementBody`, `bufferToReadable`.
+- [x] `upload-strategy.spec.ts`: the full decision table (small/large buffer, stream with/without size, Uint8Array).
+- [x] `header-utils.spec.ts`: each builder including the SSE `'NONE'` short-circuit and both ACL branches.
+- [x] `pnpm test src/server/utils/` passes; every util file at 100% line/branch; Stryker mutation ≥ 95 (break 95).
 
 #### Files to create / modify
 
@@ -1215,3 +1215,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 2.8 ✅ 2026-06-30 — download(): Node Readable stream + metadata, Range/If-(None-)Match propagation, empty-body NOT_FOUND; downloadBuffer() via transformToByteArray().
 - 2.9 ✅ 2026-06-30 — delete(): idempotent DeleteObject; a mapped 404 is a logged no-op, other errors propagate.
 - 2.10 ✅ 2026-06-30 — module wiring: IdempotencyCache factory + StorageService in providers/exports; barrel re-exports StorageService (server 7.9 KB brotli).
+- 2.11 ✅ 2026-06-30 — utility specs: idempotency-cache, stream-utils, upload-strategy, header-utils all at 100% line/branch/function.

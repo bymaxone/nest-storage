@@ -101,7 +101,9 @@ async function teeAndPeek(
     uploadPT.end()
   })
   source.on('error', (err: Error) => {
-    peekPT.destroy(err)
+    // End the peek side gracefully so the head resolves with whatever arrived,
+    // and surface the failure on the upload side for the consumer to handle.
+    closePeek()
     uploadPT.destroy(err)
   })
   const head = await collectStream(peekPT)
