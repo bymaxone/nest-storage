@@ -49,6 +49,8 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
    * Returns the live client, building it on first use, or `null` when storage is
    * not configured. Used by the public raw-client token so its value does not
    * depend on lifecycle-hook ordering.
+   *
+   * @returns The singleton client, or `null` when no credentials are configured.
    */
   getClientOrNull(): S3Client | null {
     if (!this.options.hasCredentials) {
@@ -60,6 +62,9 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
   /**
    * Returns the singleton client. Throws when storage is not configured — call
    * `isConfigured()` first and surface a typed `STORAGE_NOT_CONFIGURED`.
+   *
+   * @returns The singleton `S3Client`.
+   * @throws Error when storage is not configured.
    */
   getClient(): S3Client {
     if (!this.client) {
@@ -68,6 +73,11 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
     return this.client
   }
 
+  /**
+   * Reports whether the singleton client has been built.
+   *
+   * @returns `true` once the client exists, `false` otherwise.
+   */
   isConfigured(): boolean {
     return Boolean(this.client)
   }

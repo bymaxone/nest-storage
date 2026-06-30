@@ -24,6 +24,9 @@ import {
  * without a default (`cdnBaseUrl`, `validation`, `scanner`,
  * `serverSideEncryption`, `kmsKeyId`) are included only when provided so the
  * result stays compatible with `exactOptionalPropertyTypes`.
+ *
+ * @param options - The validated consumer options.
+ * @returns The fully-resolved options with every defaulted field present.
  */
 export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymaxStorageOptions {
   const hasCredentials =

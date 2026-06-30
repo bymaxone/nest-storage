@@ -22,6 +22,10 @@ interface AwsLikeError {
  *   - `name === 'NotFound'` or HTTP 404 → `STORAGE_OBJECT_NOT_FOUND` (404)
  *   - `name === 'TimeoutError'`          → `STORAGE_TIMEOUT` (504)
  *   - anything else                      → `STORAGE_PROVIDER_ERROR` (502)
+ *
+ * @param err - The error thrown by the AWS SDK (typed as `unknown`).
+ * @param context - Optional non-sensitive context merged into `details`.
+ * @returns A typed `StorageException` carrying observability metadata.
  */
 export function mapAwsError(err: unknown, context?: Record<string, unknown>): StorageException {
   const e = (err ?? {}) as AwsLikeError

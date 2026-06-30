@@ -29,6 +29,7 @@ function isNonEmptyString(value: unknown): value is string {
  * Validates options at module bootstrap. Credentials may be empty (handled
  * lazily); structural fields are mandatory.
  *
+ * @param options - The raw options passed to `forRoot`/`forRootAsync`.
  * @throws StorageException with code `STORAGE_INVALID_CONFIG`.
  */
 export function validateOptions(options: unknown): void {

@@ -29,6 +29,8 @@ export class KeyResolverService {
    * bytes, a leading `/`, and any `..` path segment; collapses duplicate slashes;
    * prepends the configured prefix.
    *
+   * @param rawKey - The caller-provided key, already URL-decoded by the caller.
+   * @returns The prefixed, normalized object key.
    * @throws StorageException with code `STORAGE_KEY_INVALID`.
    */
   normalize(rawKey: string): string {
@@ -51,6 +53,9 @@ export class KeyResolverService {
   /**
    * Strips the global key prefix from a key — useful when returning keys to the
    * consumer so they need not know the prefix exists.
+   *
+   * @param fullKey - A normalized key that may carry the global prefix.
+   * @returns The key without the configured prefix.
    */
   stripPrefix(fullKey: string): string {
     if (this.keyPrefix && fullKey.startsWith(this.keyPrefix)) {
@@ -59,7 +64,11 @@ export class KeyResolverService {
     return fullKey
   }
 
-  /** Read-only accessor for the resolved prefix. */
+  /**
+   * Read-only accessor for the resolved prefix.
+   *
+   * @returns The normalized prefix (empty string when none is configured).
+   */
   getPrefix(): string {
     return this.keyPrefix
   }

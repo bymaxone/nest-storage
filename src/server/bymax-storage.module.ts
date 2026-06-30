@@ -22,7 +22,12 @@ import { KeyResolverService } from './services/key-resolver.service'
 @Module({})
 export class BymaxStorageModule {
   /**
-   * Synchronous configuration.
+   * Synchronous configuration. Validates and resolves the options, then returns
+   * the wired dynamic module.
+   *
+   * @param options - The storage module options.
+   * @returns The configured `DynamicModule`.
+   * @throws StorageException with code `STORAGE_INVALID_CONFIG` on invalid options.
    *
    * @example
    *   BymaxStorageModule.forRoot({
