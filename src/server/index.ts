@@ -8,6 +8,9 @@
 // Module
 export { BymaxStorageModule } from './bymax-storage.module'
 
+// Services
+export { StorageService } from './services/storage.service'
+
 // DI Tokens
 export {
   BYMAX_STORAGE_OPTIONS,
