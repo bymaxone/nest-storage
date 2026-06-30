@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 14 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 1 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
@@ -48,7 +48,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 2.1 | IdempotencyCache (LRU + TTL) | 📋 ToDo | P0 | S | 1.8 |
+| 2.1 | IdempotencyCache (LRU + TTL) | ✅ Done | P0 | S | 1.8 |
 | 2.2 | stream-utils (isReadable, isBufferLike, getBodySize, peekFirstBytes, bufferToReadable) | 📋 ToDo | P0 | M | 1.6 |
 | 2.3 | upload-strategy (single-shot vs multipart decision) | 📋 ToDo | P1 | S | 2.2 |
 | 2.4 | header-utils (Content-Disposition, Cache-Control, SSE, ACL builders) | 📋 ToDo | P1 | S | 1.9, 1.12 |
@@ -69,7 +69,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 
 ### Task 2.1 — IdempotencyCache (LRU + TTL)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.8
@@ -80,13 +80,13 @@ An in-memory LRU cache with TTL that deduplicates uploads keyed by `idempotencyK
 
 #### Acceptance criteria
 
-- [ ] `set` then `get` returns the value for the same cache key.
-- [ ] `get` returns `undefined` after the TTL elapses (tested with an injected `now` clock).
-- [ ] Eviction happens when `size > maxEntries` (oldest insertion-ordered key removed).
-- [ ] LRU touch is correct: accessing A, B, C, A and then exceeding the cap removes **B**, not A.
-- [ ] `computeKey` is deterministic (same input → same output) and hashes via sha256 (raw `idempotencyKey` never used as the Map key).
-- [ ] File carries a `@fileoverview` + `@layer` header; `pnpm typecheck` passes.
-- [ ] 100% line/branch coverage; Stryker mutation ≥ 95.
+- [x] `set` then `get` returns the value for the same cache key.
+- [x] `get` returns `undefined` after the TTL elapses (tested with an injected `now` clock).
+- [x] Eviction happens when `size > maxEntries` (oldest insertion-ordered key removed).
+- [x] LRU touch is correct: accessing A, B, C, A and then exceeding the cap removes **B**, not A.
+- [x] `computeKey` is deterministic (same input → same output) and hashes via sha256 (raw `idempotencyKey` never used as the Map key).
+- [x] File carries a `@fileoverview` + `@layer` header; `pnpm typecheck` passes.
+- [x] 100% line/branch coverage; Stryker mutation ≥ 95.
 
 #### Files to create / modify
 
@@ -1204,3 +1204,5 @@ Completion Protocol (after you finish):
 ## Completion log
 
 _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
+
+- 2.1 ✅ 2026-06-30 — IdempotencyCache: hand-rolled LRU + TTL on a Map (sha256 cache key, injectable clock, oldest-first eviction).
