@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "verbatimModuleSyntax": false,
+    "isolatedModules": false,
+    "sourceMap": true,
+    "inlineSourceMap": false,
+    "types": ["node", "jest", "reflect-metadata"],
+    "baseUrl": ".",
+    "paths": {
+      "@bymax-one/nest-storage": ["./src/server/index.ts"],
+      "@bymax-one/nest-storage/shared": ["./src/shared/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/e2e/**/*.ts"],
+  "exclude": ["node_modules", "dist", "coverage"]
+}
