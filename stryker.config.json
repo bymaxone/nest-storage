@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "pnpm",
+  "testRunner": "jest",
+  "plugins": ["@stryker-mutator/jest-runner", "@stryker-mutator/typescript-checker"],
+  "checkers": ["typescript"],
+  "tsconfigFile": "tsconfig.json",
+  "jest": {
+    "projectType": "custom",
+    "configFile": "jest.stryker.config.ts"
+  },
+  "reporters": ["clear-text", "progress", "json"],
+  "coverageAnalysis": "perTest",
+  "timeoutMS": 15000,
+  "mutate": [
+    "src/server/**/*.ts",
+    "!src/**/*.spec.ts",
+    "!src/**/index.ts",
+    "!src/server/interfaces/**",
+    "!src/server/constants/**",
+    "!src/server/bymax-storage.constants.ts",
+    "!src/server/errors/storage-error-messages.ts",
+    "!src/server/errors/storage-error-status.ts"
+  ],
+  "thresholds": {
+    "high": 100,
+    "low": 95,
+    "break": 95
+  },
+  "concurrency": 1
+}
