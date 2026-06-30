@@ -77,10 +77,10 @@ async function teeAndPeek(
   const peekPT = new PassThrough()
   const uploadPT = new PassThrough()
   let peeked = 0
-  let peekClosed = false
+  let isPeekClosed = false
   const closePeek = (): void => {
-    if (!peekClosed) {
-      peekClosed = true
+    if (!isPeekClosed) {
+      isPeekClosed = true
       peekPT.end()
     }
   }

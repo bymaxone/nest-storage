@@ -67,8 +67,11 @@ export class StorageService {
 
   constructor(
     @Inject(BYMAX_STORAGE_OPTIONS) private readonly options: ResolvedBymaxStorageOptions,
-    private readonly s3Provider: S3ClientProvider,
-    private readonly keyResolver: KeyResolverService,
+    // Class providers are injected by explicit token rather than by reflected
+    // parameter type: the published bundle is produced without decorator metadata,
+    // so type-only injection would resolve to `undefined` for consumers.
+    @Inject(S3ClientProvider) private readonly s3Provider: S3ClientProvider,
+    @Inject(KeyResolverService) private readonly keyResolver: KeyResolverService,
     @Inject(BYMAX_STORAGE_IDEMPOTENCY_CACHE) private readonly idempotencyCache: IdempotencyCache,
   ) {}
 
@@ -83,6 +86,8 @@ export class StorageService {
    */
   async upload(options: UploadOptions): Promise<UploadResult> {
     this.assertConfigured()
+    // Defensive boundary check: callers may pass an absent body from untyped
+    // (JS / request-parsed) data despite the compile-time type.
     const rawBody = options.body as unknown
     if (rawBody === undefined || rawBody === null) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_BODY_MISSING)
@@ -208,6 +213,9 @@ export class StorageService {
           bucket,
         })
       }
+      // The SDK types `Body` as a cross-runtime union; in Node it is always a
+      // Readable. The bridge is unavoidable because the static type is broader
+      // than the concrete runtime value.
       const stream = response.Body as unknown as NodeJS.ReadableStream
       return { stream, metadata: this.toObjectMetadata(response, finalKey, bucket) }
     } catch (err) {
@@ -229,6 +237,8 @@ export class StorageService {
     options: DownloadOptions,
   ): Promise<{ buffer: Buffer; metadata: ObjectMetadata }> {
     const { stream, metadata } = await this.download(options)
+    // The Node GetObject body carries the sdk-stream-mixin, which the public
+    // `NodeJS.ReadableStream` return type of download() does not surface.
     const bytes = await (stream as unknown as SdkByteStream).transformToByteArray()
     return { buffer: Buffer.from(bytes), metadata }
   }
