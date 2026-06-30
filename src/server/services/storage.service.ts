@@ -282,6 +282,12 @@ export class StorageService {
       partSize: this.options.multipart.partSizeBytes,
       leavePartsOnError: false,
     })
+    if (options.onProgress) {
+      const onProgress = options.onProgress
+      uploader.on('httpUploadProgress', (event) => {
+        this.emitProgress(onProgress, event.loaded ?? 0, event.total, event.part)
+      })
+    }
     try {
       const response = await uploader.done()
       return this.buildUploadResult({
