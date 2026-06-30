@@ -35,6 +35,16 @@ describe('KeyResolverService', () => {
       expect(makeService('/tenant-x/').normalize('a.txt')).toBe('tenant-x/a.txt')
     })
 
+    it.each([['/'], ['///']])(
+      'should treat an all-slash prefix as no prefix (no leading "/" leaks into the key): %s',
+      (prefix) => {
+        // All-slash prefix trims to empty — the resolved key must not start with "/".
+        const key = makeService(prefix).normalize('a.txt')
+        expect(key).toBe('a.txt')
+        expect(key.startsWith('/')).toBe(false)
+      },
+    )
+
     it.each([['../etc/passwd'], ['a/../b'], ['../..'], ['./..'], ['a/b/../../c']])(
       'should reject path traversal: %s',
       (input) => {

@@ -20,8 +20,10 @@ export class KeyResolverService {
 
   constructor(@Inject(BYMAX_STORAGE_OPTIONS) options: ResolvedBymaxStorageOptions) {
     // Normalize the prefix: trim surrounding slashes, then add a single trailing
-    // slash when it is non-empty.
-    this.keyPrefix = options.keyPrefix ? `${options.keyPrefix.replace(/^\/+|\/+$/g, '')}/` : ''
+    // slash when it is non-empty. An all-slash prefix (e.g. "/" or "///") trims to
+    // empty and must yield no prefix — never a bare "/" that would leak into the key.
+    const trimmedPrefix = options.keyPrefix ? options.keyPrefix.replace(/^\/+|\/+$/g, '') : ''
+    this.keyPrefix = trimmedPrefix ? `${trimmedPrefix}/` : ''
   }
 
   /**
