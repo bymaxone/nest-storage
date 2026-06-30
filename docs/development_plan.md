@@ -67,15 +67,15 @@ The phase order respects the dependency graph (Appendix A): S3 client before upl
 
 ### 1.4 Progress
 
-- **Overall progress:** 📋 0 / 5 phases done (0%) — 0 / 64 tasks
-- **Active phase:** **Phase 1** (Foundation + S3 Client + Config) — not started
+- **Overall progress:** 🔄 0 / 5 phases done (0%) — 0 / 64 tasks
+- **Active phase:** **Phase 1** (Foundation + S3 Client + Config) — 🔄 In Progress
 - **Blocked:** none
 
 ### 1.5 Phase dashboard
 
 | ID | Phase | Status | Progress | Complexity | Last updated |
 | --- | --- | --- | --- | --- | --- |
-| 1 | [Foundation + S3 Client + Config](./tasks/phase-01-foundation-s3-client-config.md) | 📋 ToDo | 0/17 | MEDIUM | 2026-06-23 |
+| 1 | [Foundation + S3 Client + Config](./tasks/phase-01-foundation-s3-client-config.md) | 🔄 In Progress | 0/17 | MEDIUM | 2026-06-30 |
 | 2 | [Upload (single, multipart, stream) + Download](./tasks/phase-02-upload-download.md) | 📋 ToDo | 0/14 | HIGH | 2026-06-23 |
 | 3 | [Signed URLs + Validation + Scanner](./tasks/phase-03-signed-urls-validation-scanner.md) | 📋 ToDo | 0/12 | MEDIUM | 2026-06-23 |
 | 4 | [Listing + Pagination + forRootAsync + E2E + Mutation](./tasks/phase-04-listing-async-e2e-mutation.md) | 📋 ToDo | 0/12 | HIGH | 2026-06-23 |
