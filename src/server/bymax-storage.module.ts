@@ -65,9 +65,15 @@ export class BymaxStorageModule {
     return {
       module: BymaxStorageModule,
       providers,
-      // Public DI surface: the resolved options + the raw-client token.
-      // S3ClientProvider and KeyResolverService stay internal.
-      exports: [BYMAX_STORAGE_OPTIONS, BYMAX_STORAGE_S3_CLIENT],
+      // Public DI surface: the resolved options, the raw-client token, and the
+      // user-supplied upload-validators + file-scanner tokens — all injectable by
+      // consumers via `@Global()`. S3ClientProvider and KeyResolverService stay internal.
+      exports: [
+        BYMAX_STORAGE_OPTIONS,
+        BYMAX_STORAGE_S3_CLIENT,
+        BYMAX_STORAGE_UPLOAD_VALIDATORS,
+        BYMAX_STORAGE_FILE_SCANNER,
+      ],
     }
   }
 }
