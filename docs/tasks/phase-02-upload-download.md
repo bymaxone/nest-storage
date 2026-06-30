@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 🔄 In Progress · **Progress**: 8 / 14 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 9 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
@@ -56,7 +56,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 | 2.6 | StorageService.upload (single-shot path) | ✅ Done | P0 | M | 2.2, 2.3, 2.5 |
 | 2.7 | StorageService.uploadMultipart (lib-storage Upload) | ✅ Done | P0 | M | 2.6 |
 | 2.8 | StorageService.download + downloadBuffer | ✅ Done | P0 | M | 2.5 |
-| 2.9 | StorageService.delete (idempotent) | 📋 ToDo | P1 | S | 2.5 |
+| 2.9 | StorageService.delete (idempotent) | ✅ Done | P1 | S | 2.5 |
 | 2.10 | Module wiring — register StorageService + IdempotencyCache + barrel | 📋 ToDo | P0 | S | 1.15, 2.1, 2.6, 2.7, 2.8, 2.9 |
 | 2.11 | Tests — utilities (idempotency-cache, stream-utils, upload-strategy, header-utils) | 📋 ToDo | P0 | L | 2.1, 2.2, 2.3, 2.4 |
 | 2.12 | Tests — StorageService (single-shot + head/exists/delete/getPublicUrl) | 📋 ToDo | P0 | L | 2.9, 2.10 |
@@ -745,7 +745,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.9 — StorageService.delete (idempotent)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 2.5
@@ -756,11 +756,11 @@ An idempotent `delete()` — it issues `DeleteObjectCommand` and treats a mapped
 
 #### Acceptance criteria
 
-- [ ] `delete()` calls `DeleteObjectCommand` for an existing key.
-- [ ] `delete()` on a missing key does not throw (logs a warning and returns).
-- [ ] `delete()` propagates non-404 errors.
-- [ ] `assertConfigured` runs first; the key is normalized and the bucket resolved.
-- [ ] File header present; `pnpm typecheck` passes; coverage finalized in 2.12.
+- [x] `delete()` calls `DeleteObjectCommand` for an existing key.
+- [x] `delete()` on a missing key does not throw (logs a warning and returns).
+- [x] `delete()` propagates non-404 errors.
+- [x] `assertConfigured` runs first; the key is normalized and the bucket resolved.
+- [x] File header present; `pnpm typecheck` passes; coverage finalized in 2.12.
 
 #### Files to create / modify
 
@@ -1213,3 +1213,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 2.6 ✅ 2026-06-30 — upload(): validation, key/bucket resolution, idempotency dedup, strategy dispatch, single-shot PutObject + automatic headers + progress.
 - 2.7 ✅ 2026-06-30 — uploadMultipart: lib-storage Upload (leavePartsOnError:false auto-abort), httpUploadProgress events, STORAGE_MULTIPART_ABORTED on failure.
 - 2.8 ✅ 2026-06-30 — download(): Node Readable stream + metadata, Range/If-(None-)Match propagation, empty-body NOT_FOUND; downloadBuffer() via transformToByteArray().
+- 2.9 ✅ 2026-06-30 — delete(): idempotent DeleteObject; a mapped 404 is a logged no-op, other errors propagate.

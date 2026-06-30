@@ -8,6 +8,7 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -230,6 +231,31 @@ export class StorageService {
     const { stream, metadata } = await this.download(options)
     const bytes = await (stream as unknown as SdkByteStream).transformToByteArray()
     return { buffer: Buffer.from(bytes), metadata }
+  }
+
+  /**
+   * Deletes an object. Idempotent: a missing object is a no-op (logged as a
+   * warning), not an error. Any other failure is propagated.
+   *
+   * @param key - The raw object key.
+   * @param options - Optional per-call bucket override.
+   */
+  async delete(key: string, options?: BucketScopedOptions): Promise<void> {
+    this.assertConfigured()
+    const finalKey = this.keyResolver.normalize(key)
+    const bucket = this.resolveBucket(options?.bucket)
+    try {
+      await this.s3Provider
+        .getClient()
+        .send(new DeleteObjectCommand({ Bucket: bucket, Key: finalKey }))
+    } catch (err) {
+      const mapped = mapAwsError(err, { key: finalKey, bucket, op: 'delete' })
+      if (mapped.code === STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND) {
+        this.logger.warn(`delete() — key not found (idempotent no-op): ${finalKey}`)
+        return
+      }
+      throw mapped
+    }
   }
 
   /** Throws when the S3 client was never built (missing credentials). */
