@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 🔄 In Progress · **Progress**: 2 / 14 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 3 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
@@ -50,7 +50,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 |---|---|---|---|---|---|
 | 2.1 | IdempotencyCache (LRU + TTL) | ✅ Done | P0 | S | 1.8 |
 | 2.2 | stream-utils (isReadable, isBufferLike, getBodySize, peekFirstBytes, bufferToReadable) | ✅ Done | P0 | M | 1.6 |
-| 2.3 | upload-strategy (single-shot vs multipart decision) | 📋 ToDo | P1 | S | 2.2 |
+| 2.3 | upload-strategy (single-shot vs multipart decision) | ✅ Done | P1 | S | 2.2 |
 | 2.4 | header-utils (Content-Disposition, Cache-Control, SSE, ACL builders) | 📋 ToDo | P1 | S | 1.9, 1.12 |
 | 2.5 | StorageService base (assertConfigured, resolveBucket, head, exists, getPublicUrl) | 📋 ToDo | P0 | M | 1.13, 1.14, 2.1, 2.4 |
 | 2.6 | StorageService.upload (single-shot path) | 📋 ToDo | P0 | M | 2.2, 2.3, 2.5 |
@@ -236,7 +236,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.3 — upload-strategy (single-shot vs multipart decision)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 2.2
@@ -247,14 +247,14 @@ A pure function that decides the upload strategy from the body, the declared siz
 
 #### Acceptance criteria
 
-- [ ] Buffer below threshold → `'single-shot'`.
-- [ ] Buffer at/above threshold → `'multipart'`.
-- [ ] Stream with `declaredSize` below threshold → `'single-shot'`.
-- [ ] Stream with `declaredSize` at/above threshold → `'multipart'`.
-- [ ] Stream without `declaredSize` → `'multipart'`.
-- [ ] `Uint8Array` below threshold → `'single-shot'`.
-- [ ] File carries a `@fileoverview` + `@layer` header; `pnpm typecheck` passes.
-- [ ] 100% line/branch coverage; Stryker mutation ≥ 95.
+- [x] Buffer below threshold → `'single-shot'`.
+- [x] Buffer at/above threshold → `'multipart'`.
+- [x] Stream with `declaredSize` below threshold → `'single-shot'`.
+- [x] Stream with `declaredSize` at/above threshold → `'multipart'`.
+- [x] Stream without `declaredSize` → `'multipart'`.
+- [x] `Uint8Array` below threshold → `'single-shot'`.
+- [x] File carries a `@fileoverview` + `@layer` header; `pnpm typecheck` passes.
+- [x] 100% line/branch coverage; Stryker mutation ≥ 95.
 
 #### Files to create / modify
 
@@ -1207,3 +1207,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 
 - 2.1 ✅ 2026-06-30 — IdempotencyCache: hand-rolled LRU + TTL on a Map (sha256 cache key, injectable clock, oldest-first eviction).
 - 2.2 ✅ 2026-06-30 — stream-utils: body type guards, best-effort sizing, memory-bounded two-PassThrough peek, and a buffer-to-Readable adapter.
+- 2.3 ✅ 2026-06-30 — upload-strategy: pure single-shot vs multipart decision from body, declared size, and threshold.
