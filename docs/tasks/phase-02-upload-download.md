@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 🔄 In Progress · **Progress**: 11 / 14 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 12 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
@@ -59,7 +59,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 | 2.9 | StorageService.delete (idempotent) | ✅ Done | P1 | S | 2.5 |
 | 2.10 | Module wiring — register StorageService + IdempotencyCache + barrel | ✅ Done | P0 | S | 1.15, 2.1, 2.6, 2.7, 2.8, 2.9 |
 | 2.11 | Tests — utilities (idempotency-cache, stream-utils, upload-strategy, header-utils) | ✅ Done | P0 | L | 2.1, 2.2, 2.3, 2.4 |
-| 2.12 | Tests — StorageService (single-shot + head/exists/delete/getPublicUrl) | 📋 ToDo | P0 | L | 2.9, 2.10 |
+| 2.12 | Tests — StorageService (single-shot + head/exists/delete/getPublicUrl) | ✅ Done | P0 | L | 2.9, 2.10 |
 | 2.13 | Tests — StorageService multipart + download/downloadBuffer | 📋 ToDo | P1 | M | 2.12 |
 | 2.14 | Phase validation + smoke test against MinIO | 📋 ToDo | P0 | M | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13 |
 
@@ -973,7 +973,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.12 — Tests — StorageService (single-shot + head/exists/delete/getPublicUrl)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 2.9, 2.10
@@ -984,12 +984,12 @@ Unit specs for the non-multipart `StorageService` paths, mocking `S3Client.send(
 
 #### Acceptance criteria
 
-- [ ] 15+ cases covering: `STORAGE_NOT_CONFIGURED`; `STORAGE_KEY_INVALID` via the key resolver (path traversal); `STORAGE_BODY_MISSING`; `STORAGE_CONTENT_TYPE_REQUIRED`; `PutObjectCommand` called with normalized key + metadata + contentType; SSE applied when configured; ACL `public-read` when `publicRead: true`; idempotency dedup (first `false`, second `true`); `onProgress` invoked in single-shot.
-- [ ] `head()` returns a populated `ObjectMetadata`; `head()` throws `STORAGE_OBJECT_NOT_FOUND` on 404.
-- [ ] `exists()` true for a present key, false on 404.
-- [ ] `delete()` calls `DeleteObjectCommand`; `delete()` is idempotent on 404 (does not throw).
-- [ ] `getPublicUrl()` uses the CDN when configured and avoids duplicating the bucket in the path.
-- [ ] `pnpm test src/server/services/storage.service.spec.ts` passes; `storage.service.ts` at 100% line/branch for the covered paths; Stryker mutation ≥ 95.
+- [x] 15+ cases covering: `STORAGE_NOT_CONFIGURED`; `STORAGE_KEY_INVALID` via the key resolver (path traversal); `STORAGE_BODY_MISSING`; `STORAGE_CONTENT_TYPE_REQUIRED`; `PutObjectCommand` called with normalized key + metadata + contentType; SSE applied when configured; ACL `public-read` when `publicRead: true`; idempotency dedup (first `false`, second `true`); `onProgress` invoked in single-shot.
+- [x] `head()` returns a populated `ObjectMetadata`; `head()` throws `STORAGE_OBJECT_NOT_FOUND` on 404.
+- [x] `exists()` true for a present key, false on 404.
+- [x] `delete()` calls `DeleteObjectCommand`; `delete()` is idempotent on 404 (does not throw).
+- [x] `getPublicUrl()` uses the CDN when configured and avoids duplicating the bucket in the path.
+- [x] `pnpm test src/server/services/storage.service.spec.ts` passes; `storage.service.ts` at 100% line/branch for the covered paths; Stryker mutation ≥ 95.
 
 #### Files to create / modify
 
@@ -1216,3 +1216,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 2.9 ✅ 2026-06-30 — delete(): idempotent DeleteObject; a mapped 404 is a logged no-op, other errors propagate.
 - 2.10 ✅ 2026-06-30 — module wiring: IdempotencyCache factory + StorageService in providers/exports; barrel re-exports StorageService (server 7.9 KB brotli).
 - 2.11 ✅ 2026-06-30 — utility specs: idempotency-cache, stream-utils, upload-strategy, header-utils all at 100% line/branch/function.
+- 2.12 ✅ 2026-06-30 — StorageService spec: 29 cases over validation, single-shot upload, head/exists, delete, getPublicUrl (DIY send spy).
