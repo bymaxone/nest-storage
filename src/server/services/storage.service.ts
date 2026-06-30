@@ -329,7 +329,7 @@ export class StorageService {
     try {
       const response = await this.s3Provider.getClient().send(new PutObjectCommand(input))
       if (options.onProgress) {
-        this.emitProgress(options.onProgress, total ?? 0, total)
+        this.emitProgress(options.onProgress, total, total)
       }
       return this.buildUploadResult({
         finalKey,
@@ -378,7 +378,7 @@ export class StorageService {
     if (options.onProgress) {
       const onProgress = options.onProgress
       uploader.on('httpUploadProgress', (event) => {
-        this.emitProgress(onProgress, event.loaded ?? 0, event.total, event.part)
+        this.emitProgress(onProgress, event.loaded, event.total, event.part)
       })
     }
     try {
@@ -435,12 +435,12 @@ export class StorageService {
   /** Emits a progress event, omitting `total`/`part` when they are unknown. */
   private emitProgress(
     onProgress: NonNullable<UploadOptions['onProgress']>,
-    loaded: number,
+    loaded: number | undefined,
     total: number | undefined,
     part?: number,
   ): void {
     onProgress({
-      loaded,
+      loaded: loaded ?? 0,
       ...(total !== undefined ? { total } : {}),
       ...(part !== undefined ? { part } : {}),
     })

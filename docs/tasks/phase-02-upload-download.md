@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 🔄 In Progress · **Progress**: 12 / 14 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 13 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
@@ -60,7 +60,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 | 2.10 | Module wiring — register StorageService + IdempotencyCache + barrel | ✅ Done | P0 | S | 1.15, 2.1, 2.6, 2.7, 2.8, 2.9 |
 | 2.11 | Tests — utilities (idempotency-cache, stream-utils, upload-strategy, header-utils) | ✅ Done | P0 | L | 2.1, 2.2, 2.3, 2.4 |
 | 2.12 | Tests — StorageService (single-shot + head/exists/delete/getPublicUrl) | ✅ Done | P0 | L | 2.9, 2.10 |
-| 2.13 | Tests — StorageService multipart + download/downloadBuffer | 📋 ToDo | P1 | M | 2.12 |
+| 2.13 | Tests — StorageService multipart + download/downloadBuffer | ✅ Done | P1 | M | 2.12 |
 | 2.14 | Phase validation + smoke test against MinIO | 📋 ToDo | P0 | M | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13 |
 
 ---
@@ -1048,7 +1048,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.13 — Tests — StorageService multipart + download/downloadBuffer
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.12
@@ -1059,10 +1059,10 @@ Unit specs for the multipart and download paths. Multipart mocks the `Upload` cl
 
 #### Acceptance criteria
 
-- [ ] Two spec files created (multipart + download).
-- [ ] Multipart: body above threshold → `result.multipart === true`; stream without size → `multipart === true`; `httpUploadProgress` event → `onProgress` invoked; error in `uploader.done()` → `STORAGE_MULTIPART_ABORTED`.
-- [ ] Download: `download()` returns `{ stream, metadata }`; propagates `Range` / `IfNoneMatch` / `IfMatch`; throws `STORAGE_OBJECT_NOT_FOUND` for an empty body; `downloadBuffer()` materializes the stream into a `Buffer`.
-- [ ] `pnpm test` for both specs passes; the multipart/download paths reach the library coverage floor (residual e2e-only gaps are closed in a later phase).
+- [x] Two spec files created (multipart + download).
+- [x] Multipart: body above threshold → `result.multipart === true`; stream without size → `multipart === true`; `httpUploadProgress` event → `onProgress` invoked; error in `uploader.done()` → `STORAGE_MULTIPART_ABORTED`.
+- [x] Download: `download()` returns `{ stream, metadata }`; propagates `Range` / `IfNoneMatch` / `IfMatch`; throws `STORAGE_OBJECT_NOT_FOUND` for an empty body; `downloadBuffer()` materializes the stream into a `Buffer`.
+- [x] `pnpm test` for both specs passes; the multipart/download paths reach the library coverage floor (`storage.service.ts` at 100% line/branch).
 
 #### Files to create / modify
 
@@ -1217,3 +1217,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 2.10 ✅ 2026-06-30 — module wiring: IdempotencyCache factory + StorageService in providers/exports; barrel re-exports StorageService (server 7.9 KB brotli).
 - 2.11 ✅ 2026-06-30 — utility specs: idempotency-cache, stream-utils, upload-strategy, header-utils all at 100% line/branch/function.
 - 2.12 ✅ 2026-06-30 — StorageService spec: 29 cases over validation, single-shot upload, head/exists, delete, getPublicUrl (DIY send spy).
+- 2.13 ✅ 2026-06-30 — multipart spec (mocked lib-storage Upload) + download/downloadBuffer spec; storage.service.ts at 100% line/branch.
