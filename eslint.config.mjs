@@ -33,6 +33,9 @@ export default tseslint.config(
       },
     },
     rules: {
+      // NestJS module/provider classes are decorated and may legitimately carry
+      // only static factory methods.
+      '@typescript-eslint/no-extraneous-class': ['error', { allowWithDecorator: true }],
       '@typescript-eslint/explicit-function-return-type': ['error', { allowExpressions: true }],
       '@typescript-eslint/consistent-type-imports': [
         'error',
