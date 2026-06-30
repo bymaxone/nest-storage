@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + S3 Client + Config
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 17 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 17 / 17 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §2
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §2–§4, §12
 
@@ -45,23 +45,23 @@ When the phase closes, the library can be installed in a NestJS fixture app, cre
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 1.1 | Project scaffold — `package.json` + pnpm init | 📋 ToDo | P0 | S | — |
-| 1.2 | Build config — `tsconfig.*` + `tsup.config.ts` | 📋 ToDo | P0 | S | 1.1 |
-| 1.3 | ESLint + Prettier + `.gitignore` + `.npmignore` | 📋 ToDo | P1 | S | 1.1 |
-| 1.4 | Jest configs (4 variants) + Stryker config | 📋 ToDo | P0 | S | 1.2 |
-| 1.5 | `scripts/check-size.mjs` — brotli bundle gate | 📋 ToDo | P1 | S | 1.2 |
-| 1.6 | `src/` structure + four CI workflows (ci/codeql/scorecard/release, incl. e2e job) | 📋 ToDo | P0 | L | 1.2, 1.3, 1.4, 1.5 |
-| 1.7 | Shared types | 📋 ToDo | P0 | S | 1.6 |
-| 1.8 | Shared constants (`STORAGE_ERROR_CODES`, MIME whitelists, TTLs) | 📋 ToDo | P0 | S | 1.6 |
-| 1.9 | Server interfaces (8 contracts + barrel) | 📋 ToDo | P0 | M | 1.7 |
-| 1.10 | DI tokens (Symbol) + default-options constants | 📋 ToDo | P0 | S | 1.8 |
-| 1.11 | Error catalog — messages + status map + `StorageException` + AWS mapper | 📋 ToDo | P0 | M | 1.8 |
-| 1.12 | Config — `validate-options` + `resolved-options` + `apply-defaults` | 📋 ToDo | P0 | M | 1.9, 1.10, 1.11 |
-| 1.13 | `KeyResolverService` — path-traversal guard + `keyPrefix` | 📋 ToDo | P0 | M | 1.11, 1.12 |
-| 1.14 | `S3ClientProvider` — lifecycle + lazy init | 📋 ToDo | P0 | M | 1.12 |
-| 1.15 | `BymaxStorageModule.forRoot()` synchronous + initial barrel | 📋 ToDo | P0 | S | 1.13, 1.14 |
-| 1.16 | Unit tests — config, error catalog, KeyResolver, S3ClientProvider, module | 📋 ToDo | P0 | L | 1.12, 1.13, 1.14, 1.15 |
-| 1.17 | Phase validation + integration smoke | 📋 ToDo | P0 | S | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16 |
+| 1.1 | Project scaffold — `package.json` + pnpm init | ✅ Done | P0 | S | — |
+| 1.2 | Build config — `tsconfig.*` + `tsup.config.ts` | ✅ Done | P0 | S | 1.1 |
+| 1.3 | ESLint + Prettier + `.gitignore` + `.npmignore` | ✅ Done | P1 | S | 1.1 |
+| 1.4 | Jest configs (4 variants) + Stryker config | ✅ Done | P0 | S | 1.2 |
+| 1.5 | `scripts/check-size.mjs` — brotli bundle gate | ✅ Done | P1 | S | 1.2 |
+| 1.6 | `src/` structure + four CI workflows (ci/codeql/scorecard/release, incl. e2e job) | ✅ Done | P0 | L | 1.2, 1.3, 1.4, 1.5 |
+| 1.7 | Shared types | ✅ Done | P0 | S | 1.6 |
+| 1.8 | Shared constants (`STORAGE_ERROR_CODES`, MIME whitelists, TTLs) | ✅ Done | P0 | S | 1.6 |
+| 1.9 | Server interfaces (8 contracts + barrel) | ✅ Done | P0 | M | 1.7 |
+| 1.10 | DI tokens (Symbol) + default-options constants | ✅ Done | P0 | S | 1.8 |
+| 1.11 | Error catalog — messages + status map + `StorageException` + AWS mapper | ✅ Done | P0 | M | 1.8 |
+| 1.12 | Config — `validate-options` + `resolved-options` + `apply-defaults` | ✅ Done | P0 | M | 1.9, 1.10, 1.11 |
+| 1.13 | `KeyResolverService` — path-traversal guard + `keyPrefix` | ✅ Done | P0 | M | 1.11, 1.12 |
+| 1.14 | `S3ClientProvider` — lifecycle + lazy init | ✅ Done | P0 | M | 1.12 |
+| 1.15 | `BymaxStorageModule.forRoot()` synchronous + initial barrel | ✅ Done | P0 | S | 1.13, 1.14 |
+| 1.16 | Unit tests — config, error catalog, KeyResolver, S3ClientProvider, module | ✅ Done | P0 | L | 1.12, 1.13, 1.14, 1.15 |
+| 1.17 | Phase validation + integration smoke | ✅ Done | P0 | S | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16 |
 
 ---
 
@@ -69,7 +69,7 @@ When the phase closes, the library can be installed in a NestJS fixture app, cre
 
 ### Task 1.1 — Project scaffold: `package.json` + pnpm init
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: —
@@ -155,7 +155,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.2 — Build config: `tsconfig.*` + `tsup.config.ts`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.1
@@ -236,7 +236,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.3 — ESLint + Prettier + `.gitignore` + `.npmignore`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 1.1
@@ -310,7 +310,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.4 — Jest configs (4 variants) + Stryker config
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.2
@@ -394,7 +394,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.5 — `scripts/check-size.mjs` — brotli bundle gate
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 1.2
@@ -467,7 +467,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.6 — `src/` structure + four CI workflows (ci/codeql/scorecard/release)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 1.2, 1.3, 1.4, 1.5
@@ -735,7 +735,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.7 — Shared types
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.6
@@ -810,7 +810,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.8 — Shared constants (`STORAGE_ERROR_CODES`, MIME whitelists, TTLs)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.6
@@ -893,7 +893,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.9 — Server interfaces (8 contracts + barrel)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.7
@@ -984,7 +984,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.10 — DI tokens (Symbol) + default-options constants
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.8
@@ -1065,7 +1065,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.11 — Error catalog: messages + status map + `StorageException` + AWS mapper
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.8
@@ -1150,7 +1150,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.12 — Config: `validate-options` + `resolved-options` + `apply-defaults`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.9, 1.10, 1.11
@@ -1229,7 +1229,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.13 — `KeyResolverService` — path-traversal guard + `keyPrefix`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.11, 1.12
@@ -1308,7 +1308,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.14 — `S3ClientProvider` — lifecycle + lazy init
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.12
@@ -1391,7 +1391,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.15 — `BymaxStorageModule.forRoot()` synchronous + initial barrel
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.13, 1.14
@@ -1470,7 +1470,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.16 — Unit tests: config, error catalog, KeyResolver, S3ClientProvider, module
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 1.12, 1.13, 1.14, 1.15
@@ -1557,7 +1557,7 @@ Completion Protocol (after you finish):
 
 ### Task 1.17 — Phase validation + integration smoke
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16
@@ -1638,4 +1638,20 @@ Completion Protocol (after you finish):
 
 ## Completion log
 
-_Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
+- 1.1 ✅ 2026-06-30 — Project scaffold: package.json (zero deps, 6 peers), two-subpath exports, lockfile.
+- 1.2 ✅ 2026-06-30 — tsconfig variants + tsup build (ESM+CJS+.d.ts for both subpaths).
+- 1.3 ✅ 2026-06-30 — ESLint + Prettier + ignore files.
+- 1.4 ✅ 2026-06-30 — Jest (4 variants, 100% global threshold, maxWorkers 50%) + Stryker config.
+- 1.5 ✅ 2026-06-30 — Brotli bundle-size gate (scripts/check-size.mjs).
+- 1.6 ✅ 2026-06-30 — src entries + 4 CI workflows + osv-scanner; hardened (SHA pins, harden-runner) and visibility-gated (public-ready / green-while-private).
+- 1.7 ✅ 2026-06-30 — Shared types.
+- 1.8 ✅ 2026-06-30 — Shared constants (STORAGE_ERROR_CODES, MIME whitelist, TTLs).
+- 1.9 ✅ 2026-06-30 — Server interface contracts + barrel.
+- 1.10 ✅ 2026-06-30 — Symbol DI tokens + default-options constants.
+- 1.11 ✅ 2026-06-30 — Error catalog (messages + status map) + StorageException + AWS error mapper.
+- 1.12 ✅ 2026-06-30 — Options validate / resolve / apply-defaults.
+- 1.13 ✅ 2026-06-30 — KeyResolverService path-traversal guard + keyPrefix isolation.
+- 1.14 ✅ 2026-06-30 — S3ClientProvider singleton lifecycle + lazy, credential-tolerant init.
+- 1.15 ✅ 2026-06-30 — BymaxStorageModule.forRoot() synchronous + public barrel.
+- 1.16 ✅ 2026-06-30 — Unit tests (8 suites, 66 tests, 100% line/branch).
+- 1.17 ✅ 2026-06-30 — Phase gate: typecheck/lint/100% cov/build/size green; public-surface bootstrap resolves BYMAX_STORAGE_S3_CLIENT; grep invariant clean.

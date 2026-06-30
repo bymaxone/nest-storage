@@ -1,6 +1,6 @@
 # Development Tasks — @bymax-one/nest-storage
 
-> **Last updated:** 2026-06-23
+> **Last updated:** 2026-06-30
 > **Source roadmap:** [`../development_plan.md`](../development_plan.md) · **Spec:** [`../technical_specification.md`](../technical_specification.md)
 
 Tasks live **one file per phase** in this folder (`phase-NN-<slug>.md`), following the Bymax task-doc convention (same pattern as `bymax-one/rust-auth`). Each phase file is self-contained: context, rules-of-phase, reference docs, a task index, the tasks (each with an executable 4-backtick **Agent prompt**), and a completion log.
@@ -13,12 +13,12 @@ Tasks live **one file per phase** in this folder (`phase-NN-<slug>.md`), followi
 
 | Phase | File | Tasks | Status |
 |---|---|---|---|
-| 1 | [`phase-01-foundation-s3-client-config.md`](./phase-01-foundation-s3-client-config.md) | 0 / 17 | 🔄 In Progress |
+| 1 | [`phase-01-foundation-s3-client-config.md`](./phase-01-foundation-s3-client-config.md) | 17 / 17 | 🔄 In Progress |
 | 2 | [`phase-02-upload-download.md`](./phase-02-upload-download.md) | 0 / 14 | 📋 ToDo |
 | 3 | [`phase-03-signed-urls-validation-scanner.md`](./phase-03-signed-urls-validation-scanner.md) | 0 / 12 | 📋 ToDo |
 | 4 | [`phase-04-listing-async-e2e-mutation.md`](./phase-04-listing-async-e2e-mutation.md) | 0 / 12 | 📋 ToDo |
 | 5 | [`phase-05-release.md`](./phase-05-release.md) | 0 / 9 | 📋 ToDo |
-| | **Total** | **0 / 64** | 📋 ToDo |
+| | **Total** | **17 / 64** | 📋 ToDo |
 
 ---
 
