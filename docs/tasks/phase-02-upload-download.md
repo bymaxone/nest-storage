@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 🔄 In Progress · **Progress**: 4 / 14 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 5 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
@@ -52,7 +52,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 | 2.2 | stream-utils (isReadable, isBufferLike, getBodySize, peekFirstBytes, bufferToReadable) | ✅ Done | P0 | M | 1.6 |
 | 2.3 | upload-strategy (single-shot vs multipart decision) | ✅ Done | P1 | S | 2.2 |
 | 2.4 | header-utils (Content-Disposition, Cache-Control, SSE, ACL builders) | ✅ Done | P1 | S | 1.9, 1.12 |
-| 2.5 | StorageService base (assertConfigured, resolveBucket, head, exists, getPublicUrl) | 📋 ToDo | P0 | M | 1.13, 1.14, 2.1, 2.4 |
+| 2.5 | StorageService base (assertConfigured, resolveBucket, head, exists, getPublicUrl) | ✅ Done | P0 | M | 1.13, 1.14, 2.1, 2.4 |
 | 2.6 | StorageService.upload (single-shot path) | 📋 ToDo | P0 | M | 2.2, 2.3, 2.5 |
 | 2.7 | StorageService.uploadMultipart (lib-storage Upload) | 📋 ToDo | P0 | M | 2.6 |
 | 2.8 | StorageService.download + downloadBuffer | 📋 ToDo | P0 | M | 2.5 |
@@ -393,7 +393,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.5 — StorageService base (assertConfigured, resolveBucket, head, exists, getPublicUrl)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.13, 1.14, 2.1, 2.4
@@ -404,15 +404,15 @@ The `StorageService` backbone: constructor with DI (resolved options, `S3ClientP
 
 #### Acceptance criteria
 
-- [ ] `StorageService` is `@Injectable()` with the four constructor dependencies wired by DI token / class.
-- [ ] `assertConfigured()` throws `STORAGE_NOT_CONFIGURED` (HTTP 503, status from the catalog) when `!s3Provider.isConfigured()`.
-- [ ] `resolveBucket(perCall?)` returns `perCall ?? options.bucket` and throws `STORAGE_BUCKET_UNDEFINED` when both are undefined.
-- [ ] `head()` calls `HeadObjectCommand` and maps the response to `ObjectMetadata`; errors go through `mapAwsError`.
-- [ ] `head()` throws `STORAGE_OBJECT_NOT_FOUND` on 404.
-- [ ] `exists()` returns `false` on 404 and `false` (with a warning) on other errors.
-- [ ] `getPublicUrl()` normalizes the key, resolves the bucket, and uses `cdnBaseUrl ?? publicBaseUrl` without duplicating the bucket already present in the base.
-- [ ] File carries a `@fileoverview` + `@layer` header; `pnpm typecheck` passes.
-- [ ] Coverage at the library floor (finalized in 2.12).
+- [x] `StorageService` is `@Injectable()` with the constructor dependencies wired by DI token / class (the idempotency cache joins in 2.6 where it is first used).
+- [x] `assertConfigured()` throws `STORAGE_NOT_CONFIGURED` (HTTP 503, status from the catalog) when `!s3Provider.isConfigured()`.
+- [x] `resolveBucket(perCall?)` returns `perCall ?? options.bucket` and throws `STORAGE_BUCKET_UNDEFINED` when both are undefined.
+- [x] `head()` calls `HeadObjectCommand` and maps the response to `ObjectMetadata`; errors go through `mapAwsError`.
+- [x] `head()` throws `STORAGE_OBJECT_NOT_FOUND` on 404.
+- [x] `exists()` returns `false` on 404 and `false` (with a warning) on other errors.
+- [x] `getPublicUrl()` normalizes the key, resolves the bucket, and uses `cdnBaseUrl ?? publicBaseUrl` without duplicating the bucket already present in the base.
+- [x] File carries a `@fileoverview` + `@layer` header; `pnpm typecheck` passes.
+- [x] Coverage at the library floor (finalized in 2.12).
 
 #### Files to create / modify
 
@@ -1209,3 +1209,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 2.2 ✅ 2026-06-30 — stream-utils: body type guards, best-effort sizing, memory-bounded two-PassThrough peek, and a buffer-to-Readable adapter.
 - 2.3 ✅ 2026-06-30 — upload-strategy: pure single-shot vs multipart decision from body, declared size, and threshold.
 - 2.4 ✅ 2026-06-30 — header-utils: Content-Disposition, Cache-Control, SSE (with the NONE sentinel), and ACL builders.
+- 2.5 ✅ 2026-06-30 — StorageService base: DI constructor, assertConfigured/resolveBucket/buildPublicUrl helpers, head/exists/getPublicUrl.
