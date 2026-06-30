@@ -67,20 +67,20 @@ The phase order respects the dependency graph (Appendix A): S3 client before upl
 
 ### 1.4 Progress
 
-- **Overall progress:** 🔄 0 / 5 phases done (0%) — 17 / 64 tasks
-- **Active phase:** **Phase 1** (Foundation + S3 Client + Config) — 👀 Review (PR #2 open)
+- **Overall progress:** 🔄 1 / 5 phases done (20%) — 17 / 64 tasks
+- **Active phase:** **Phase 2** (Upload (single, multipart, stream) + Download) — 🔄 In Progress
 - **Blocked:** none
 
 ### 1.5 Phase dashboard
 
 | ID | Phase | Status | Progress | Complexity | Last updated |
 | --- | --- | --- | --- | --- | --- |
-| 1 | [Foundation + S3 Client + Config](./tasks/phase-01-foundation-s3-client-config.md) | 👀 Review | 17/17 | MEDIUM | 2026-06-30 |
-| 2 | [Upload (single, multipart, stream) + Download](./tasks/phase-02-upload-download.md) | 📋 ToDo | 0/14 | HIGH | 2026-06-23 |
+| 1 | [Foundation + S3 Client + Config](./tasks/phase-01-foundation-s3-client-config.md) | ✅ Done | 17/17 | MEDIUM | 2026-06-30 |
+| 2 | [Upload (single, multipart, stream) + Download](./tasks/phase-02-upload-download.md) | 🔄 In Progress | 0/14 | HIGH | 2026-06-30 |
 | 3 | [Signed URLs + Validation + Scanner](./tasks/phase-03-signed-urls-validation-scanner.md) | 📋 ToDo | 0/12 | MEDIUM | 2026-06-23 |
 | 4 | [Listing + Pagination + forRootAsync + E2E + Mutation](./tasks/phase-04-listing-async-e2e-mutation.md) | 📋 ToDo | 0/12 | HIGH | 2026-06-23 |
 | 5 | [Release v0.1.0](./tasks/phase-05-release.md) | 📋 ToDo | 0/9 | LOW | 2026-06-23 |
-| | **Total** | 🔄 **0 / 5 phases** | **17 / 64 tasks** | — | — |
+| | **Total** | 🔄 **1 / 5 phases** | **17 / 64 tasks** | — | — |
 
 > Each phase links to its task file in [`docs/tasks/`](./tasks/) (one file per phase). Per-sub-step detail is in §2–§6; dependency graph in Appendix A, complexity matrix in Appendix B. The **sub-step** counts in the prose (11/9/8/8/7 = 43) are finer-grained than the **task** counts (17/14/12/12/9 = 64): one plan sub-step expands into one or more executable tasks (§1.9).
 
