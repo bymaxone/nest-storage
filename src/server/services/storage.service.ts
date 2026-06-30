@@ -7,15 +7,29 @@
  * @layer server/services
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { HeadObjectCommand } from '@aws-sdk/client-s3'
-import { BYMAX_STORAGE_OPTIONS } from '../bymax-storage.constants'
+import { HeadObjectCommand, PutObjectCommand, type PutObjectCommandInput } from '@aws-sdk/client-s3'
+import { Upload } from '@aws-sdk/lib-storage'
+import {
+  BYMAX_STORAGE_IDEMPOTENCY_CACHE,
+  BYMAX_STORAGE_OPTIONS,
+} from '../bymax-storage.constants'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
-import type { ObjectMetadata } from '../../shared/types/storage-types'
+import type { UploadOptions } from '../interfaces/upload-options.interface'
+import type { ObjectMetadata, UploadResult } from '../../shared/types/storage-types'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import {
+  buildACL,
+  buildCacheControl,
+  buildContentDisposition,
+  buildSSE,
+} from '../utils/header-utils'
+import { getBodySize, isBufferLike, type UploadBody } from '../utils/stream-utils'
+import { pickUploadStrategy } from '../utils/upload-strategy'
+import { IdempotencyCache } from '../utils/idempotency-cache'
 
 /** Common metadata fields shared by `HeadObject` and `GetObject` responses. */
 interface S3ObjectResponse {
@@ -43,7 +57,56 @@ export class StorageService {
     @Inject(BYMAX_STORAGE_OPTIONS) private readonly options: ResolvedBymaxStorageOptions,
     private readonly s3Provider: S3ClientProvider,
     private readonly keyResolver: KeyResolverService,
+    @Inject(BYMAX_STORAGE_IDEMPOTENCY_CACHE) private readonly idempotencyCache: IdempotencyCache,
   ) {}
+
+  /**
+   * Uploads an object, choosing single-shot or multipart automatically. When an
+   * `idempotencyKey` is supplied and a matching result is cached within the TTL
+   * window, the cached result is returned without re-uploading.
+   *
+   * @param options - The upload request.
+   * @returns The upload result.
+   * @throws StorageException for missing configuration, body, or content type.
+   */
+  async upload(options: UploadOptions): Promise<UploadResult> {
+    this.assertConfigured()
+    const rawBody = options.body as unknown
+    if (rawBody === undefined || rawBody === null) {
+      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_BODY_MISSING)
+    }
+    if (!options.contentType) {
+      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_CONTENT_TYPE_REQUIRED)
+    }
+    const finalKey = this.keyResolver.normalize(options.key)
+    const bucket = this.resolveBucket(options.bucket)
+
+    if (options.idempotencyKey) {
+      const cacheKey = this.idempotencyCache.computeKey(options.idempotencyKey, finalKey)
+      const cached = this.idempotencyCache.get(cacheKey)
+      if (cached) {
+        return { ...cached, fromIdempotencyCache: true }
+      }
+    }
+
+    const strategy = pickUploadStrategy(
+      options.body,
+      options.size,
+      this.options.multipart.thresholdBytes,
+    )
+    const result =
+      strategy === 'multipart'
+        ? await this.uploadMultipart(options, finalKey, bucket)
+        : await this.uploadSingleShot(options, finalKey, bucket)
+
+    if (options.idempotencyKey) {
+      this.idempotencyCache.set(
+        this.idempotencyCache.computeKey(options.idempotencyKey, finalKey),
+        result,
+      )
+    }
+    return result
+  }
 
   /**
    * Returns metadata for an object without downloading its body.
@@ -145,5 +208,142 @@ export class StorageService {
       ...(response.StorageClass !== undefined ? { storageClass: response.StorageClass } : {}),
       ...(response.VersionId !== undefined ? { versionId: response.VersionId } : {}),
     }
+  }
+
+  /** Single `PutObject` upload for bodies below the multipart threshold. */
+  private async uploadSingleShot(
+    options: UploadOptions,
+    finalKey: string,
+    bucket: string,
+  ): Promise<UploadResult> {
+    const total = options.size ?? getBodySize(options.body)
+    const input: PutObjectCommandInput = {
+      Bucket: bucket,
+      Key: finalKey,
+      Body: this.normalizeSingleShotBody(options.body),
+      ContentType: options.contentType,
+      ContentLength: total,
+      CacheControl: buildCacheControl(options.cacheControl, this.options.defaultCacheControl),
+      ContentDisposition: buildContentDisposition(
+        options.contentDisposition,
+        this.options.defaultContentDisposition,
+      ),
+      // `public-read` only takes effect on buckets that allow ACLs (see header-utils).
+      ACL: buildACL(options.publicRead, this.options.defaultPublicRead),
+      Metadata: options.metadata,
+      ...buildSSE(options.serverSideEncryption, options.kmsKeyId, this.options),
+    }
+    try {
+      const response = await this.s3Provider.getClient().send(new PutObjectCommand(input))
+      if (options.onProgress) {
+        this.emitProgress(options.onProgress, total ?? 0, total)
+      }
+      return this.buildUploadResult({
+        finalKey,
+        bucket,
+        etag: response.ETag,
+        versionId: response.VersionId,
+        size: total,
+        contentType: options.contentType,
+        multipart: false,
+      })
+    } catch (err) {
+      throw mapAwsError(err, { key: finalKey, bucket, op: 'upload-single' })
+    }
+  }
+
+  /**
+   * Multipart upload via `@aws-sdk/lib-storage`. `leavePartsOnError: false` makes
+   * the SDK abort and clean up parts on failure, so no manual abort is issued.
+   */
+  private async uploadMultipart(
+    options: UploadOptions,
+    finalKey: string,
+    bucket: string,
+  ): Promise<UploadResult> {
+    const params: PutObjectCommandInput = {
+      Bucket: bucket,
+      Key: finalKey,
+      Body: options.body as NonNullable<PutObjectCommandInput['Body']>,
+      ContentType: options.contentType,
+      CacheControl: buildCacheControl(options.cacheControl, this.options.defaultCacheControl),
+      ContentDisposition: buildContentDisposition(
+        options.contentDisposition,
+        this.options.defaultContentDisposition,
+      ),
+      ACL: buildACL(options.publicRead, this.options.defaultPublicRead),
+      Metadata: options.metadata,
+      ...buildSSE(options.serverSideEncryption, options.kmsKeyId, this.options),
+    }
+    const uploader = new Upload({
+      client: this.s3Provider.getClient(),
+      params,
+      queueSize: this.options.multipart.queueSize,
+      partSize: this.options.multipart.partSizeBytes,
+      leavePartsOnError: false,
+    })
+    try {
+      const response = await uploader.done()
+      return this.buildUploadResult({
+        finalKey,
+        bucket,
+        etag: response.ETag,
+        versionId: response.VersionId,
+        size: options.size,
+        contentType: options.contentType,
+        multipart: true,
+      })
+    } catch (err) {
+      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_MULTIPART_ABORTED, undefined, {
+        key: finalKey,
+        bucket,
+        awsMessage: (err as Error).message,
+      })
+    }
+  }
+
+  /** Converts a `Uint8Array` body to a `Buffer` for SDK safety; passes others through. */
+  private normalizeSingleShotBody(body: UploadBody): NonNullable<PutObjectCommandInput['Body']> {
+    if (isBufferLike(body)) {
+      return Buffer.isBuffer(body) ? body : Buffer.from(body)
+    }
+    return body as NonNullable<PutObjectCommandInput['Body']>
+  }
+
+  /** Assembles an `UploadResult`, omitting optional fields that are absent. */
+  private buildUploadResult(params: {
+    finalKey: string
+    bucket: string
+    etag: string | undefined
+    versionId: string | undefined
+    size: number | undefined
+    contentType: string
+    multipart: boolean
+  }): UploadResult {
+    return {
+      key: params.finalKey,
+      bucket: params.bucket,
+      etag: params.etag ?? '',
+      contentType: params.contentType,
+      publicUrl: this.buildPublicUrl(params.finalKey, params.bucket),
+      multipart: params.multipart,
+      fromIdempotencyCache: false,
+      ...(params.size !== undefined ? { size: params.size } : {}),
+      ...(params.versionId !== undefined ? { versionId: params.versionId } : {}),
+    }
+  }
+
+  /** Emits a progress event, omitting `total`/`part` when they are unknown. */
+  private emitProgress(
+    onProgress: NonNullable<UploadOptions['onProgress']>,
+    loaded: number,
+    total: number | undefined,
+    part?: number,
+  ): void {
+    onProgress({
+      loaded,
+      ...(total !== undefined ? { total } : {}),
+      ...(part !== undefined ? { part } : {}),
+    })
   }
 }

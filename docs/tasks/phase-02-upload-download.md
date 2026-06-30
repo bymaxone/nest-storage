@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 🔄 In Progress · **Progress**: 5 / 14 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 6 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
@@ -53,7 +53,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 | 2.3 | upload-strategy (single-shot vs multipart decision) | ✅ Done | P1 | S | 2.2 |
 | 2.4 | header-utils (Content-Disposition, Cache-Control, SSE, ACL builders) | ✅ Done | P1 | S | 1.9, 1.12 |
 | 2.5 | StorageService base (assertConfigured, resolveBucket, head, exists, getPublicUrl) | ✅ Done | P0 | M | 1.13, 1.14, 2.1, 2.4 |
-| 2.6 | StorageService.upload (single-shot path) | 📋 ToDo | P0 | M | 2.2, 2.3, 2.5 |
+| 2.6 | StorageService.upload (single-shot path) | ✅ Done | P0 | M | 2.2, 2.3, 2.5 |
 | 2.7 | StorageService.uploadMultipart (lib-storage Upload) | 📋 ToDo | P0 | M | 2.6 |
 | 2.8 | StorageService.download + downloadBuffer | 📋 ToDo | P0 | M | 2.5 |
 | 2.9 | StorageService.delete (idempotent) | 📋 ToDo | P1 | S | 2.5 |
@@ -490,7 +490,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.6 — StorageService.upload (single-shot path)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 2.2, 2.3, 2.5
@@ -501,14 +501,14 @@ The public `upload()` entry point plus the single-shot `PutObject` path: validat
 
 #### Acceptance criteria
 
-- [ ] `upload()` throws `STORAGE_NOT_CONFIGURED` when the S3 client is missing.
-- [ ] `upload()` throws `STORAGE_BODY_MISSING` for a missing body and `STORAGE_CONTENT_TYPE_REQUIRED` for an empty content type.
-- [ ] `upload()` applies the global `keyPrefix` via the key resolver.
-- [ ] `upload()` returns `fromIdempotencyCache: true` on a dedup hit and `false` on the first call.
-- [ ] `uploadSingleShot` builds `PutObjectCommandInput` with Bucket, Key, Body, ContentType, ContentLength, CacheControl, ContentDisposition, ACL, Metadata, and the SSE headers, and returns `UploadResult` with `multipart: false`.
-- [ ] `uploadSingleShot` invokes `onProgress` once with `{ loaded: total ?? 0, total }` when provided.
-- [ ] Errors map through `mapAwsError(err, { key, bucket, op: 'upload-single' })`.
-- [ ] File header present; `pnpm typecheck` passes; coverage finalized in 2.12.
+- [x] `upload()` throws `STORAGE_NOT_CONFIGURED` when the S3 client is missing.
+- [x] `upload()` throws `STORAGE_BODY_MISSING` for a missing body and `STORAGE_CONTENT_TYPE_REQUIRED` for an empty content type.
+- [x] `upload()` applies the global `keyPrefix` via the key resolver.
+- [x] `upload()` returns `fromIdempotencyCache: true` on a dedup hit and `false` on the first call.
+- [x] `uploadSingleShot` builds `PutObjectCommandInput` with Bucket, Key, Body, ContentType, ContentLength, CacheControl, ContentDisposition, ACL, Metadata, and the SSE headers, and returns `UploadResult` with `multipart: false`.
+- [x] `uploadSingleShot` invokes `onProgress` once with `{ loaded: total ?? 0, total }` when provided.
+- [x] Errors map through `mapAwsError(err, { key, bucket, op: 'upload-single' })`.
+- [x] File header present; `pnpm typecheck` passes; coverage finalized in 2.12.
 
 #### Files to create / modify
 
@@ -1210,3 +1210,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 2.3 ✅ 2026-06-30 — upload-strategy: pure single-shot vs multipart decision from body, declared size, and threshold.
 - 2.4 ✅ 2026-06-30 — header-utils: Content-Disposition, Cache-Control, SSE (with the NONE sentinel), and ACL builders.
 - 2.5 ✅ 2026-06-30 — StorageService base: DI constructor, assertConfigured/resolveBucket/buildPublicUrl helpers, head/exists/getPublicUrl.
+- 2.6 ✅ 2026-06-30 — upload(): validation, key/bucket resolution, idempotency dedup, strategy dispatch, single-shot PutObject + automatic headers + progress.
