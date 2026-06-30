@@ -1,6 +1,6 @@
 # Phase 2 — Upload (single, multipart, stream) + Download
 
-> **Status**: 🔄 In Progress · **Progress**: 3 / 14 tasks · **Last updated**: 2026-06-30
+> **Status**: 🔄 In Progress · **Progress**: 4 / 14 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) § 3
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) § 5, § 6
 
@@ -51,7 +51,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 | 2.1 | IdempotencyCache (LRU + TTL) | ✅ Done | P0 | S | 1.8 |
 | 2.2 | stream-utils (isReadable, isBufferLike, getBodySize, peekFirstBytes, bufferToReadable) | ✅ Done | P0 | M | 1.6 |
 | 2.3 | upload-strategy (single-shot vs multipart decision) | ✅ Done | P1 | S | 2.2 |
-| 2.4 | header-utils (Content-Disposition, Cache-Control, SSE, ACL builders) | 📋 ToDo | P1 | S | 1.9, 1.12 |
+| 2.4 | header-utils (Content-Disposition, Cache-Control, SSE, ACL builders) | ✅ Done | P1 | S | 1.9, 1.12 |
 | 2.5 | StorageService base (assertConfigured, resolveBucket, head, exists, getPublicUrl) | 📋 ToDo | P0 | M | 1.13, 1.14, 2.1, 2.4 |
 | 2.6 | StorageService.upload (single-shot path) | 📋 ToDo | P0 | M | 2.2, 2.3, 2.5 |
 | 2.7 | StorageService.uploadMultipart (lib-storage Upload) | 📋 ToDo | P0 | M | 2.6 |
@@ -312,7 +312,7 @@ Completion Protocol (after you finish):
 
 ### Task 2.4 — header-utils (Content-Disposition, Cache-Control, SSE, ACL builders)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 1.9, 1.12
@@ -323,13 +323,13 @@ Small pure builders that resolve request headers consistently with a per-call �
 
 #### Acceptance criteria
 
-- [ ] `buildContentDisposition(undefined, 'inline')` → `'inline'`; a per-call value wins over the default.
-- [ ] `buildCacheControl(undefined, 'public, max-age=300')` → `'public, max-age=300'`.
-- [ ] `buildSSE('NONE', undefined, { serverSideEncryption: 'AES256' })` → `{}` (sentinel omits the header even with a global default).
-- [ ] `buildSSE('aws:kms', 'key-id', ...)` → `{ ServerSideEncryption: 'aws:kms', SSEKMSKeyId: 'key-id' }`.
-- [ ] `buildACL(true, false)` → `'public-read'`; `buildACL(false, true)` → `undefined`.
-- [ ] File carries a `@fileoverview` + `@layer` header; `pnpm typecheck` passes.
-- [ ] 100% line/branch coverage; Stryker mutation ≥ 95.
+- [x] `buildContentDisposition(undefined, 'inline')` → `'inline'`; a per-call value wins over the default.
+- [x] `buildCacheControl(undefined, 'public, max-age=300')` → `'public, max-age=300'`.
+- [x] `buildSSE('NONE', undefined, { serverSideEncryption: 'AES256' })` → `{}` (sentinel omits the header even with a global default).
+- [x] `buildSSE('aws:kms', 'key-id', ...)` → `{ ServerSideEncryption: 'aws:kms', SSEKMSKeyId: 'key-id' }`.
+- [x] `buildACL(true, false)` → `'public-read'`; `buildACL(false, true)` → `undefined`.
+- [x] File carries a `@fileoverview` + `@layer` header; `pnpm typecheck` passes.
+- [x] 100% line/branch coverage; Stryker mutation ≥ 95.
 
 #### Files to create / modify
 
@@ -1208,3 +1208,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 2.1 ✅ 2026-06-30 — IdempotencyCache: hand-rolled LRU + TTL on a Map (sha256 cache key, injectable clock, oldest-first eviction).
 - 2.2 ✅ 2026-06-30 — stream-utils: body type guards, best-effort sizing, memory-bounded two-PassThrough peek, and a buffer-to-Readable adapter.
 - 2.3 ✅ 2026-06-30 — upload-strategy: pure single-shot vs multipart decision from body, declared size, and threshold.
+- 2.4 ✅ 2026-06-30 — header-utils: Content-Disposition, Cache-Control, SSE (with the NONE sentinel), and ACL builders.
