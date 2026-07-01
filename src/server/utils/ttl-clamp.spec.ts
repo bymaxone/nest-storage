@@ -32,6 +32,12 @@ describe('clampTtl', () => {
       clampTtl(0, DEFAULT_TTL, MAX_TTL)
     } catch (err) {
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SIGNED_URL_TTL_INVALID)
+      // The exception must carry the exact reason and the offending value in details.
+      const details = ((err as StorageException).getResponse() as {
+        error: { details: { reason: string; provided: number } }
+      }).error.details
+      expect(details.reason).toBe('TTL must be > 0')
+      expect(details.provided).toBe(0)
     }
   })
 
@@ -42,6 +48,12 @@ describe('clampTtl', () => {
       clampTtl(-10, DEFAULT_TTL, MAX_TTL)
     } catch (err) {
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SIGNED_URL_TTL_INVALID)
+      // Details must reflect the exact rejected TTL, not a blank object.
+      const details = ((err as StorageException).getResponse() as {
+        error: { details: { reason: string; provided: number } }
+      }).error.details
+      expect(details.reason).toBe('TTL must be > 0')
+      expect(details.provided).toBe(-10)
     }
   })
 

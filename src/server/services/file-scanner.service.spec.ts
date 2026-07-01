@@ -74,6 +74,16 @@ describe('FileScannerService', () => {
       expect(service.isEnabled()).toBe(false)
     })
 
+    it('returns false when the scanner impl is null even though options.scanner is set', async () => {
+      // Both operands of the `&&` matter: options config present but a null impl → still
+      // disabled. Forcing the `scanner !== null` operand to `true` would wrongly enable it.
+      const service = await buildService(
+        buildOptions({ impl: makeMockScanner({ status: 'clean', engine: 'test' }) }),
+        null,
+      )
+      expect(service.isEnabled()).toBe(false)
+    })
+
     it('returns true when scanner and options.scanner are both set', async () => {
       // both scanner and options config present → enabled
       const service = await buildService(
@@ -128,6 +138,15 @@ describe('FileScannerService', () => {
       expect(resp.error.details.threat).toBe('Trojan.X')
     })
 
+    it('returns a "clean" result even when rejectOnUnknown is true (does not enter the unknown branch)', async () => {
+      // The `status === 'unknown'` guard must gate the reject path: a clean result with
+      // rejectOnUnknown enabled must still pass, never throw SCAN_INCONCLUSIVE.
+      const impl = makeMockScanner({ status: 'clean', engine: 'clamav' })
+      const service = await buildService(buildOptions({ impl, rejectOnUnknown: true }), impl)
+      const result = await service.scan(SCAN_INPUT)
+      expect(result.status).toBe('clean')
+    })
+
     it('uses "unknown" as the threat label when the result carries no threat name', async () => {
       // threat may be absent; the warn log must substitute the fallback label "unknown"
       const impl = makeMockScanner({ status: 'infected', engine: 'clamav' })
@@ -160,10 +179,13 @@ describe('FileScannerService', () => {
       const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SCAN_INCONCLUSIVE)
+      // The inconclusive exception must carry the engine in details, not a blank object.
+      const resp = (err as StorageException).getResponse() as { error: { details: Record<string, unknown> } }
+      expect(resp.error.details.engine).toBe('clamav')
     })
 
-    it('returns result with a warning log on "unknown" when rejectOnUnknown is false', async () => {
-      // inconclusive without rejectOnUnknown must pass but log a warning
+    it('returns result with a specific warning log on "unknown" when rejectOnUnknown is false', async () => {
+      // inconclusive without rejectOnUnknown must pass but log the exact acceptance warning
       const impl = makeMockScanner({ status: 'unknown', engine: 'clamav' })
       const service = await buildService(buildOptions({ impl, rejectOnUnknown: false }), impl)
       const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
@@ -171,14 +193,14 @@ describe('FileScannerService', () => {
       const result = await service.scan(SCAN_INPUT)
 
       expect(result.status).toBe('unknown')
-      expect(warnSpy).toHaveBeenCalled()
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Inconclusive scan result accepted'))
       warnSpy.mockRestore()
     })
 
-    it('throws a programmatic Error when scan is called without a configured scanner', async () => {
-      // caller must guard with isEnabled() — calling scan() without a scanner is a bug
+    it('throws a programmatic Error with the guard message when scan is called without a scanner', async () => {
+      // caller must guard with isEnabled() — the error message names the required guard
       const service = await buildService(buildOptions(), null)
-      await expect(service.scan(SCAN_INPUT)).rejects.toThrow(Error)
+      await expect(service.scan(SCAN_INPUT)).rejects.toThrow('guard with isEnabled')
     })
   })
 

@@ -96,6 +96,23 @@ describe('applyDefaults', () => {
     expect(r.serverSideEncryption).toBeUndefined()
     expect(r.kmsKeyId).toBeUndefined()
     expect(r.credentials.sessionToken).toBeUndefined()
+    // The conditional spreads must OMIT the keys entirely (not set them to undefined),
+    // so `exactOptionalPropertyTypes` holds — the `in` check distinguishes absence from
+    // a present-but-undefined value that `toBeUndefined()` alone cannot catch.
+    expect('cdnBaseUrl' in r).toBe(false)
+    expect('validation' in r).toBe(false)
+    expect('scanner' in r).toBe(false)
+    expect('serverSideEncryption' in r).toBe(false)
+    expect('kmsKeyId' in r).toBe(false)
+  })
+
+  it('should strip every trailing slash from the endpoint when deriving publicBaseUrl', () => {
+    // The trailing-slash regex is `/\/+$/` (one-or-more) with an empty replacement:
+    // multiple trailing slashes must all collapse, and the replacement must be '' —
+    // never a single-slash strip and never an injected sentinel string.
+    expect(applyDefaults({ ...base, endpoint: 'http://localhost///' }).publicBaseUrl).toBe(
+      'http://localhost/b',
+    )
   })
 
   it('should pass through every provided option', () => {

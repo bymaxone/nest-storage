@@ -6,6 +6,7 @@
  * @layer server/services
  */
 import { Readable } from 'node:stream'
+import { Logger } from '@nestjs/common'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { StorageService } from './storage.service'
 import { StorageException } from '../errors/storage-exception'
@@ -88,6 +89,14 @@ function uploadOf(overrides: Partial<UploadOptions> = {}): UploadOptions {
 function firstInput(send: jest.Mock): Record<string, unknown> {
   const calls = send.mock.calls as [{ input: Record<string, unknown> }][]
   return calls[0]![0].input
+}
+
+/** Extracts the `error.details` map from a rejected StorageException promise. */
+function detailsOf(err: unknown): Record<string, unknown> {
+  return (
+    ((err as StorageException).getResponse() as { error: { details?: Record<string, unknown> } }).error
+      .details ?? {}
+  )
 }
 
 describe('StorageService — validation', () => {
@@ -244,12 +253,53 @@ describe('StorageService — single-shot upload', () => {
   })
 
   it('maps a provider failure through mapAwsError', async () => {
-    // A non-404 send rejection becomes a provider error.
+    // A non-404 send rejection becomes a provider error carrying the single-shot op context.
     const { service, send } = makeService()
     send.mockRejectedValue(SERVER_ERROR)
-    await expect(service.upload(uploadOf())).rejects.toMatchObject({
-      code: 'STORAGE_PROVIDER_ERROR',
+    const err = await service.upload(uploadOf({ key: 'a.txt' })).catch((e: unknown) => e)
+    expect((err as StorageException).code).toBe('STORAGE_PROVIDER_ERROR')
+    const details = detailsOf(err)
+    expect(details.op).toBe('upload-single')
+    expect(details.key).toBe('a.txt')
+    expect(details.bucket).toBe('test-bucket')
+  })
+
+  it('passes size and metadata to the validation pipeline only when the upload declares them', async () => {
+    // The conditional spreads into validate() must add size/metadata with their exact
+    // values when present and OMIT the keys entirely when absent.
+    const captured: Record<string, unknown>[] = []
+    const validate = jest.fn().mockImplementation((input: Record<string, unknown>) => {
+      captured.push(input)
+      return Promise.resolve({ body: input.body })
     })
+    const resolved = applyDefaults({
+      endpoint: 'https://s3.example.com',
+      region: 'us-east-1',
+      bucket: 'test-bucket',
+      credentials: { accessKeyId: 'k', secretAccessKey: 's' },
+      publicBaseUrl: 'https://cdn.example.com',
+    })
+    const send = jest.fn().mockResolvedValue({ ETag: '"abc"' })
+    const s3Provider = {
+      isConfigured: (): boolean => true,
+      getClient: (): S3Client => ({ send }) as unknown as S3Client,
+    } as unknown as S3ClientProvider
+    const service = new StorageService(
+      resolved,
+      s3Provider,
+      new KeyResolverService(resolved),
+      new IdempotencyCache(100, 60_000, () => 0),
+      { validate } as unknown as ValidationService,
+      makeDisabledScanner(),
+    )
+
+    await service.upload(uploadOf({ key: 'a.txt', size: 9, metadata: { owner: 'alice' } }))
+    await service.upload(uploadOf({ key: 'a.txt' }))
+
+    expect(captured[0]?.size).toBe(9)
+    expect(captured[0]?.metadata).toEqual({ owner: 'alice' })
+    expect('size' in (captured[1] ?? {})).toBe(false)
+    expect('metadata' in (captured[1] ?? {})).toBe(false)
   })
 })
 
@@ -301,12 +351,15 @@ describe('StorageService — head / exists', () => {
   })
 
   it('throws STORAGE_OBJECT_NOT_FOUND on a 404', async () => {
-    // 404 maps to the not-found code.
+    // 404 maps to the not-found code, carrying the head op context in details.
     const { service, send } = makeService()
     send.mockRejectedValue(NOT_FOUND)
-    await expect(service.head('missing')).rejects.toMatchObject({
-      code: 'STORAGE_OBJECT_NOT_FOUND',
-    })
+    const err = await service.head('missing').catch((e: unknown) => e)
+    expect((err as StorageException).code).toBe('STORAGE_OBJECT_NOT_FOUND')
+    const details = detailsOf(err)
+    expect(details.op).toBe('head')
+    expect(details.key).toBe('missing')
+    expect(details.bucket).toBe('test-bucket')
   })
 
   it('exists returns true for a present object', async () => {
@@ -316,18 +369,25 @@ describe('StorageService — head / exists', () => {
     await expect(service.exists('a.txt')).resolves.toBe(true)
   })
 
-  it('exists returns false on a 404', async () => {
-    // head 404 → exists false (the not-found branch).
+  it('exists returns false on a 404 without logging a warning', async () => {
+    // head 404 → exists false via the not-found branch; the non-404 warn path must NOT run.
     const { service, send } = makeService()
     send.mockRejectedValue(NOT_FOUND)
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     await expect(service.exists('missing')).resolves.toBe(false)
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
   })
 
-  it('exists returns false (with a warning) on a non-404 error', async () => {
-    // A provider error is treated as "false" rather than thrown.
+  it('exists returns false with a specific warning on a non-404 error', async () => {
+    // A provider error is treated as "false" rather than thrown, and the fall-through
+    // branch logs the exact non-404 warning (proving it is NOT the not-found branch).
     const { service, send } = makeService()
     send.mockRejectedValue(SERVER_ERROR)
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     await expect(service.exists('a.txt')).resolves.toBe(false)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('treating a non-404'))
+    warnSpy.mockRestore()
   })
 
   it('exists returns false when head throws a non-StorageException', async () => {
@@ -350,20 +410,26 @@ describe('StorageService — delete', () => {
     })
   })
 
-  it('is idempotent on a 404 (no throw)', async () => {
-    // A missing object is a logged no-op.
+  it('is idempotent on a 404 (no throw) and logs the not-found no-op', async () => {
+    // A missing object is a logged no-op with the specific idempotent-delete warning.
     const { service, send } = makeService()
     send.mockRejectedValue(NOT_FOUND)
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     await expect(service.delete('missing')).resolves.toBeUndefined()
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('key not found (idempotent no-op)'))
+    warnSpy.mockRestore()
   })
 
-  it('propagates a non-404 error', async () => {
-    // Other failures surface as provider errors.
+  it('propagates a non-404 error with the delete op context', async () => {
+    // Other failures surface as provider errors carrying the delete operation details.
     const { service, send } = makeService()
     send.mockRejectedValue(SERVER_ERROR)
-    await expect(service.delete('a.txt')).rejects.toMatchObject({
-      code: 'STORAGE_PROVIDER_ERROR',
-    })
+    const err = await service.delete('a.txt').catch((e: unknown) => e)
+    expect((err as StorageException).code).toBe('STORAGE_PROVIDER_ERROR')
+    const details = detailsOf(err)
+    expect(details.op).toBe('delete')
+    expect(details.key).toBe('a.txt')
+    expect(details.bucket).toBe('test-bucket')
   })
 })
 
@@ -401,6 +467,48 @@ describe('StorageService — getPublicUrl', () => {
       { bucket: 'test-bucket' },
     )
     expect(service.getPublicUrl('a.png')).toBe('https://test-bucket.s3.example.com/a.png')
+  })
+
+  it('strips ALL trailing slashes from the base before appending (multi-slash, empty replacement)', () => {
+    // The base-normalization regex is `/\/+$/` with an empty replacement: several trailing
+    // slashes must all collapse, never a single-slash strip nor an injected sentinel.
+    const { service } = makeService({ cdnBaseUrl: 'https://cdn.example.com//' })
+    expect(service.getPublicUrl('a.png')).toBe('https://cdn.example.com/test-bucket/a.png')
+  })
+
+  it('treats the host label as the bucket even when the base has a path (authority is the pre-slash part)', () => {
+    // The authority must be the substring BEFORE the first '/', so a host equal to the
+    // bucket is recognized despite a trailing path — the bucket is not appended again.
+    const { service } = makeService({ cdnBaseUrl: 'http://localhost/path' }, { bucket: 'localhost' })
+    expect(service.getPublicUrl('a.png')).toBe('http://localhost/path/a.png')
+  })
+
+  it('treats the whole schemeless base as the authority when there is no path', () => {
+    // With no '/', authority is the entire schemeless base (not sliced short by one char),
+    // so a host that equals the bucket is matched and the bucket is not duplicated.
+    const { service } = makeService({ cdnBaseUrl: 'http://localhost' }, { bucket: 'localhost' })
+    expect(service.getPublicUrl('a.png')).toBe('http://localhost/a.png')
+  })
+
+  it('recognizes the bucket as a leading path segment (slash at index 1)', () => {
+    // The path begins at the first '/' (index 1 here); its segments must be scanned, so a
+    // bucket appearing as the first path segment is not appended a second time.
+    const { service } = makeService({ cdnBaseUrl: 'https://x/foo' }, { bucket: 'foo' })
+    expect(service.getPublicUrl('a.png')).toBe('https://x/foo/a.png')
+  })
+
+  it('does not treat the authority tail as a path segment when the base has no path', () => {
+    // With no path, `path` must be '' (never the last authority char via slice(-1)); a
+    // single-char bucket equal to that tail must NOT be considered already carried.
+    const { service } = makeService({ cdnBaseUrl: 'https://cdn.example.com' }, { bucket: 'm' })
+    expect(service.getPublicUrl('a.png')).toBe('https://cdn.example.com/m/a.png')
+  })
+
+  it('excludes the authority from the path segments when a path is present', () => {
+    // `path` must be sliced from the first '/', so the dotted authority is NOT scanned as a
+    // path segment — a bucket equal to the whole authority is still appended.
+    const { service } = makeService({ cdnBaseUrl: 'https://a.b.c/x' }, { bucket: 'a.b.c' })
+    expect(service.getPublicUrl('a.png')).toBe('https://a.b.c/x/a.b.c/a.png')
   })
 })
 
@@ -539,6 +647,52 @@ describe('StorageService — scan integration', () => {
     expect(scanFn).toHaveBeenCalledWith(expect.objectContaining({ mode: 'post-upload', key: 'a.txt', size: 2 }))
   })
 
+  it('omits size from the post-upload scan input when the upload has no size', async () => {
+    // The conditional spread must NOT inject a `size: undefined` key when the upload
+    // provides no size.
+    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('post-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service } = makeServiceWithScanner(scanner)
+
+    await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain' })
+
+    const [[scanArg]] = scanFn.mock.calls as [[Record<string, unknown>]]
+    expect('size' in scanArg).toBe(false)
+  })
+
+  it('cleans up the infected object from the per-call bucket, not the module default', async () => {
+    // The post-upload cleanup delete must target the SAME bucket the upload used — the
+    // `{ bucket }` override, not `{}` (which would fall back to the default bucket).
+    const infected = new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED, undefined, {
+      engine: 'test',
+      threat: 'Virus.Z',
+    })
+    const scanFn = jest.fn().mockRejectedValue(infected)
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('post-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service, send } = makeServiceWithScanner(scanner)
+
+    await service
+      .upload({
+        key: 'infected.bin',
+        body: Buffer.from('evil'),
+        contentType: 'application/octet-stream',
+        bucket: 'override-bucket',
+      })
+      .catch(() => null)
+
+    // send #1 = PutObject, send #2 = DeleteObject cleanup — both against override-bucket.
+    const deleteInput = (send.mock.calls[1] as [{ input: Record<string, unknown> }])[0].input
+    expect(deleteInput.Bucket).toBe('override-bucket')
+  })
+
   it('deletes the object and rethrows when post-upload scan detects infection', async () => {
     // infected object must be removed from the bucket before the exception propagates
     const infected = new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED, undefined, {
@@ -579,11 +733,19 @@ describe('StorageService — scan integration', () => {
     send
       .mockResolvedValueOnce({ ETag: '"abc"' })
       .mockRejectedValueOnce(new Error('delete forbidden'))
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
 
     const err = await service
       .upload({ key: 'infected2.bin', body: Buffer.from('evil'), contentType: 'application/octet-stream' })
       .catch((e: unknown) => e)
 
     expect(err).toBe(infected)
+    // The swallowed delete failure must be logged with the specific cleanup-failed message
+    // (proving the catch body is not empty), alongside the delete error's message.
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Post-upload cleanup failed'),
+      expect.anything(),
+    )
+    errorSpy.mockRestore()
   })
 })

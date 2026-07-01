@@ -27,6 +27,8 @@ describe('providerRecipes.awsS3', () => {
     expect(withToken.credentials.sessionToken).toBe('tok')
     const without = providerRecipes.awsS3({ region: 'us-east-1', bucket: 'b', ...CREDS })
     expect(without.credentials.sessionToken).toBeUndefined()
+    // The conditional spread must OMIT the key when absent, not set it to undefined.
+    expect('sessionToken' in without.credentials).toBe(false)
   })
 })
 

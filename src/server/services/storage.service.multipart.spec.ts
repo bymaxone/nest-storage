@@ -8,6 +8,7 @@ import { Readable } from 'node:stream'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import { StorageService } from './storage.service'
+import type { StorageException } from '../errors/storage-exception'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { IdempotencyCache } from '../utils/idempotency-cache'
@@ -158,11 +159,17 @@ describe('StorageService — multipart upload', () => {
   })
 
   it('maps a failed done() to STORAGE_MULTIPART_ABORTED with details', async () => {
-    // A multipart failure surfaces the abort code and non-sensitive details.
+    // A multipart failure surfaces the abort code and non-sensitive details (key + the
+    // underlying AWS message), never a blank details object.
     const { service } = makeService()
     installUploader(() => Promise.reject(new Error('part failed')))
-    await expect(service.upload(uploadOf({ key: 'big.bin' }))).rejects.toMatchObject({
-      code: 'STORAGE_MULTIPART_ABORTED',
-    })
+    const err = await service.upload(uploadOf({ key: 'big.bin' })).catch((e: unknown) => e)
+    expect((err as StorageException).code).toBe('STORAGE_MULTIPART_ABORTED')
+    const details = ((err as StorageException).getResponse() as {
+      error: { details: Record<string, unknown> }
+    }).error.details
+    expect(details.key).toBe('big.bin')
+    expect(details.bucket).toBe('test-bucket')
+    expect(details.awsMessage).toBe('part failed')
   })
 })

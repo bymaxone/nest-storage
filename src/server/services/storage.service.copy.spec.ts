@@ -6,6 +6,7 @@
  */
 import type { S3Client } from '@aws-sdk/client-s3'
 import { StorageService } from './storage.service'
+import type { StorageException } from '../errors/storage-exception'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { IdempotencyCache } from '../utils/idempotency-cache'
@@ -125,12 +126,17 @@ describe('StorageService.copy', () => {
     expect(result.etag).toBe('')
   })
 
-  it('maps AWS failures through mapAwsError', async () => {
-    // A provider error surfaces as STORAGE_PROVIDER_ERROR.
+  it('maps AWS failures through mapAwsError with the copy op context', async () => {
+    // A provider error surfaces as STORAGE_PROVIDER_ERROR carrying source/dest key + op.
     const { service, send } = makeService()
     send.mockRejectedValue(SERVER_ERROR)
-    await expect(service.copy({ sourceKey: 'a', destinationKey: 'b' })).rejects.toMatchObject({
-      code: 'STORAGE_PROVIDER_ERROR',
-    })
+    const err = await service.copy({ sourceKey: 'a', destinationKey: 'b' }).catch((e: unknown) => e)
+    expect((err as StorageException).code).toBe('STORAGE_PROVIDER_ERROR')
+    const details = ((err as StorageException).getResponse() as {
+      error: { details: Record<string, unknown> }
+    }).error.details
+    expect(details.op).toBe('copy')
+    expect(details.sourceKey).toBe('a')
+    expect(details.destKey).toBe('b')
   })
 })

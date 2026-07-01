@@ -85,6 +85,13 @@ describe('StorageService.deleteMany', () => {
     expect(result).toEqual({ deleted: [], failed: [] })
   })
 
+  it('returns early on empty input BEFORE resolving the bucket', async () => {
+    // The empty guard must `return` early: with an unresolvable (empty) bucket, a no-op
+    // deleteMany([]) still succeeds — it never reaches resolveBucket (BUCKET_UNDEFINED).
+    const { service } = makeService({ bucket: '' })
+    await expect(service.deleteMany([])).resolves.toEqual({ deleted: [], failed: [] })
+  })
+
   it('deletes with Quiet:false and reports successes', async () => {
     // Both successes and errors are requested via Quiet:false.
     const { service, send } = makeService()

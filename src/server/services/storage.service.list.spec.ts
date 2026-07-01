@@ -7,6 +7,7 @@
  */
 import type { ListObjectsV2CommandOutput, S3Client } from '@aws-sdk/client-s3'
 import { StorageService } from './storage.service'
+import type { StorageException } from '../errors/storage-exception'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { IdempotencyCache } from '../utils/idempotency-cache'
@@ -171,10 +172,17 @@ describe('StorageService.list', () => {
     ])
   })
 
-  it('maps AWS failures through mapAwsError', async () => {
-    // A provider error surfaces as STORAGE_PROVIDER_ERROR.
+  it('maps AWS failures through mapAwsError with the list op context', async () => {
+    // A provider error surfaces as STORAGE_PROVIDER_ERROR carrying bucket/prefix/op details.
     const { service, send } = makeService()
     send.mockRejectedValue(SERVER_ERROR)
-    await expect(service.list({ prefix: 'x/' })).rejects.toMatchObject({ code: 'STORAGE_PROVIDER_ERROR' })
+    const err = await service.list({ prefix: 'x/' }).catch((e: unknown) => e)
+    expect((err as StorageException).code).toBe('STORAGE_PROVIDER_ERROR')
+    const details = ((err as StorageException).getResponse() as {
+      error: { details: Record<string, unknown> }
+    }).error.details
+    expect(details.op).toBe('list')
+    expect(details.bucket).toBe('test-bucket')
+    expect(details.prefix).toBe('x/')
   })
 })
