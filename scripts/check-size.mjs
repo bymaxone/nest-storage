@@ -10,8 +10,8 @@ import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
  * is types and constants. Measured at maximum brotli quality.
  */
 const BUDGETS = [
-  { name: 'server (NestJS module + AWS SDK externals)', path: 'dist/server/index.mjs', brotli: 30_000 },
-  { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 3_500 },
+  { name: 'server (NestJS module + AWS SDK externals)', path: 'dist/server/index.mjs', brotli: 17_000 },
+  { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 700 },
 ]
 
 let failed = false

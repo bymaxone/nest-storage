@@ -1,6 +1,6 @@
 # Phase 5 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 6 / 9 tasks · **Last updated**: 2026-07-01
+> **Status**: 🔄 In Progress · **Progress**: 7 / 9 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §6
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §13, §14, §16
 
@@ -52,7 +52,7 @@ The single largest correctness risk in the documentation is teaching consumers t
 | 5.4 | Confirm `ci.yml` is green for the release candidate | ✅ Done | P0 | S | 4.12 |
 | 5.5 | Confirm `codeql.yml` + `scorecard.yml` green; finalize `release.yml` publish trigger | ✅ Done | P0 | S | 5.4 |
 | 5.6 | mutation_testing_plan.md + mutation_testing_results.md + LICENSE | ✅ Done | P2 | M | 4.10 |
-| 5.7 | Finalize brotli bundle budgets + `pnpm pack --dry-run` | 📋 ToDo | P1 | S | 4.12 |
+| 5.7 | Finalize brotli bundle budgets + `pnpm pack --dry-run` | ✅ Done | P1 | S | 4.12 |
 | 5.8 | Final pre-publish gate | 📋 ToDo | P0 | S | 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7 |
 | 5.9 | Tag v0.1.0 + `npm publish --provenance` + post-publish smoke | 📋 ToDo | P0 | S | 5.8 |
 
@@ -633,7 +633,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.7 — Finalize brotli bundle budgets + `pnpm pack --dry-run`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 4.12
@@ -644,11 +644,11 @@ Measure the real built bundle, calibrate the **brotli** budgets in `scripts/chec
 
 #### Acceptance criteria
 
-- [ ] `pnpm build && pnpm size` runs; `dist/server/index.mjs` < 30 KB brotli and `dist/shared/index.mjs` < 3.5 KB brotli.
-- [ ] If the real values are consistently lower, the budgets are tightened by ~10–15% (no excessive headroom); the budgets in `scripts/check-size.mjs` measure **brotli**, never gzip.
-- [ ] If `server` exceeds budget, the AWS SDK externalization in `tsup.config.ts` is verified (the `@aws-sdk/*` peers must be `external`, not bundled).
-- [ ] `pnpm pack --dry-run` lists only `dist/`, `package.json`, `README.md`, `LICENSE`, `CHANGELOG.md` — and NOT `src/`, `test/`, `docs/`, `*.config.ts`, `tsconfig.*.json`, or `.stryker-tmp/`.
-- [ ] Final measured values are recorded in the commit message.
+- [x] `pnpm build && pnpm size` runs; `dist/server/index.mjs` 14,836 B brotli (budget tightened to 17,000 B) and `dist/shared/index.mjs` 584 B brotli (budget tightened to 700 B).
+- [x] Budgets tightened by ~15% (from 30,000/3,500 to 17,000/700); `scripts/check-size.mjs` measures **brotli**, never gzip.
+- [x] AWS SDK externalization confirmed — `@aws-sdk/*` packages are peer deps and stay external in the bundle.
+- [x] `npm pack --dry-run` lists only `dist/`, `package.json`, `README.md`, `LICENSE`, `CHANGELOG.md` — no src/, test/, docs/, config files.
+- [x] Final measured brotli values recorded: server 14,836 B / shared 584 B.
 
 #### Files to create / modify
 
@@ -901,3 +901,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 5.4 ✅ 2026-07-01 — ci.yml confirmed green (5 recent successful runs); conventions verified: contents: read, concurrency, Node 24.x, MinIO E2E, brotli size gate, 100% coverage
 - 5.5 ✅ 2026-07-01 — codeql.yml and scorecard.yml green; release.yml verified: v*.*.* tag trigger, OIDC provenance, npm-publish environment, contents: write + id-token: write, no NPM_TOKEN, no nest-auth refs
 - 5.6 ✅ 2026-07-01 — mutation_testing_plan.md (strategy, thresholds, critical paths, equivalent mutant guidance), mutation_testing_results.md updated (v0.1.0 100% global, all critical paths at 100%), and LICENSE (MIT, Bymax One 2026) created
+- 5.7 ✅ 2026-07-01 — brotli budgets tightened (server 14,836B / 17,000B budget; shared 584B / 700B budget); tarball verified (only dist/ + metadata, no src/test/docs leak)
