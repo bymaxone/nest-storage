@@ -1,0 +1,57 @@
+# Changelog
+
+All notable changes to `@bymax-one/nest-storage` are documented in this file.
+
+The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [Unreleased]
+
+---
+
+## [0.1.0] - 2026-07-01
+
+### Added
+
+- **Initial release** of `@bymax-one/nest-storage` — provider-agnostic S3-compatible object storage for NestJS.
+- **Single `@aws-sdk/client-s3` engine** — works with AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, MinIO, and Wasabi.
+- **`StorageService`** — full object lifecycle:
+  - `upload()` — single-shot PutObject or automatic multipart via `@aws-sdk/lib-storage` (with `leavePartsOnError: false` for automatic abort on failure), `onProgress` events, `idempotencyKey` cache
+  - `download()` — streaming `Readable` with metadata
+  - `downloadBuffer()` — buffered download (for files < 10 MiB)
+  - `head()` — object metadata without downloading
+  - `exists()` — non-throwing existence check
+  - `delete()` — idempotent (no error on 404)
+  - `deleteMany()` — batched (chunked ≤ 1 000 keys per S3 API call); returns `{ deleted, failed }`
+  - `list()` — paginated listing via `ContinuationToken`
+  - `copy()` — server-side copy (same or cross-bucket)
+  - `getPublicUrl()` — unsigned public URL (does not validate ACL or existence)
+- **`SignedUrlService`** — presigned URL generation:
+  - `getDownloadUrl()` — presigned GET with optional response headers
+  - `getUploadUrl()` — presigned PUT with Content-Length-Range policy
+  - `getMultipartUploadUrls()` — presigned multipart (InitiateMultipartUpload + per-part URLs)
+  - TTL clamped to `signedUrls.maxTtlSeconds`; `maxTtlSeconds` clamped to 604 800 s (7-day SigV4 ceiling) at init
+- **`IUploadValidator` hook** — pluggable pre-upload validator (MIME whitelist with wildcards, size limit, custom `readBytes` magic-byte checks); `NoOpUploadValidator` included
+- **`IFileScanner` hook** — pluggable virus-scan integration (`pre-upload` / `post-upload` / `both`; `rejectOnUnknown` policy); `NoOpFileScanner` included
+- **Six provider recipes** (`providerRecipes`):
+  - `awsS3` — AWS S3 with SSE-AES256; SDK default checksum mode
+  - `cloudflareR2` — region `'auto'`; `customDomain` required; checksums `'WHEN_REQUIRED'`
+  - `backblazeB2` — virtual-hosted; checksums `'WHEN_REQUIRED'`
+  - `digitalOceanSpaces` — with CDN base URL; checksums `'WHEN_REQUIRED'`
+  - `minio` — `forcePathStyle: true`; checksums `'WHEN_REQUIRED'`
+  - `wasabi` — virtual-hosted; checksums `'WHEN_REQUIRED'`
+- **17-code `StorageException` catalog** — typed errors extending `HttpException` with `{ error: { code, message, details? } }` response body; `STORAGE_ERROR_CODES` exported from the `./shared` subpath
+- **`keyPrefix` multi-tenant isolation** — prepended to every resolved key; enforced by `KeyResolverService`
+- **Mandatory path-traversal guard** — `KeyResolverService` blocks `..`, leading `/`, and empty-after-normalize keys (`STORAGE_KEY_INVALID` / HTTP 400)
+- **In-memory LRU idempotency cache** — default 1 000 entries / 24 h; `idempotencyKey` per-upload
+- **Server-side encryption** — `serverSideEncryption: 'AES256'` or `'aws:kms'` globally or per-upload; `'NONE'` sentinel omits the header
+- **Subpath exports**:
+  - `.` — server runtime (NestJS module, services, provider recipes, DI tokens, interfaces)
+  - `./shared` — framework-free types and `STORAGE_ERROR_CODES`
+- **`forRoot` / `forRootAsync`** dynamic module API (`@Global()`; `Symbol()` DI tokens)
+- **`BYMAX_STORAGE_S3_CLIENT` DI token** — raw `S3Client` injection for provider-specific advanced operations (spec §11.2)
+- **Non-AWS checksum opt-out** — the five non-AWS recipes set `requestChecksumCalculation` / `responseChecksumValidation` to `'WHEN_REQUIRED'` to prevent the SDK's default CRC32 `x-amz-checksum-*` headers from being sent to providers that reject them
+
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/bymaxone/nest-storage/releases/tag/v0.1.0
