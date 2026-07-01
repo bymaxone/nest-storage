@@ -68,7 +68,7 @@ The phase order respects the dependency graph (Appendix A): S3 client before upl
 ### 1.4 Progress
 
 - **Overall progress:** ✅ 4 / 5 phases done (80%) — 55 / 64 tasks
-- **Active phase:** **Phase 5** (Release) — 📋 ToDo
+- **Active phase:** **Phase 5** (Release) — 🔄 In Progress
 - **Blocked:** none
 
 ### 1.5 Phase dashboard
@@ -79,7 +79,7 @@ The phase order respects the dependency graph (Appendix A): S3 client before upl
 | 2 | [Upload (single, multipart, stream) + Download](./tasks/phase-02-upload-download.md) | ✅ Done | 14/14 | HIGH | 2026-06-30 |
 | 3 | [Signed URLs + Validation + Scanner](./tasks/phase-03-signed-urls-validation-scanner.md) | ✅ Done | 12/12 | MEDIUM | 2026-06-30 |
 | 4 | [Listing + Pagination + forRootAsync + E2E + Mutation](./tasks/phase-04-listing-async-e2e-mutation.md) | ✅ Done | 12/12 | HIGH | 2026-07-01 |
-| 5 | [Release v0.1.0](./tasks/phase-05-release.md) | 📋 ToDo | 0/9 | LOW | 2026-06-23 |
+| 5 | [Release v0.1.0](./tasks/phase-05-release.md) | 🔄 In Progress | 1/9 | LOW | 2026-07-01 |
 | | **Total** | ✅ **4 / 5 phases** | **55 / 64 tasks** | — | — |
 
 > Each phase links to its task file in [`docs/tasks/`](./tasks/) (one file per phase). Per-sub-step detail is in §2–§6; dependency graph in Appendix A, complexity matrix in Appendix B. The **sub-step** counts in the prose (11/9/8/8/7 = 43) are finer-grained than the **task** counts (17/14/12/12/9 = 64): one plan sub-step expands into one or more executable tasks (§1.9).

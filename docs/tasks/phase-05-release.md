@@ -1,6 +1,6 @@
 # Phase 5 — Release v0.1.0
 
-> **Status**: 📋 ToDo · **Progress**: 0 / 9 tasks · **Last updated**: 2026-06-23
+> **Status**: 🔄 In Progress · **Progress**: 1 / 9 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §6
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §13, §14, §16
 
@@ -46,7 +46,7 @@ The single largest correctness risk in the documentation is teaching consumers t
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 5.1 | README (badges + quick start + 4 provider scenarios + error table) | 📋 ToDo | P1 | L | 4.12 |
+| 5.1 | README (badges + quick start + 4 provider scenarios + error table) | ✅ Done | P1 | L | 4.12 |
 | 5.2 | CHANGELOG.md + SECURITY.md | 📋 ToDo | P1 | M | 1.1 |
 | 5.3 | CLAUDE.md + AGENTS.md | 📋 ToDo | P2 | L | 1.1 |
 | 5.4 | Confirm `ci.yml` is green for the release candidate | 📋 ToDo | P0 | S | 4.12 |
@@ -62,7 +62,7 @@ The single largest correctness risk in the documentation is teaching consumers t
 
 ### Task 5.1 — README (badges + quick start + 4 provider scenarios + error table)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: L
 - **Depends on**: 4.12
@@ -73,16 +73,16 @@ Author the public `README.md`, mirroring the structure of `nest-auth/README.md` 
 
 #### Acceptance criteria
 
-- [ ] README contains all sections: Overview, Features, Subpath Exports, Quick Start, Configuration, Provider Recipes, Upload, Download, Signed URLs, Validation, Virus Scanning, Lifecycle Operations, Error Codes, Testing, Contributing, License.
-- [ ] Badges configured for `bymaxone/nest-storage`: npm version, downloads, CI status, coverage, mutation score, OpenSSF Scorecard, license, TypeScript, Node 24+.
-- [ ] Subpath Exports table lists exactly two entries: `.` (server) and `./shared`.
-- [ ] Four complete, copy-pasteable quick-start scenarios: (1) AWS S3 via `providerRecipes.awsS3`; (2) Cloudflare R2 with `customDomain` (which is the `publicBaseUrl` — **required**, no working default); (3) DigitalOcean Spaces with CDN; (4) MinIO local (dev) with `forcePathStyle: true`.
-- [ ] A dedicated note teaches the **#1 provider-compat trap**: non-AWS providers reject the SDK's default integrity-checksum headers, and the non-AWS recipes set `requestChecksumCalculation`/`responseChecksumValidation` to `'WHEN_REQUIRED'` to fix it.
-- [ ] A note documents that `publicRead` via ACL returns HTTP 400 `AccessControlListNotSupported` on modern AWS S3 and is a silent no-op on R2 — use a bucket policy / CDN / signed URL instead.
-- [ ] Configuration prose uses `maxAttempts` (default 3) and contains **no** `maxRetries` and **no** `signatureVersion` anywhere.
-- [ ] Complete table of all 17 error codes with their HTTP status (mirrors spec §12.2).
-- [ ] An `IUploadValidator` example (magic-byte PDF check) and an `IFileScanner` stub (ClamAV) example.
-- [ ] Markdown is valid with no broken intra-repo links.
+- [x] README contains all sections: Overview, Features, Subpath Exports, Quick Start, Configuration, Provider Recipes, Upload, Download, Signed URLs, Validation, Virus Scanning, Lifecycle Operations, Error Codes, Testing, Contributing, License.
+- [x] Badges configured for `bymaxone/nest-storage`: npm version, downloads, CI status, coverage, mutation score, OpenSSF Scorecard, license, TypeScript, Node 24+.
+- [x] Subpath Exports table lists exactly two entries: `.` (server) and `./shared`.
+- [x] Four complete, copy-pasteable quick-start scenarios: (1) AWS S3 via `providerRecipes.awsS3`; (2) Cloudflare R2 with `customDomain` (which is the `publicBaseUrl` — **required**, no working default); (3) DigitalOcean Spaces with CDN; (4) MinIO local (dev) with `forcePathStyle: true`.
+- [x] A dedicated note teaches the **#1 provider-compat trap**: non-AWS providers reject the SDK's default integrity-checksum headers, and the non-AWS recipes set `requestChecksumCalculation`/`responseChecksumValidation` to `'WHEN_REQUIRED'` to fix it.
+- [x] A note documents that `publicRead` via ACL returns HTTP 400 `AccessControlListNotSupported` on modern AWS S3 and is a silent no-op on R2 — use a bucket policy / CDN / signed URL instead.
+- [x] Configuration prose uses `maxAttempts` (default 3) and contains **no** `maxRetries` and **no** `signatureVersion` anywhere.
+- [x] Complete table of all 17 error codes with their HTTP status (mirrors spec §12.2).
+- [x] An `IUploadValidator` example (magic-byte PDF check) and an `IFileScanner` stub (ClamAV) example.
+- [x] Markdown is valid with no broken intra-repo links.
 
 #### Files to create / modify
 
@@ -894,3 +894,5 @@ Completion Protocol (after you finish):
 ## Completion log
 
 _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
+
+- 5.1 ✅ 2026-07-01 — README created with badges, four provider quick-starts, error table, and the two provider-trap callouts
