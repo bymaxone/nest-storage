@@ -23,6 +23,9 @@ import {
 import { S3ClientProvider } from './providers/s3-client.provider'
 import { KeyResolverService } from './services/key-resolver.service'
 import { StorageService } from './services/storage.service'
+import { SignedUrlService } from './services/signed-url.service'
+import { ValidationService } from './services/validation.service'
+import { FileScannerService } from './services/file-scanner.service'
 import { IdempotencyCache } from './utils/idempotency-cache'
 
 @Global()
@@ -70,6 +73,11 @@ export class BymaxStorageModule {
           ),
       },
       StorageService,
+      SignedUrlService,
+      // ValidationService and FileScannerService are internal — consumed via
+      // StorageService.upload() only, not exported from the module.
+      ValidationService,
+      FileScannerService,
       {
         // Public raw-client token. Null-tolerant so the module still registers
         // without credentials (resolves to null until configured).
@@ -82,12 +90,14 @@ export class BymaxStorageModule {
     return {
       module: BymaxStorageModule,
       providers,
-      // Public DI surface: the `StorageService` facade, the resolved options, the
-      // raw-client token, and the user-supplied upload-validators + file-scanner
-      // tokens — all injectable by consumers via `@Global()`. S3ClientProvider,
-      // KeyResolverService, and the idempotency cache stay internal.
+      // Public DI surface: StorageService + SignedUrlService facades, the resolved
+      // options, the raw-client token, and the user-supplied upload-validators +
+      // file-scanner tokens — all injectable by consumers via @Global().
+      // S3ClientProvider, KeyResolverService, ValidationService, FileScannerService,
+      // and the idempotency cache are internal and intentionally not exported.
       exports: [
         StorageService,
+        SignedUrlService,
         BYMAX_STORAGE_OPTIONS,
         BYMAX_STORAGE_S3_CLIENT,
         BYMAX_STORAGE_UPLOAD_VALIDATORS,

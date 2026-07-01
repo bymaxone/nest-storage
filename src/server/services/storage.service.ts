@@ -25,6 +25,8 @@ import type { DownloadOptions } from '../interfaces/download-options.interface'
 import type { ObjectMetadata, UploadResult } from '../../shared/types/storage-types'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
+import { ValidationService } from './validation.service'
+import { FileScannerService } from './file-scanner.service'
 import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
@@ -73,6 +75,8 @@ export class StorageService {
     @Inject(S3ClientProvider) private readonly s3Provider: S3ClientProvider,
     @Inject(KeyResolverService) private readonly keyResolver: KeyResolverService,
     @Inject(BYMAX_STORAGE_IDEMPOTENCY_CACHE) private readonly idempotencyCache: IdempotencyCache,
+    @Inject(ValidationService) private readonly validation: ValidationService,
+    @Inject(FileScannerService) private readonly scanner: FileScannerService,
   ) {}
 
   /**
@@ -106,15 +110,31 @@ export class StorageService {
       }
     }
 
+    // Validation pipeline: MIME → size → custom validators.
+    const validated = await this.validation.validate({
+      key: finalKey,
+      body: options.body,
+      contentType: options.contentType,
+      ...(options.size !== undefined ? { size: options.size } : {}),
+      ...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
+    })
+    const validatedOptions = { ...options, body: validated.body }
+
+    // Pre-upload scan: runs before the S3 PutObject.
+    await this.runPreUploadScan(validated.body, finalKey, bucket, options)
+
     const strategy = pickUploadStrategy(
-      options.body,
-      options.size,
+      validatedOptions.body,
+      validatedOptions.size,
       this.options.multipart.thresholdBytes,
     )
     const result =
       strategy === 'multipart'
-        ? await this.uploadMultipart(options, finalKey, bucket)
-        : await this.uploadSingleShot(options, finalKey, bucket)
+        ? await this.uploadMultipart(validatedOptions, finalKey, bucket)
+        : await this.uploadSingleShot(validatedOptions, finalKey, bucket)
+
+    // Post-upload scan: runs after the object is written; infected → delete and re-throw.
+    await this.runPostUploadScan(finalKey, bucket, options)
 
     if (options.idempotencyKey) {
       this.idempotencyCache.set(
@@ -123,6 +143,57 @@ export class StorageService {
       )
     }
     return result
+  }
+
+  /** Runs a pre-upload scan when configured; throws on infected. */
+  private async runPreUploadScan(
+    body: UploadBody,
+    finalKey: string,
+    bucket: string,
+    options: UploadOptions,
+  ): Promise<void> {
+    if (!this.scanner.isEnabled() || this.scanner.getMode() !== 'pre-upload') {
+      return
+    }
+    await this.scanner.scan({
+      mode: 'pre-upload',
+      body: body as Buffer | NodeJS.ReadableStream,
+      key: finalKey,
+      bucket,
+      contentType: options.contentType,
+      ...(options.size !== undefined ? { size: options.size } : {}),
+    })
+  }
+
+  /**
+   * Runs a post-upload scan. On infection, deletes the just-uploaded object
+   * (logging delete failures as errors) and re-throws the scan exception.
+   */
+  private async runPostUploadScan(
+    finalKey: string,
+    bucket: string,
+    options: UploadOptions,
+  ): Promise<void> {
+    if (!this.scanner.isEnabled() || this.scanner.getMode() !== 'post-upload') {
+      return
+    }
+    try {
+      await this.scanner.scan({
+        mode: 'post-upload',
+        key: finalKey,
+        bucket,
+        contentType: options.contentType,
+        ...(options.size !== undefined ? { size: options.size } : {}),
+      })
+    } catch (scanErr) {
+      await this.delete(finalKey, { bucket }).catch((deleteErr: unknown) => {
+        this.logger.error(
+          `Post-upload cleanup failed for infected/inconclusive object: ${finalKey}`,
+          (deleteErr as Error).message,
+        )
+      })
+      throw scanErr
+    }
   }
 
   /**

@@ -10,6 +10,11 @@ export { BymaxStorageModule } from './bymax-storage.module'
 
 // Services
 export { StorageService } from './services/storage.service'
+export { SignedUrlService } from './services/signed-url.service'
+
+// No-op helpers (default implementations for validation and scanning)
+export { NoOpUploadValidator } from './providers/no-op-validator'
+export { NoOpFileScanner } from './providers/no-op-scanner'
 
 // DI Tokens
 export {
