@@ -1,6 +1,6 @@
 # Phase 4 — Listing + Pagination + forRootAsync + E2E + Mutation
 
-> **Status**: 🔄 In Progress · **Progress**: 5 / 12 tasks · **Last updated**: 2026-07-01
+> **Status**: 🔄 In Progress · **Progress**: 6 / 12 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §5
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §10, §4.3, §4.4
 
@@ -52,7 +52,7 @@ It also stands up the real **end-to-end** suite: Jest spins up a MinIO container
 | 4.3 | `StorageService.deleteMany()` — batch delete (chunked ≤ 1000) | ✅ Done | P0 | M | 2.5 |
 | 4.4 | Provider Recipes (AWS, DO Spaces, R2, B2, MinIO, Wasabi) | ✅ Done | P1 | M | 1.9 |
 | 4.5 | Barrel — export `providerRecipes` | ✅ Done | P1 | S | 4.1, 4.2, 4.3, 4.4 |
-| 4.6 | `BymaxStorageModule.forRootAsync()` | 📋 ToDo | P0 | M | 1.15, 2.10, 3.7 |
+| 4.6 | `BymaxStorageModule.forRootAsync()` | ✅ Done | P0 | M | 1.15, 2.10, 3.7 |
 | 4.7 | Unit tests — list / copy / deleteMany / recipes / forRootAsync | 📋 ToDo | P0 | L | 4.1, 4.2, 4.3, 4.4, 4.6 |
 | 4.8 | E2E fixtures — MinIO via Testcontainers | 📋 ToDo | P0 | S | 4.6 |
 | 4.9 | E2E specs against MinIO (basic / multipart / signed / list / validation) | 📋 ToDo | P0 | L | 4.8 |
@@ -476,7 +476,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.6 — `BymaxStorageModule.forRootAsync()`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.15, 2.10, 3.7
@@ -487,13 +487,13 @@ Add the canonical NestJS `forRootAsync()` to `BymaxStorageModule`, supporting `u
 
 #### Acceptance criteria
 
-- [ ] `forRootAsync({ useFactory, inject: [ConfigService] })` resolves options asynchronously from the injected dependencies.
-- [ ] `forRootAsync({ useClass: MyOptionsFactory })` instantiates the factory and calls `createStorageOptions()`.
-- [ ] `forRootAsync({ useExisting: ExistingFactory })` reuses the existing instance.
-- [ ] Absent all three (`useFactory`/`useClass`/`useExisting`) → throws `Error('BymaxStorageModule.forRootAsync requires useFactory, useClass, or useExisting')`.
-- [ ] `validateOptions` + `applyDefaults` run inside the factory (not in the consumer).
-- [ ] The returned module replicates all `forRoot()` providers/exports; `StorageService` is injectable after async bootstrap.
-- [ ] `asyncOptions.imports` are forwarded; each method ≤ 50 lines; `pnpm typecheck` passes; seed spec at 100% line/branch on the new paths.
+- [x] `forRootAsync({ useFactory, inject: [ConfigService] })` resolves options asynchronously from the injected dependencies.
+- [x] `forRootAsync({ useClass: MyOptionsFactory })` instantiates the factory and calls `createStorageOptions()`.
+- [x] `forRootAsync({ useExisting: ExistingFactory })` reuses the existing instance.
+- [x] Absent all three (`useFactory`/`useClass`/`useExisting`) → throws `Error('BymaxStorageModule.forRootAsync requires useFactory, useClass, or useExisting')`.
+- [x] `validateOptions` + `applyDefaults` run inside the factory (not in the consumer).
+- [x] The returned module replicates all `forRoot()` providers/exports; `StorageService` is injectable after async bootstrap.
+- [x] `asyncOptions.imports` are forwarded; each method ≤ 50 lines; `pnpm typecheck` passes; seed spec at 100% line/branch on the new paths.
 
 #### Files to create / modify
 
@@ -1040,3 +1040,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 4.3 ✅ 2026-07-01 — Added `StorageService.deleteMany()` chunked at ≤1000 keys with per-key success/failure aggregation and prefix stripping.
 - 4.4 ✅ 2026-07-01 — Added `providerRecipes` for AWS/DO/R2/B2/MinIO/Wasabi with the non-AWS checksum opt-out and session-token forwarding.
 - 4.5 ✅ 2026-07-01 — Exported `providerRecipes` from the server barrel; verified list/copy/deleteMany signatures and six recipe keys in the built d.ts.
+- 4.6 ✅ 2026-07-01 — Added `BymaxStorageModule.forRootAsync()` (useFactory/useClass/useExisting), validating and resolving options inside the factory and replicating the `forRoot` provider/export surface.
