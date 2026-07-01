@@ -234,15 +234,47 @@ describe('SignedUrlService', () => {
       expect(input.Metadata).toEqual({ owner: 'alice' })
     })
 
-    it('forwards ContentLength as maxSizeBytes when provided', async () => {
-      // maxSizeBytes becomes ContentLength on the signed PUT command
+    it('does not pin an exact ContentLength even when maxSizeBytes is provided', async () => {
+      // A SigV4 PUT ContentLength is exact, not a max — binding it would reject
+      // valid smaller uploads, so maxSizeBytes must never reach the command.
       const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
 
       await service.getUploadUrl({ key: KEY, contentType: 'image/png', maxSizeBytes: 1024 })
 
       const cmdArg = mockedGetSignedUrl.mock.calls[0]?.[1]
       const input = (cmdArg as PutObjectCommand).input
-      expect(input.ContentLength).toBe(1024)
+      expect(input.ContentLength).toBeUndefined()
+    })
+
+    it('includes x-amz-acl in requiredHeaders when publicRead is set', async () => {
+      // publicRead signs an x-amz-acl header, so the client must be told to send it
+      const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+
+      const result = await service.getUploadUrl({ key: KEY, contentType: 'image/png', publicRead: true })
+
+      expect(result.requiredHeaders['x-amz-acl']).toBe('public-read')
+    })
+
+    it('omits x-amz-acl from requiredHeaders when no ACL is signed', async () => {
+      // without publicRead (and no module default) no ACL header is part of the signature
+      const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+
+      const result = await service.getUploadUrl({ key: KEY, contentType: 'image/png' })
+
+      expect(result.requiredHeaders).not.toHaveProperty('x-amz-acl')
+    })
+
+    it('includes an x-amz-meta-<key> entry in requiredHeaders per metadata pair', async () => {
+      // signed metadata headers must be echoed to the client or the signature breaks
+      const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+
+      const result = await service.getUploadUrl({
+        key: KEY,
+        contentType: 'image/png',
+        metadata: { a: 'b' },
+      })
+
+      expect(result.requiredHeaders['x-amz-meta-a']).toBe('b')
     })
 
     it('maps a non-StorageException error from getSignedUrl to STORAGE_PROVIDER_ERROR', async () => {
@@ -316,8 +348,9 @@ describe('SignedUrlService', () => {
       expect(result.completeUrl.length).toBeGreaterThan(0)
     })
 
-    it('throws STORAGE_PART_TOO_SMALL when parts is 0', async () => {
-      // zero parts is invalid — must throw before any S3 call
+    it('throws STORAGE_INVALID_PART_COUNT when parts is 0', async () => {
+      // zero is an invalid part COUNT, not a too-small part SIZE — must throw the
+      // dedicated invalid-count error before any S3 call
       const service = await buildService(
         buildOptions(),
         buildMockS3Provider(true, { UploadId: MOCK_UPLOAD_ID }),
@@ -328,10 +361,11 @@ describe('SignedUrlService', () => {
         .getMultipartUploadUrls({ key: KEY, contentType: 'image/png', parts: 0 })
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
+      expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT)
     })
 
-    it('throws when parts is negative', async () => {
-      // negative parts count is invalid
+    it('throws STORAGE_INVALID_PART_COUNT when parts is negative', async () => {
+      // a negative part count is likewise invalid
       const service = await buildService(
         buildOptions(),
         buildMockS3Provider(true, { UploadId: MOCK_UPLOAD_ID }),
@@ -342,6 +376,7 @@ describe('SignedUrlService', () => {
         .getMultipartUploadUrls({ key: KEY, contentType: 'image/png', parts: -1 })
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
+      expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT)
     })
 
     it('throws STORAGE_PROVIDER_ERROR when CreateMultipartUpload returns no UploadId', async () => {

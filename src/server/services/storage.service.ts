@@ -157,12 +157,24 @@ export class StorageService {
     }
     await this.scanner.scan({
       mode: 'pre-upload',
-      body: body as Buffer | NodeJS.ReadableStream,
+      body: this.normalizeScanBody(body),
       key: finalKey,
       bucket,
       contentType: options.contentType,
       ...(options.size !== undefined ? { size: options.size } : {}),
     })
+  }
+
+  /**
+   * Coerces a buffer-like scan body (`Buffer` or `Uint8Array`) to a `Buffer` so
+   * the scanner always receives its declared contract type; streams pass through
+   * unchanged.
+   */
+  private normalizeScanBody(body: UploadBody): Buffer | NodeJS.ReadableStream {
+    if (isBufferLike(body)) {
+      return Buffer.isBuffer(body) ? body : Buffer.from(body)
+    }
+    return body
   }
 
   /**

@@ -75,12 +75,16 @@ export class SignedUrlService {
 
   /**
    * Issues a presigned PUT URL for uploading an object. The client MUST send
-   * the `Content-Type` header listed in `requiredHeaders` verbatim — it is part
-   * of the URL signature.
+   * every header listed in `requiredHeaders` verbatim — each one is part of the
+   * URL signature, so an omitted header yields `SignatureDoesNotMatch`. The map
+   * always carries `Content-Type` and additionally lists `x-amz-acl` when an ACL
+   * is signed and an `x-amz-meta-<key>` entry per metadata pair.
    *
-   * SECURITY: The returned URL is a temporary credential — NEVER log it. Note
-   * that a signed PUT bypasses the server-side MIME/size validation pipeline;
-   * pair with a `Content-Length-Range` policy, a post-upload HEAD check, and
+   * SECURITY: The returned URL is a temporary credential — NEVER log it. A signed
+   * PUT bypasses the server-side MIME/size validation pipeline. Size limits are
+   * NOT enforced at presign time: a SigV4 PUT signature can only pin an exact
+   * `Content-Length`, never a maximum, so binding one would reject valid smaller
+   * uploads. Enforce size after the fact via a post-upload HEAD/size check plus
    * the post-upload scanner path for defence-in-depth.
    *
    * ACL caveat: `publicRead` emits `ACL: public-read`, which returns HTTP 400
@@ -103,12 +107,12 @@ export class SignedUrlService {
       this.options.signedUrls.maxTtlSeconds,
     )
     try {
+      const acl = buildACL(options.publicRead, this.options.defaultPublicRead)
       const command = new PutObjectCommand({
         Bucket: bucket,
         Key: finalKey,
         ContentType: options.contentType,
-        ...(options.maxSizeBytes !== undefined ? { ContentLength: options.maxSizeBytes } : {}),
-        ACL: buildACL(options.publicRead, this.options.defaultPublicRead),
+        ACL: acl,
         ...(options.metadata !== undefined ? { Metadata: options.metadata } : {}),
       })
       const url = await getSignedUrl(this.s3Provider.getClient(), command, { expiresIn: ttl })
@@ -116,12 +120,34 @@ export class SignedUrlService {
         url,
         expiresAt: new Date(Date.now() + ttl * 1000),
         method: 'PUT',
-        requiredHeaders: { 'Content-Type': options.contentType },
+        requiredHeaders: this.buildPutRequiredHeaders(options, acl),
       }
     } catch (err) {
       if (err instanceof StorageException) throw err
       throw mapAwsError(err, { key: finalKey, bucket, op: 'getUploadUrl' })
     }
+  }
+
+  /**
+   * Builds the set of headers a client MUST send for a signed PUT, mirroring the
+   * headers folded into the SigV4 signature. Always includes `Content-Type`; adds
+   * `x-amz-acl` when an ACL is signed and an `x-amz-meta-<key>` entry (key
+   * lowercased to match SigV4 canonicalisation) for every metadata pair.
+   */
+  private buildPutRequiredHeaders(
+    options: SignedPutUrlOptions,
+    acl: 'public-read' | undefined,
+  ): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': options.contentType }
+    if (acl !== undefined) {
+      headers['x-amz-acl'] = acl
+    }
+    if (options.metadata !== undefined) {
+      for (const [key, value] of Object.entries(options.metadata)) {
+        headers[`x-amz-meta-${key.toLowerCase()}`] = value
+      }
+    }
+    return headers
   }
 
   /**
@@ -140,8 +166,8 @@ export class SignedUrlService {
   async getMultipartUploadUrls(options: MultipartUploadUrlsOptions): Promise<MultipartUploadUrlsResult> {
     this.assertConfigured()
     if (options.parts <= 0) {
-      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_PART_TOO_SMALL, undefined, {
-        reason: 'parts must be > 0',
+      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT, undefined, {
+        reason: 'parts must be a positive integer',
         provided: options.parts,
       })
     }

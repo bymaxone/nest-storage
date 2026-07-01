@@ -13,8 +13,8 @@
  * 1. **Exact** — case-insensitive string equality (e.g. `'image/jpeg'`).
  * 2. **Subtype wildcard** — type followed by a `/*` suffix matches any subtype
  *    of that type (e.g. `'image/*'` matches `'image/png'`).
- * 3. **Full wildcard** — the pattern `'* /*'` (no space) matches any valid
- *    `type/subtype` pair.
+ * 3. **Full wildcard** — the `*`/`*` pattern matches any valid `type/subtype`
+ *    pair.
  *
  * RFC 2045 parameters after `;` (e.g. `charset=utf-8`) are stripped before
  * comparison. An input with no `/` is treated as an invalid MIME type and

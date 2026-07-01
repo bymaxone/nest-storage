@@ -467,6 +467,40 @@ describe('StorageService — scan integration', () => {
     expect(scanArg).not.toHaveProperty('size')
   })
 
+  it('normalizes a Uint8Array body to a Buffer before the pre-upload scan', async () => {
+    // the scanner contract accepts Buffer | stream only, so a Uint8Array upload
+    // must reach it as a Buffer rather than a raw Uint8Array
+    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('pre-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service } = makeServiceWithScanner(scanner)
+
+    await service.upload({ key: 'a.txt', body: new Uint8Array([104, 105]), contentType: 'text/plain' })
+
+    const [[scanArg]] = scanFn.mock.calls as [[{ body: unknown }]]
+    expect(Buffer.isBuffer(scanArg.body)).toBe(true)
+  })
+
+  it('passes a stream body through unchanged to the pre-upload scan', async () => {
+    // stream bodies are handed to the scanner as-is (never buffered)
+    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('pre-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service } = makeServiceWithScanner(scanner)
+    const stream = Readable.from([Buffer.from('hi')])
+
+    await service.upload({ key: 'a.txt', body: stream, contentType: 'text/plain', size: 2 })
+
+    const [[scanArg]] = scanFn.mock.calls as [[{ body: unknown }]]
+    expect(scanArg.body).toBe(stream)
+  })
+
   it('calls scan with mode "post-upload" after the object has been uploaded (no size)', async () => {
     // scan() must be invoked after S3 PutObject send when mode is post-upload
     const callOrder: string[] = []
