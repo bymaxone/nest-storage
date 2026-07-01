@@ -8,6 +8,7 @@ import { type DynamicModule, Global, Module, type Provider } from '@nestjs/commo
 import { S3Client } from '@aws-sdk/client-s3'
 import {
   BYMAX_STORAGE_FILE_SCANNER,
+  BYMAX_STORAGE_IDEMPOTENCY_CACHE,
   BYMAX_STORAGE_OPTIONS,
   BYMAX_STORAGE_S3_CLIENT,
   BYMAX_STORAGE_UPLOAD_VALIDATORS,
@@ -15,8 +16,14 @@ import {
 import type { BymaxStorageModuleOptions } from './interfaces/storage-module-options.interface'
 import { validateOptions } from './config/validate-options'
 import { applyDefaults } from './config/apply-defaults'
+import {
+  DEFAULT_IDEMPOTENCY_CACHE_MAX_ENTRIES,
+  DEFAULT_IDEMPOTENCY_CACHE_TTL_MS,
+} from './constants/default-options.constants'
 import { S3ClientProvider } from './providers/s3-client.provider'
 import { KeyResolverService } from './services/key-resolver.service'
+import { StorageService } from './services/storage.service'
+import { IdempotencyCache } from './utils/idempotency-cache'
 
 @Global()
 @Module({})
@@ -54,6 +61,16 @@ export class BymaxStorageModule {
       S3ClientProvider,
       KeyResolverService,
       {
+        // Per-instance idempotency cache for deduplicating uploads within the TTL.
+        provide: BYMAX_STORAGE_IDEMPOTENCY_CACHE,
+        useFactory: (): IdempotencyCache =>
+          new IdempotencyCache(
+            DEFAULT_IDEMPOTENCY_CACHE_MAX_ENTRIES,
+            DEFAULT_IDEMPOTENCY_CACHE_TTL_MS,
+          ),
+      },
+      StorageService,
+      {
         // Public raw-client token. Null-tolerant so the module still registers
         // without credentials (resolves to null until configured).
         provide: BYMAX_STORAGE_S3_CLIENT,
@@ -65,10 +82,12 @@ export class BymaxStorageModule {
     return {
       module: BymaxStorageModule,
       providers,
-      // Public DI surface: the resolved options, the raw-client token, and the
-      // user-supplied upload-validators + file-scanner tokens — all injectable by
-      // consumers via `@Global()`. S3ClientProvider and KeyResolverService stay internal.
+      // Public DI surface: the `StorageService` facade, the resolved options, the
+      // raw-client token, and the user-supplied upload-validators + file-scanner
+      // tokens — all injectable by consumers via `@Global()`. S3ClientProvider,
+      // KeyResolverService, and the idempotency cache stay internal.
       exports: [
+        StorageService,
         BYMAX_STORAGE_OPTIONS,
         BYMAX_STORAGE_S3_CLIENT,
         BYMAX_STORAGE_UPLOAD_VALIDATORS,
