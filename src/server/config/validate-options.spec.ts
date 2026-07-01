@@ -4,7 +4,7 @@
  * @layer server/config
  */
 import { validateOptions } from './validate-options'
-import { StorageException } from '../errors/storage-exception'
+import type { StorageException } from '../errors/storage-exception'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 
 const valid: BymaxStorageModuleOptions = {
@@ -43,37 +43,37 @@ describe('validateOptions', () => {
   })
 
   it('should throw when options is not an object', () => {
-    // `isObject` left-false branch.
-    expect(() => {
+    // `isObject` left-false branch — with the exact reason string.
+    expect(reasonOf(() => {
       validateOptions(undefined)
-    }).toThrow(StorageException)
+    })).toBe('options object is required')
   })
 
   it('should throw when options is null', () => {
     // `isObject` left-true (typeof null === object) and right-false branch.
-    expect(() => {
+    expect(reasonOf(() => {
       validateOptions(null)
-    }).toThrow(StorageException)
+    })).toBe('options object is required')
   })
 
   it.each([
-    ['endpoint missing', { ...valid, endpoint: undefined as unknown as string }],
-    ['endpoint empty', { ...valid, endpoint: '' }],
-    ['endpoint non-string', { ...valid, endpoint: 123 as unknown as string }],
-    ['region empty', { ...valid, region: '' }],
-    ['bucket empty', { ...valid, bucket: '' }],
-  ])('should throw STORAGE_INVALID_CONFIG when %s', (_label, opts) => {
-    // Each structural string field is mandatory and must be non-empty.
-    expect(() => {
+    ['endpoint missing', { ...valid, endpoint: undefined as unknown as string }, 'options.endpoint must be a non-empty string'],
+    ['endpoint empty', { ...valid, endpoint: '' }, 'options.endpoint must be a non-empty string'],
+    ['endpoint non-string', { ...valid, endpoint: 123 as unknown as string }, 'options.endpoint must be a non-empty string'],
+    ['region empty', { ...valid, region: '' }, 'options.region must be a non-empty string'],
+    ['bucket empty', { ...valid, bucket: '' }, 'options.bucket must be a non-empty string'],
+  ])('should throw STORAGE_INVALID_CONFIG with the field reason when %s', (_label, opts, reason) => {
+    // Each structural string field is mandatory and reports its own actionable reason.
+    expect(reasonOf(() => {
       validateOptions(opts)
-    }).toThrow(StorageException)
+    })).toBe(reason)
   })
 
   it('should throw when credentials is missing', () => {
-    // `isObject(options.credentials)` left-false branch.
-    expect(() => {
+    // `isObject(options.credentials)` left-false branch — with the exact reason.
+    expect(reasonOf(() => {
       validateOptions({ ...valid, credentials: undefined as unknown as BymaxStorageModuleOptions['credentials'] })
-    }).toThrow(StorageException)
+    })).toBe('options.credentials is required')
   })
 
   it('should accept a positive signedUrls.maxTtlSeconds', () => {

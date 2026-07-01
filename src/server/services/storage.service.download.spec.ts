@@ -7,6 +7,7 @@
 import { Readable } from 'node:stream'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { StorageService } from './storage.service'
+import type { StorageException } from '../errors/storage-exception'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { IdempotencyCache } from '../utils/idempotency-cache'
@@ -68,6 +69,14 @@ function firstInput(send: jest.Mock): Record<string, unknown> {
   return calls[0]![0].input
 }
 
+/** Extracts the `error.details` map from a rejected StorageException promise. */
+function detailsOf(err: unknown): Record<string, unknown> {
+  return (
+    ((err as StorageException).getResponse() as { error: { details?: Record<string, unknown> } }).error
+      .details ?? {}
+  )
+}
+
 /** Drains a stream to a string. */
 async function collect(stream: NodeJS.ReadableStream): Promise<string> {
   const chunks: Buffer[] = []
@@ -114,21 +123,26 @@ describe('StorageService — download', () => {
   })
 
   it('throws STORAGE_OBJECT_NOT_FOUND when the response has no body', async () => {
-    // An empty body is treated as a missing object.
+    // An empty body is treated as a missing object, carrying key/bucket in details.
     const { service, send } = makeService()
     send.mockResolvedValue({})
-    await expect(service.download({ key: 'missing' })).rejects.toMatchObject({
-      code: 'STORAGE_OBJECT_NOT_FOUND',
-    })
+    const err = await service.download({ key: 'missing' }).catch((e: unknown) => e)
+    expect((err as StorageException).code).toBe('STORAGE_OBJECT_NOT_FOUND')
+    const details = detailsOf(err)
+    expect(details.key).toBe('missing')
+    expect(details.bucket).toBe('test-bucket')
   })
 
-  it('maps a provider failure through mapAwsError', async () => {
-    // A send rejection is mapped to a typed provider error.
+  it('maps a provider failure through mapAwsError with the download op context', async () => {
+    // A send rejection is mapped to a typed provider error carrying the download context.
     const { service, send } = makeService()
     send.mockRejectedValue(SERVER_ERROR)
-    await expect(service.download({ key: 'a.txt' })).rejects.toMatchObject({
-      code: 'STORAGE_PROVIDER_ERROR',
-    })
+    const err = await service.download({ key: 'a.txt' }).catch((e: unknown) => e)
+    expect((err as StorageException).code).toBe('STORAGE_PROVIDER_ERROR')
+    const details = detailsOf(err)
+    expect(details.op).toBe('download')
+    expect(details.key).toBe('a.txt')
+    expect(details.bucket).toBe('test-bucket')
   })
 
   it('materializes the object into a Buffer via downloadBuffer', async () => {

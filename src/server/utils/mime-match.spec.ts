@@ -85,4 +85,24 @@ describe('mimeMatches', () => {
     // a pattern without a slash is not a valid MIME pattern and must not match
     expect(mimeMatches('text/plain', ['text'])).toBe(false)
   })
+
+  it('trims surrounding whitespace from the MIME input before matching', () => {
+    // the input (not just the pattern) must be trimmed — a padded type still matches
+    expect(mimeMatches('  image/jpeg  ', ['image/jpeg'])).toBe(true)
+  })
+
+  it('does not match a same-type different-subtype exact pattern', () => {
+    // image/jpeg must NOT match the exact pattern image/png (subtype must be checked)
+    expect(mimeMatches('image/jpeg', ['image/png'])).toBe(false)
+  })
+
+  it('does not treat a slashless "*" pattern as a subtype wildcard', () => {
+    // a pattern with no slash must be skipped entirely; "*" alone never matches
+    expect(mimeMatches('/png', ['*'])).toBe(false)
+  })
+
+  it('matches a subtype wildcard whose slash is at index 1 (single-char type)', () => {
+    // the slash-present guard uses -1 as the sentinel, not 1 — a slash at index 1 counts
+    expect(mimeMatches('a/b', ['a/*'])).toBe(true)
+  })
 })

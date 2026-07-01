@@ -10,6 +10,12 @@ export type {
 export type { UploadOptions } from './upload-options.interface'
 export type { DownloadOptions } from './download-options.interface'
 export type { ListOptions, ListResult } from './list-options.interface'
+export type { CopyOptions } from './copy-options.interface'
+export type {
+  DeleteManyOptions,
+  DeleteManyResult,
+  FailedDeletion,
+} from './delete-many-options.interface'
 export type {
   SignedGetUrlOptions,
   SignedPutUrlOptions,

@@ -66,6 +66,12 @@ describe('ValidationService', () => {
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_MIME_NOT_ALLOWED)
+      // The exception must carry the offending content type and the configured whitelist.
+      const details = ((err as StorageException).getResponse() as {
+        error: { details: { contentType: string; whitelist: string[] } }
+      }).error.details
+      expect(details.contentType).toBe('text/plain')
+      expect(details.whitelist).toEqual(['image/png'])
     })
 
     it('passes when the MIME matches via a wildcard (image/*)', async () => {
@@ -99,12 +105,26 @@ describe('ValidationService', () => {
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SIZE_EXCEEDED)
+      // Details must report both the actual size and the configured maximum.
+      const details = ((err as StorageException).getResponse() as {
+        error: { details: { size: number; maxSize: number } }
+      }).error.details
+      expect(details.size).toBe(200)
+      expect(details.maxSize).toBe(100)
     })
 
     it('passes when size is within limit', async () => {
       // size within bounds must pass
       const service = await buildService(buildOptions({ maxSizeBytes: 1000 }))
       const result = await service.validate({ key: 'k', body: Buffer.alloc(50), contentType: 'image/png', size: 50 })
+      expect(result.body).toBeDefined()
+    })
+
+    it('passes when size EXACTLY equals maxSizeBytes (strict > boundary, not >=)', async () => {
+      // The check is `size > maxSizeBytes` — an exact-limit upload is allowed. A `>=`
+      // mutant would wrongly reject size === maxSizeBytes.
+      const service = await buildService(buildOptions({ maxSizeBytes: 100 }))
+      const result = await service.validate({ key: 'k', body: Buffer.alloc(100), contentType: 'image/png', size: 100 })
       expect(result.body).toBeDefined()
     })
 
@@ -182,6 +202,43 @@ describe('ValidationService', () => {
         metadata: { owner: 'alice' },
       })
       expect(capturedMetadata).toEqual({ owner: 'alice' })
+    })
+
+    it('includes size in the validator context only when the upload declares one', async () => {
+      // The conditional spread must add `size` with the exact value when present and
+      // OMIT the key entirely when absent (not pass `size: undefined`).
+      const contexts: Record<string, unknown>[] = []
+      const validator: IUploadValidator = {
+        name: 'ctx-spy',
+        validate: jest.fn().mockImplementation((ctx: Record<string, unknown>) => {
+          contexts.push(ctx)
+          return Promise.resolve({ ok: true })
+        }),
+      }
+      const service = await buildService(buildOptions(), [validator])
+
+      await service.validate({ key: 'k', body: Buffer.from('x'), contentType: 'image/png', size: 42 })
+      await service.validate({ key: 'k', body: Buffer.from('x'), contentType: 'image/png' })
+
+      expect(contexts[0]?.size).toBe(42)
+      expect('size' in (contexts[0] ?? {})).toBe(true)
+      expect('size' in (contexts[1] ?? {})).toBe(false)
+    })
+
+    it('omits metadata from the validator context when the upload provides none', async () => {
+      // The conditional spread must NOT inject a `metadata: undefined` key when absent.
+      const contexts: Record<string, unknown>[] = []
+      const validator: IUploadValidator = {
+        name: 'meta-omit-spy',
+        validate: jest.fn().mockImplementation((ctx: Record<string, unknown>) => {
+          contexts.push(ctx)
+          return Promise.resolve({ ok: true })
+        }),
+      }
+      const service = await buildService(buildOptions(), [validator])
+
+      await service.validate({ key: 'k', body: Buffer.from('x'), contentType: 'image/png' })
+      expect('metadata' in (contexts[0] ?? {})).toBe(false)
     })
 
     it('calls readBytes and gives the validator the first N bytes of the body', async () => {

@@ -117,6 +117,19 @@ describe('stream-utils', () => {
       expect(await collect(replacementBody as NodeJS.ReadableStream)).toBe('abcd')
     })
 
+    it('peeks exactly maxBytes across chunks, not the whole crossing chunk', async () => {
+      // First chunk 'a' (1 byte) is under maxBytes; the second chunk 'bcd' crosses the
+      // boundary. The head must be exactly the first 3 bytes ('abc'), proving the peek
+      // slice width is `maxBytes - peeked` (2 here) and that peeking stops AT maxBytes —
+      // not `maxBytes + peeked` (which would grab 'abcd') and not after the first chunk.
+      const { head, replacementBody } = await peekFirstBytes(
+        Readable.from([Buffer.from('a'), Buffer.from('bcd')]),
+        3,
+      )
+      expect(head.toString()).toBe('abc')
+      expect(await collect(replacementBody as NodeJS.ReadableStream)).toBe('abcd')
+    })
+
     it('handles a stream that emits strings', async () => {
       // String chunks are normalized to Buffers in the tee.
       const { head, replacementBody } = await peekFirstBytes(Readable.from(['hello']), 3)

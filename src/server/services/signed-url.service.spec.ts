@@ -88,6 +88,14 @@ async function buildService(
 
 const mockedGetSignedUrl = getSignedUrl as jest.MockedFunction<typeof getSignedUrl>
 
+/** Extracts the `error.details` map from a thrown StorageException. */
+function detailsOf(err: unknown): Record<string, unknown> {
+  return (
+    ((err as StorageException).getResponse() as { error: { details?: Record<string, unknown> } }).error
+      .details ?? {}
+  )
+}
+
 describe('SignedUrlService', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -107,6 +115,20 @@ describe('SignedUrlService', () => {
       expect(result.method).toBe('GET')
       expect(result.expiresAt.getTime()).toBeGreaterThanOrEqual(before + ttlSeconds * 1000 - 100)
       expect(result.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + ttlSeconds * 1000 + 100)
+      // The presigner must receive the effective TTL as its expiresIn option.
+      expect(mockedGetSignedUrl.mock.calls[0]?.[2]).toEqual({ expiresIn: ttlSeconds })
+    })
+
+    it('omits ResponseContentDisposition and ResponseContentType from the command when not provided', async () => {
+      // The conditional spreads must OMIT these keys entirely (not set them to undefined)
+      // so they never become part of the signed request.
+      const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+
+      await service.getDownloadUrl({ key: KEY })
+
+      const input = (mockedGetSignedUrl.mock.calls[0]?.[1] as GetObjectCommand).input
+      expect('ResponseContentDisposition' in input).toBe(false)
+      expect('ResponseContentType' in input).toBe(false)
     })
 
     it('silently clamps TTL above maxTtlSeconds', async () => {
@@ -173,6 +195,11 @@ describe('SignedUrlService', () => {
       const err = await service.getDownloadUrl({ key: KEY }).catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR)
+      // The mapped error must carry the non-sensitive operation context in details.
+      const details = detailsOf(err)
+      expect(details.op).toBe('getDownloadUrl')
+      expect(details.key).toBe(KEY)
+      expect(details.bucket).toBe(BUCKET)
     })
 
     it('re-throws a StorageException from getSignedUrl without double-wrapping', async () => {
@@ -202,9 +229,19 @@ describe('SignedUrlService', () => {
       // the client must send exactly this Content-Type (part of the signature)
       const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
 
+      const before = Date.now()
       const result = await service.getUploadUrl({ key: KEY, contentType: 'image/png' })
 
       expect(result.requiredHeaders['Content-Type']).toBe('image/png')
+      expect(result.method).toBe('PUT')
+      // expiresAt = Date.now() + ttl * 1000 (default PUT TTL 300s): must be ~5min ahead,
+      // never in the past (a `-` mutant) and never a millisecond offset (a `/` mutant).
+      expect(result.expiresAt.getTime()).toBeGreaterThanOrEqual(before + 300 * 1000 - 100)
+      expect(result.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 300 * 1000 + 100)
+      // The presigner receives the effective TTL, and Metadata is omitted when absent.
+      expect(mockedGetSignedUrl.mock.calls[0]?.[2]).toEqual({ expiresIn: 300 })
+      const input = (mockedGetSignedUrl.mock.calls[0]?.[1] as PutObjectCommand).input
+      expect('Metadata' in input).toBe(false)
     })
 
     it('applies ACL public-read when publicRead: true', async () => {
@@ -285,6 +322,11 @@ describe('SignedUrlService', () => {
       const err = await service.getUploadUrl({ key: KEY, contentType: 'image/png' }).catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR)
+      // Mapped error must carry the getUploadUrl operation context.
+      const details = detailsOf(err)
+      expect(details.op).toBe('getUploadUrl')
+      expect(details.key).toBe(KEY)
+      expect(details.bucket).toBe(BUCKET)
     })
 
     it('re-throws a StorageException from getSignedUrl without double-wrapping', async () => {
@@ -331,6 +373,8 @@ describe('SignedUrlService', () => {
       expect(result.partUrls[0]?.partNumber).toBe(1)
       expect(result.partUrls[1]?.partNumber).toBe(2)
       expect(result.partUrls[2]?.partNumber).toBe(3)
+      // Every part/complete presign must pass the effective TTL as expiresIn.
+      expect(mockedGetSignedUrl.mock.calls[0]?.[2]).toEqual({ expiresIn: 300 })
     })
 
     it('returns a completeUrl', async () => {
@@ -362,6 +406,10 @@ describe('SignedUrlService', () => {
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT)
+      // Details must state the exact reason and echo the offending part count.
+      const details = detailsOf(err)
+      expect(details.reason).toBe('parts must be a positive integer')
+      expect(details.provided).toBe(0)
     })
 
     it('throws STORAGE_INVALID_PART_COUNT when parts is negative', async () => {
@@ -389,6 +437,14 @@ describe('SignedUrlService', () => {
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR)
+      // This inner StorageException must be re-thrown as-is (the `instanceof` guard), so
+      // it keeps its explanatory reason/key/bucket rather than being re-wrapped by
+      // mapAwsError (which would drop `reason` and add an `op`).
+      const details = detailsOf(err)
+      expect(details.reason).toBe('CreateMultipartUpload returned no UploadId')
+      expect(details.key).toBe(KEY)
+      expect(details.bucket).toBe(BUCKET)
+      expect('op' in details).toBe(false)
     })
 
     it('maps a non-StorageException error thrown by send() to STORAGE_PROVIDER_ERROR', async () => {
@@ -403,6 +459,8 @@ describe('SignedUrlService', () => {
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR)
+      // A genuine SDK error IS mapped, carrying the multipart operation context.
+      expect(detailsOf(err).op).toBe('getMultipartUploadUrls')
     })
   })
 })

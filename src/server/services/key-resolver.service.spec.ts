@@ -4,7 +4,7 @@
  * @layer server/services
  */
 import { KeyResolverService } from './key-resolver.service'
-import { StorageException } from '../errors/storage-exception'
+import type { StorageException } from '../errors/storage-exception'
 import { applyDefaults } from '../config/apply-defaults'
 
 function makeService(keyPrefix = ''): KeyResolverService {
@@ -16,6 +16,20 @@ function makeService(keyPrefix = ''): KeyResolverService {
     keyPrefix,
   })
   return new KeyResolverService(options)
+}
+
+/** Runs `fn`, asserts it threw STORAGE_KEY_INVALID, and returns the details.reason. */
+function reasonOf(fn: () => void): string {
+  try {
+    fn()
+  } catch (error) {
+    const body = (error as StorageException).getResponse() as {
+      error: { code: string; details: { reason: string } }
+    }
+    expect(body.error.code).toBe('STORAGE_KEY_INVALID')
+    return body.error.details.reason
+  }
+  throw new Error('expected normalize to throw')
 }
 
 describe('KeyResolverService', () => {
@@ -35,6 +49,23 @@ describe('KeyResolverService', () => {
       expect(makeService('/tenant-x/').normalize('a.txt')).toBe('tenant-x/a.txt')
     })
 
+    it('should preserve internal slashes in the prefix (only surrounding ones are trimmed)', () => {
+      // The regex anchors are `^\/+` and `\/+$` — an internal slash is a real path
+      // separator and must survive, so `a/b` becomes the prefix `a/b/`.
+      expect(makeService('a/b').getPrefix()).toBe('a/b/')
+      expect(makeService('a/b').normalize('c.txt')).toBe('a/b/c.txt')
+    })
+
+    it('should trim MULTIPLE leading slashes from the prefix', () => {
+      // `^\/+` is one-or-more: two leading slashes must both go, not just one.
+      expect(makeService('//tenant-x').getPrefix()).toBe('tenant-x/')
+    })
+
+    it('should trim MULTIPLE trailing slashes from the prefix', () => {
+      // `\/+$` is one-or-more: two trailing slashes must both go, not just one.
+      expect(makeService('tenant-x//').getPrefix()).toBe('tenant-x/')
+    })
+
     it.each([['/'], ['///']])(
       'should treat an all-slash prefix as no prefix (no leading "/" leaks into the key): %s',
       (prefix) => {
@@ -46,26 +77,28 @@ describe('KeyResolverService', () => {
     )
 
     it.each([['../etc/passwd'], ['a/../b'], ['../..'], ['./..'], ['a/b/../../c']])(
-      'should reject path traversal: %s',
+      'should reject path traversal with the ".." reason: %s',
       (input) => {
-        // `..`-segment guard.
-        expect(() => makeService().normalize(input)).toThrow(StorageException)
+        // `..`-segment guard — carries the exact traversal reason in details.
+        expect(reasonOf(() => makeService().normalize(input))).toBe(
+          'Key must not contain ".." path segments',
+        )
       },
     )
 
-    it('should reject an empty key', () => {
-      // Empty-key guard.
-      expect(() => makeService().normalize('')).toThrow(StorageException)
+    it('should reject an empty key with its reason', () => {
+      // Empty-key guard — exact reason string.
+      expect(reasonOf(() => makeService().normalize(''))).toBe('Key must be a non-empty string')
     })
 
-    it('should reject a key containing a null byte', () => {
-      // Null-byte guard.
-      expect(() => makeService().normalize('a\0b')).toThrow(StorageException)
+    it('should reject a key containing a null byte with its reason', () => {
+      // Null-byte guard — exact reason string.
+      expect(reasonOf(() => makeService().normalize('a\0b'))).toBe('Key must not contain null bytes')
     })
 
-    it('should reject a leading slash', () => {
-      // Leading-slash guard.
-      expect(() => makeService().normalize('/foo')).toThrow(StorageException)
+    it('should reject a leading slash with its reason', () => {
+      // Leading-slash guard — exact reason string.
+      expect(reasonOf(() => makeService().normalize('/foo'))).toBe('Key must not start with "/"')
     })
 
     it('should collapse duplicate slashes', () => {
