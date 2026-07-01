@@ -39,6 +39,13 @@ describe('IdempotencyCache', () => {
       const cache = new IdempotencyCache(10, 1000)
       expect(cache.computeKey('req-1', 'a.txt')).not.toBe(cache.computeKey('req-2', 'a.txt'))
     })
+
+    it('should not collide when the delimiter is ambiguous across the two components', () => {
+      // ('a', 'b:c') and ('a:b', 'c') both flatten to "a:b:c" under naive
+      // concatenation; the preimage must encode component boundaries so they differ.
+      const cache = new IdempotencyCache(10, 1000)
+      expect(cache.computeKey('a', 'b:c')).not.toBe(cache.computeKey('a:b', 'c'))
+    })
   })
 
   describe('get / set', () => {

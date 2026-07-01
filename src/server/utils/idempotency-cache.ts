@@ -45,12 +45,17 @@ export class IdempotencyCache {
    * with the final object key. Hashing avoids storing the raw idempotency key as
    * a `Map` key, where it could be inspected during debugging.
    *
+   * The two components are hashed through a structured JSON encoding so their
+   * boundary is unambiguous: without it, pairs such as `('a', 'b:c')` and
+   * `('a:b', 'c')` would flatten to the same preimage and collide.
+   *
    * @param idempotencyKey - The caller-provided idempotency key.
    * @param finalKey - The normalized, prefixed object key.
    * @returns A hex-encoded sha256 digest.
    */
   computeKey(idempotencyKey: string, finalKey: string): string {
-    return createHash('sha256').update(`${idempotencyKey}:${finalKey}`).digest('hex')
+    const preimage = JSON.stringify([idempotencyKey, finalKey])
+    return createHash('sha256').update(preimage).digest('hex')
   }
 
   /**
