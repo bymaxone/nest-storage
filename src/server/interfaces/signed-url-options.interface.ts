@@ -22,7 +22,12 @@ export interface SignedPutUrlOptions {
   /** Content-Type the client MUST send (it becomes part of the signature). */
   contentType: string
   ttlSeconds?: number
-  /** Adds a Content-Length-Range policy — S3 rejects PUTs larger than this. */
+  /**
+   * Advisory maximum upload size. NOT enforced at presign time — a SigV4 PUT
+   * signature can only pin an exact `Content-Length`, never a maximum, so the
+   * library does not bind it. Enforce it post-upload via a HEAD/size check plus
+   * the scanner path.
+   */
   maxSizeBytes?: number
   publicRead?: boolean
   metadata?: Record<string, string>

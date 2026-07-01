@@ -27,6 +27,8 @@ export const STORAGE_ERROR_MESSAGES: Record<StorageErrorCode, string> = {
   [STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR]: 'Storage provider returned an error',
   [STORAGE_ERROR_CODES.STORAGE_SIGNED_URL_TTL_INVALID]: 'Signed URL TTL is invalid',
   [STORAGE_ERROR_CODES.STORAGE_PART_TOO_SMALL]: 'Multipart part size is below the 5 MB minimum',
+  [STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT]:
+    'Multipart part count is invalid (must be a positive integer)',
   [STORAGE_ERROR_CODES.STORAGE_BUCKET_UNDEFINED]:
     'Bucket is undefined (no default configured and none provided per call)',
   [STORAGE_ERROR_CODES.STORAGE_MULTIPART_ABORTED]: 'Multipart upload was aborted',

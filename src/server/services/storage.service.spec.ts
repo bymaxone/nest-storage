@@ -8,12 +8,32 @@
 import { Readable } from 'node:stream'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { StorageService } from './storage.service'
+import { StorageException } from '../errors/storage-exception'
+import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { IdempotencyCache } from '../utils/idempotency-cache'
 import { applyDefaults } from '../config/apply-defaults'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
+import type { ValidationService } from './validation.service'
+import type { FileScannerService } from './file-scanner.service'
+
+/** Stub ValidationService that passes everything through unchanged. */
+function makePassthroughValidation(): ValidationService {
+  return {
+    validate: jest.fn().mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
+  } as unknown as ValidationService
+}
+
+/** Stub FileScannerService with scanning disabled. */
+function makeDisabledScanner(): FileScannerService {
+  return {
+    isEnabled: jest.fn().mockReturnValue(false),
+    getMode: jest.fn().mockReturnValue(null),
+    scan: jest.fn(),
+  } as unknown as FileScannerService
+}
 
 const NOT_FOUND = { name: 'NotFound', $metadata: { httpStatusCode: 404 } }
 const SERVER_ERROR = { name: 'InternalError', message: 'boom', $metadata: { httpStatusCode: 500 } }
@@ -44,7 +64,14 @@ function makeService(
   } as unknown as S3ClientProvider
   const keyResolver = new KeyResolverService(effective)
   const cache = new IdempotencyCache(100, 60_000, () => 0)
-  const service = new StorageService(effective, s3Provider, keyResolver, cache)
+  const service = new StorageService(
+    effective,
+    s3Provider,
+    keyResolver,
+    cache,
+    makePassthroughValidation(),
+    makeDisabledScanner(),
+  )
   return { service, send }
 }
 
@@ -374,5 +401,189 @@ describe('StorageService — getPublicUrl', () => {
       { bucket: 'test-bucket' },
     )
     expect(service.getPublicUrl('a.png')).toBe('https://test-bucket.s3.example.com/a.png')
+  })
+})
+
+describe('StorageService — scan integration', () => {
+  /** Builds a service wired with a custom scanner instead of the disabled stub. */
+  function makeServiceWithScanner(scanner: FileScannerService): { service: StorageService; send: jest.Mock } {
+    const resolved = applyDefaults({
+      endpoint: 'https://s3.example.com',
+      region: 'us-east-1',
+      bucket: 'test-bucket',
+      credentials: { accessKeyId: 'k', secretAccessKey: 's' },
+      publicBaseUrl: 'https://cdn.example.com',
+    })
+    const send = jest.fn().mockResolvedValue({ ETag: '"abc"' })
+    const client = { send } as unknown as S3Client
+    const s3Provider = {
+      isConfigured: (): boolean => true,
+      getClient: (): S3Client => client,
+    } as unknown as S3ClientProvider
+    const keyResolver = new KeyResolverService(resolved)
+    const cache = new IdempotencyCache(100, 60_000, () => 0)
+    const service = new StorageService(
+      resolved,
+      s3Provider,
+      keyResolver,
+      cache,
+      makePassthroughValidation(),
+      scanner,
+    )
+    return { service, send }
+  }
+
+  it('calls scan with mode "pre-upload" when pre-upload scanner is enabled (with size)', async () => {
+    // scan() must be invoked before the S3 PutObject send when mode is pre-upload
+    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('pre-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service, send } = makeServiceWithScanner(scanner)
+
+    await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain', size: 2 })
+
+    expect(scanFn).toHaveBeenCalledTimes(1)
+    expect(scanFn).toHaveBeenCalledWith(expect.objectContaining({ mode: 'pre-upload', key: 'a.txt', size: 2 }))
+    expect(send).toHaveBeenCalled()
+  })
+
+  it('calls scan with mode "pre-upload" omitting size when not provided', async () => {
+    // scan input must omit the size key when the upload has no known size
+    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('pre-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service } = makeServiceWithScanner(scanner)
+
+    await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain' })
+
+    expect(scanFn).toHaveBeenCalledTimes(1)
+    const [[scanArg]] = scanFn.mock.calls as [[Record<string, unknown>]]
+    expect(scanArg).not.toHaveProperty('size')
+  })
+
+  it('normalizes a Uint8Array body to a Buffer before the pre-upload scan', async () => {
+    // the scanner contract accepts Buffer | stream only, so a Uint8Array upload
+    // must reach it as a Buffer rather than a raw Uint8Array
+    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('pre-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service } = makeServiceWithScanner(scanner)
+
+    await service.upload({ key: 'a.txt', body: new Uint8Array([104, 105]), contentType: 'text/plain' })
+
+    const [[scanArg]] = scanFn.mock.calls as [[{ body: unknown }]]
+    expect(Buffer.isBuffer(scanArg.body)).toBe(true)
+  })
+
+  it('passes a stream body through unchanged to the pre-upload scan', async () => {
+    // stream bodies are handed to the scanner as-is (never buffered)
+    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('pre-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service } = makeServiceWithScanner(scanner)
+    const stream = Readable.from([Buffer.from('hi')])
+
+    await service.upload({ key: 'a.txt', body: stream, contentType: 'text/plain', size: 2 })
+
+    const [[scanArg]] = scanFn.mock.calls as [[{ body: unknown }]]
+    expect(scanArg.body).toBe(stream)
+  })
+
+  it('calls scan with mode "post-upload" after the object has been uploaded (no size)', async () => {
+    // scan() must be invoked after S3 PutObject send when mode is post-upload
+    const callOrder: string[] = []
+    const scanFn = jest.fn().mockImplementation(() => {
+      callOrder.push('scan')
+      return Promise.resolve({ status: 'clean', engine: 'test' })
+    })
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('post-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service, send } = makeServiceWithScanner(scanner)
+    send.mockImplementation((..._args: unknown[]) => {
+      callOrder.push('send')
+      return Promise.resolve({ ETag: '"abc"' })
+    })
+
+    await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain' })
+
+    expect(callOrder).toEqual(['send', 'scan'])
+  })
+
+  it('includes size in post-upload scan input when upload provides a size', async () => {
+    // size must be forwarded to scan so the scanner can validate it
+    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('post-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service } = makeServiceWithScanner(scanner)
+
+    await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain', size: 2 })
+
+    expect(scanFn).toHaveBeenCalledWith(expect.objectContaining({ mode: 'post-upload', key: 'a.txt', size: 2 }))
+  })
+
+  it('deletes the object and rethrows when post-upload scan detects infection', async () => {
+    // infected object must be removed from the bucket before the exception propagates
+    const infected = new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED, undefined, {
+      engine: 'test',
+      threat: 'Virus.X',
+    })
+    const scanFn = jest.fn().mockRejectedValue(infected)
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('post-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service, send } = makeServiceWithScanner(scanner)
+
+    const err = await service
+      .upload({ key: 'infected.bin', body: Buffer.from('evil'), contentType: 'application/octet-stream' })
+      .catch((e: unknown) => e)
+
+    expect(err).toBe(infected)
+    // first call is PutObject; second call is the DeleteObject cleanup
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+
+  it('still rethrows the scan error when the post-upload delete also fails', async () => {
+    // delete failure must be absorbed (logged); the original scan error propagates
+    const infected = new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED, undefined, {
+      engine: 'test',
+      threat: 'Virus.Y',
+    })
+    const scanFn = jest.fn().mockRejectedValue(infected)
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('post-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service, send } = makeServiceWithScanner(scanner)
+    // PutObject succeeds; DeleteObject fails
+    send
+      .mockResolvedValueOnce({ ETag: '"abc"' })
+      .mockRejectedValueOnce(new Error('delete forbidden'))
+
+    const err = await service
+      .upload({ key: 'infected2.bin', body: Buffer.from('evil'), contentType: 'application/octet-stream' })
+      .catch((e: unknown) => e)
+
+    expect(err).toBe(infected)
   })
 })

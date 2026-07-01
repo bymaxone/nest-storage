@@ -11,6 +11,22 @@ import type { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { IdempotencyCache } from '../utils/idempotency-cache'
 import { applyDefaults } from '../config/apply-defaults'
+import type { ValidationService } from './validation.service'
+import type { FileScannerService } from './file-scanner.service'
+
+function makePassthroughValidation(): ValidationService {
+  return {
+    validate: jest.fn().mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
+  } as unknown as ValidationService
+}
+
+function makeDisabledScanner(): FileScannerService {
+  return {
+    isEnabled: jest.fn().mockReturnValue(false),
+    getMode: jest.fn().mockReturnValue(null),
+    scan: jest.fn(),
+  } as unknown as FileScannerService
+}
 
 const SERVER_ERROR = { name: 'InternalError', message: 'boom', $metadata: { httpStatusCode: 500 } }
 
@@ -35,7 +51,14 @@ function makeService(): Harness {
   } as unknown as S3ClientProvider
   const keyResolver = new KeyResolverService(resolved)
   const cache = new IdempotencyCache(100, 60_000, () => 0)
-  const service = new StorageService(resolved, s3Provider, keyResolver, cache)
+  const service = new StorageService(
+    resolved,
+    s3Provider,
+    keyResolver,
+    cache,
+    makePassthroughValidation(),
+    makeDisabledScanner(),
+  )
   return { service, send }
 }
 

@@ -15,6 +15,22 @@ import { applyDefaults } from '../config/apply-defaults'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
+import type { ValidationService } from './validation.service'
+import type { FileScannerService } from './file-scanner.service'
+
+function makePassthroughValidation(): ValidationService {
+  return {
+    validate: jest.fn().mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
+  } as unknown as ValidationService
+}
+
+function makeDisabledScanner(): FileScannerService {
+  return {
+    isEnabled: jest.fn().mockReturnValue(false),
+    getMode: jest.fn().mockReturnValue(null),
+    scan: jest.fn(),
+  } as unknown as FileScannerService
+}
 
 jest.mock('@aws-sdk/lib-storage', () => ({ Upload: jest.fn() }))
 
@@ -64,7 +80,14 @@ function makeService(overrides: Partial<BymaxStorageModuleOptions> = {}): Harnes
   } as unknown as S3ClientProvider
   const keyResolver = new KeyResolverService(resolved)
   const cache = new IdempotencyCache(100, 60_000, () => 0)
-  const service = new StorageService(resolved, s3Provider, keyResolver, cache)
+  const service = new StorageService(
+    resolved,
+    s3Provider,
+    keyResolver,
+    cache,
+    makePassthroughValidation(),
+    makeDisabledScanner(),
+  )
   return { service, resolved }
 }
 
