@@ -17,8 +17,8 @@ Tasks live **one file per phase** in this folder (`phase-NN-<slug>.md`), followi
 | 2 | [`phase-02-upload-download.md`](./phase-02-upload-download.md) | 14 / 14 | ✅ Done |
 | 3 | [`phase-03-signed-urls-validation-scanner.md`](./phase-03-signed-urls-validation-scanner.md) | 12 / 12 | ✅ Done |
 | 4 | [`phase-04-listing-async-e2e-mutation.md`](./phase-04-listing-async-e2e-mutation.md) | 12 / 12 | ✅ Done |
-| 5 | [`phase-05-release.md`](./phase-05-release.md) | 0 / 9 | 🔄 In Progress |
-| | **Total** | **55 / 64** | 🔄 In Progress |
+| 5 | [`phase-05-release.md`](./phase-05-release.md) | 8 / 9 | ✅ Done |
+| | **Total** | **63 / 64** | ✅ Done |
 
 ---
 

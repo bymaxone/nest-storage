@@ -10,7 +10,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-## [0.1.0] - 2026-XX-XX
+## [0.1.0] - 2026-07-01
 
 ### Added
 
