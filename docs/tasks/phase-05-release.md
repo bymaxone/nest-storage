@@ -1,6 +1,6 @@
 # Phase 5 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 3 / 9 tasks · **Last updated**: 2026-07-01
+> **Status**: 🔄 In Progress · **Progress**: 5 / 9 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §6
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §13, §14, §16
 
@@ -49,8 +49,8 @@ The single largest correctness risk in the documentation is teaching consumers t
 | 5.1 | README (badges + quick start + 4 provider scenarios + error table) | ✅ Done | P1 | L | 4.12 |
 | 5.2 | CHANGELOG.md + SECURITY.md | ✅ Done | P1 | M | 1.1 |
 | 5.3 | CLAUDE.md + AGENTS.md | ✅ Done | P2 | L | 1.1 |
-| 5.4 | Confirm `ci.yml` is green for the release candidate | 📋 ToDo | P0 | S | 4.12 |
-| 5.5 | Confirm `codeql.yml` + `scorecard.yml` green; finalize `release.yml` publish trigger | 📋 ToDo | P0 | S | 5.4 |
+| 5.4 | Confirm `ci.yml` is green for the release candidate | ✅ Done | P0 | S | 4.12 |
+| 5.5 | Confirm `codeql.yml` + `scorecard.yml` green; finalize `release.yml` publish trigger | ✅ Done | P0 | S | 5.4 |
 | 5.6 | mutation_testing_plan.md + mutation_testing_results.md + LICENSE | 📋 ToDo | P2 | M | 4.10 |
 | 5.7 | Finalize brotli bundle budgets + `pnpm pack --dry-run` | 📋 ToDo | P1 | S | 4.12 |
 | 5.8 | Final pre-publish gate | 📋 ToDo | P0 | S | 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7 |
@@ -379,7 +379,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.4 — Confirm `ci.yml` is green for the release candidate
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 4.12
@@ -390,11 +390,11 @@ The `ci.yml` workflow was created in Phase 1 and has gated every PR. This task *
 
 #### Acceptance criteria
 
-- [ ] `.github/workflows/ci.yml` exists and is **not** recreated; only verified (optionally patched if a step is stale).
-- [ ] CI runs on `pull_request` + `push` to `main`, with `permissions: contents: read`, `concurrency` + `cancel-in-progress: true`, and Node 24.x.
-- [ ] CI steps cover `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm lint`, `pnpm test:cov`, `pnpm build`, `pnpm size`, and a `pnpm test:e2e` job with Docker (MinIO) and the `minio/minio:latest` image cached.
-- [ ] The latest CI run on the release-candidate ref is green (confirmed via `gh run list` / `gh run view`).
-- [ ] The coverage step enforces the 100% line/branch lib floor (not 80%).
+- [x] `.github/workflows/ci.yml` exists and is **not** recreated; only verified (optionally patched if a step is stale).
+- [x] CI runs on `pull_request` + `push` to `main`, with `permissions: contents: read`, `concurrency` + `cancel-in-progress: true`, and Node 24.x.
+- [x] CI steps cover `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm lint`, `pnpm test:cov`, `pnpm build`, `pnpm size`, and a `pnpm test:e2e` job with Docker (MinIO) and the `minio/minio:latest` image cached.
+- [x] The latest CI run on the release-candidate ref is green (confirmed via `gh run list` / `gh run view`).
+- [x] The coverage step enforces the 100% line/branch lib floor (not 80%).
 
 #### Files to create / modify
 
@@ -461,7 +461,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.5 — Confirm `codeql.yml` + `scorecard.yml` green; finalize `release.yml` publish trigger
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 5.4
@@ -472,11 +472,11 @@ Verify the `codeql.yml` and `scorecard.yml` workflows (created in Phase 1) are g
 
 #### Acceptance criteria
 
-- [ ] `codeql.yml` and `scorecard.yml` exist (not recreated); their latest runs are green.
-- [ ] `release.yml` triggers on a `v*.*.*` tag push, runs `pnpm prepublishOnly`, then `pnpm publish --provenance`, and creates a GitHub Release; it stays inert until a tag is pushed.
-- [ ] `release.yml` uses **OIDC Trusted Publishing — NO `NPM_TOKEN` secret** — with the publish job widening to `contents: write` (release) + `id-token: write` (OIDC), nothing broader, behind the `npm-publish` environment.
-- [ ] An **`npm-publish` GitHub Environment** with a required reviewer is documented as a prerequisite, and a **Trusted Publisher** is registered on npmjs.com for `@bymax-one/nest-storage` bound to this repo's `release.yml` (documented in the PR description and `SECURITY.md`/release notes).
-- [ ] No `nest-auth` references remain in any of the three workflows.
+- [x] `codeql.yml` and `scorecard.yml` exist (not recreated); their latest runs are green.
+- [x] `release.yml` triggers on a `v*.*.*` tag push, runs `pnpm prepublishOnly`, then `pnpm publish --provenance`, and creates a GitHub Release; it stays inert until a tag is pushed.
+- [x] `release.yml` uses **OIDC Trusted Publishing — NO `NPM_TOKEN` secret** — with the publish job widening to `contents: write` (release) + `id-token: write` (OIDC), nothing broader, behind the `npm-publish` environment.
+- [x] An **`npm-publish` GitHub Environment** with a required reviewer is documented as a prerequisite, and a **Trusted Publisher** is registered on npmjs.com for `@bymax-one/nest-storage` bound to this repo's `release.yml` (documented in the PR description and `SECURITY.md`/release notes).
+- [x] No `nest-auth` references remain in any of the three workflows.
 
 #### Files to create / modify
 
@@ -898,3 +898,5 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 5.1 ✅ 2026-07-01 — README created with badges, four provider quick-starts, error table, and the two provider-trap callouts
 - 5.2 ✅ 2026-07-01 — CHANGELOG.md (Keep a Changelog 1.1.0, full 0.1.0 Added list) and SECURITY.md (disclosure policy, storage-specific security goals, operational hardening) created
 - 5.3 ✅ 2026-07-01 — CLAUDE.md (agent quick reference, 9 critical rules, context7 guidelines) and AGENTS.md (full architecture deep-dive: module, S3ClientProvider lifecycle, KeyResolverService, validation pipeline, TTL clamp, idempotency cache, provider recipes) created
+- 5.4 ✅ 2026-07-01 — ci.yml confirmed green (5 recent successful runs); conventions verified: contents: read, concurrency, Node 24.x, MinIO E2E, brotli size gate, 100% coverage
+- 5.5 ✅ 2026-07-01 — codeql.yml and scorecard.yml green; release.yml verified: v*.*.* tag trigger, OIDC provenance, npm-publish environment, contents: write + id-token: write, no NPM_TOKEN, no nest-auth refs
