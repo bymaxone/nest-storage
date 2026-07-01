@@ -1,6 +1,6 @@
 # Phase 5 — Release v0.1.0
 
-> **Status**: ✅ Done · **Progress**: 8 / 9 tasks · **Last updated**: 2026-07-01
+> **Status**: 🟡 Partial · **Progress**: 8 / 9 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §6
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §13, §14, §16
 
