@@ -125,6 +125,15 @@ describe('StorageService.deleteMany', () => {
     expect(secondInput.Delete.Objects).toHaveLength(1)
   })
 
+  it('sends exactly one request for a full 1000-key chunk', async () => {
+    // The chunk boundary is inclusive of 1000 — no spurious empty second send.
+    const { service, send } = makeService()
+    send.mockResolvedValue(deleteResponse())
+    const keys = Array.from({ length: 1000 }, (_, i) => `k${String(i)}.txt`)
+    await service.deleteMany(keys)
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
   it('marks every key in a chunk as failed when the whole request throws', async () => {
     // A batch-level rejection fails all keys with the error message.
     const { service, send } = makeService()

@@ -1,6 +1,6 @@
 # Phase 4 — Listing + Pagination + forRootAsync + E2E + Mutation
 
-> **Status**: 🔄 In Progress · **Progress**: 6 / 12 tasks · **Last updated**: 2026-07-01
+> **Status**: 🔄 In Progress · **Progress**: 7 / 12 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §5
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §10, §4.3, §4.4
 
@@ -53,7 +53,7 @@ It also stands up the real **end-to-end** suite: Jest spins up a MinIO container
 | 4.4 | Provider Recipes (AWS, DO Spaces, R2, B2, MinIO, Wasabi) | ✅ Done | P1 | M | 1.9 |
 | 4.5 | Barrel — export `providerRecipes` | ✅ Done | P1 | S | 4.1, 4.2, 4.3, 4.4 |
 | 4.6 | `BymaxStorageModule.forRootAsync()` | ✅ Done | P0 | M | 1.15, 2.10, 3.7 |
-| 4.7 | Unit tests — list / copy / deleteMany / recipes / forRootAsync | 📋 ToDo | P0 | L | 4.1, 4.2, 4.3, 4.4, 4.6 |
+| 4.7 | Unit tests — list / copy / deleteMany / recipes / forRootAsync | ✅ Done | P0 | L | 4.1, 4.2, 4.3, 4.4, 4.6 |
 | 4.8 | E2E fixtures — MinIO via Testcontainers | 📋 ToDo | P0 | S | 4.6 |
 | 4.9 | E2E specs against MinIO (basic / multipart / signed / list / validation) | 📋 ToDo | P0 | L | 4.8 |
 | 4.10 | Mutation testing baseline (Stryker) | 📋 ToDo | P1 | S | 4.7, 4.9 |
@@ -564,7 +564,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.7 — Unit tests — list / copy / deleteMany / recipes / forRootAsync
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 4.1, 4.2, 4.3, 4.4, 4.6
@@ -575,12 +575,12 @@ Harden the five seed specs into the full edge-case matrix and drive every file a
 
 #### Acceptance criteria
 
-- [ ] `storage.service.list.spec.ts` (~8 cases): prefix filter, delimiter → commonPrefixes, maxKeys clamp to 1000, continuationToken paging, stripPrefix on keys, isTruncated true/false, empty `Contents`/`CommonPrefixes` defaults, `mapAwsError` on send failure.
-- [ ] `storage.service.copy.spec.ts` (~5 cases): same-bucket, cross-bucket, ACL on publicRead, CopySource `/{bucket}/{key}` assertion, error mapping.
-- [ ] `storage.service.delete-many.spec.ts` (~6 cases): empty no-op (no send), two-key success, mixed success+failure, >1000 keys chunking (assert two sends), whole-batch failure marks all failed, stripPrefix on returned keys.
-- [ ] `provider-recipes.spec.ts` (~10 cases): one per recipe + R2 customDomain + DO cdnBaseUrl + non-AWS checksum opt-out present (and absent on awsS3) + determinism.
-- [ ] `bymax-storage.module.async.spec.ts` (~5 cases): useFactory+inject, useClass, useExisting, missing-all throws, validateOptions+applyDefaults run.
-- [ ] 30+ cases total; every spec is green; the five implemented files hit 100% line/branch; every `it()` carries a short comment.
+- [x] `storage.service.list.spec.ts` (~8 cases): prefix filter, delimiter → commonPrefixes, maxKeys clamp to 1000, continuationToken paging, stripPrefix on keys, isTruncated true/false, empty `Contents`/`CommonPrefixes` defaults, `mapAwsError` on send failure.
+- [x] `storage.service.copy.spec.ts` (~5 cases): same-bucket, cross-bucket, ACL on publicRead, CopySource `/{bucket}/{key}` assertion, error mapping.
+- [x] `storage.service.delete-many.spec.ts` (~6 cases): empty no-op (no send), two-key success, mixed success+failure, >1000 keys chunking (assert two sends), whole-batch failure marks all failed, stripPrefix on returned keys.
+- [x] `provider-recipes.spec.ts` (~10 cases): one per recipe + R2 customDomain + DO cdnBaseUrl + non-AWS checksum opt-out present (and absent on awsS3) + determinism.
+- [x] `bymax-storage.module.async.spec.ts` (~5 cases): useFactory+inject, useClass, useExisting, missing-all throws, validateOptions+applyDefaults run.
+- [x] 30+ cases total; every spec is green; the five implemented files hit 100% line/branch; every `it()` carries a short comment.
 
 #### Files to create / modify
 
@@ -1041,3 +1041,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 4.4 ✅ 2026-07-01 — Added `providerRecipes` for AWS/DO/R2/B2/MinIO/Wasabi with the non-AWS checksum opt-out and session-token forwarding.
 - 4.5 ✅ 2026-07-01 — Exported `providerRecipes` from the server barrel; verified list/copy/deleteMany signatures and six recipe keys in the built d.ts.
 - 4.6 ✅ 2026-07-01 — Added `BymaxStorageModule.forRootAsync()` (useFactory/useClass/useExisting), validating and resolving options inside the factory and replicating the `forRoot` provider/export surface.
+- 4.7 ✅ 2026-07-01 — Hardened the list/copy/deleteMany/recipes/forRootAsync unit specs to the full edge-case matrix (39 cases) at 100% line/branch on every file.
