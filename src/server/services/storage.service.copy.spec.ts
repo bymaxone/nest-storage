@@ -93,6 +93,16 @@ describe('StorageService.copy', () => {
     expect(result.etag).toBe('"copied"')
   })
 
+  it('percent-encodes each path segment of the source key in CopySource', async () => {
+    // A source key with a space, a `+`, and a unicode char must be encoded per
+    // segment; the segment-separating slashes stay literal (no double-encoding).
+    const { service, send } = makeService()
+    send.mockResolvedValue({ CopyObjectResult: { ETag: '"z"' } })
+    await service.copy({ sourceKey: 'a b/c+d/€.txt', destinationKey: 'dst.txt' })
+    const input = firstInput(send)
+    expect(input.CopySource).toBe('/test-bucket/a%20b/c%2Bd/%E2%82%AC.txt')
+  })
+
   it('supports cross-bucket copies when both buckets are provided', async () => {
     // The CopySource references the source bucket, the target references the dest.
     const { service, send } = makeService()

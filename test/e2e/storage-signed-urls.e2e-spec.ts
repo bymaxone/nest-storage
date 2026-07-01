@@ -1,7 +1,7 @@
 /**
  * @fileoverview End-to-end signed-URL suite against a live MinIO container:
  * a presigned GET fetched over real HTTP, a presigned PUT upload, and rejection
- * of a PUT whose Content-Type differs from the signed one.
+ * of a PUT whose SigV4 signature has been tampered with.
  * @layer test/e2e
  */
 import { Test, type TestingModule } from '@nestjs/testing'

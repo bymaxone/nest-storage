@@ -153,6 +153,20 @@ describe('StorageService.deleteMany', () => {
     ])
   })
 
+  it('coerces a non-Error throw into a string error for every key', async () => {
+    // A provider that rejects with a bare string (not an Error) must still yield a
+    // string `error` per key — never `undefined`.
+    const { service, send } = makeService()
+    send.mockRejectedValue('kaboom')
+    const result = await service.deleteMany(['a.txt', 'b.txt'])
+    expect(result.deleted).toEqual([])
+    expect(result.failed).toEqual([
+      { key: 'a.txt', error: 'kaboom' },
+      { key: 'b.txt', error: 'kaboom' },
+    ])
+    expect(typeof result.failed[0]!.error).toBe('string')
+  })
+
   it('strips the global key prefix from returned keys', async () => {
     // Both deleted and failed keys come back without the tenant prefix.
     const { service, send } = makeService({ keyPrefix: 'tenant/' })

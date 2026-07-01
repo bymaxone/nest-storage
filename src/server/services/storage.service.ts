@@ -27,6 +27,12 @@ import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
 import type { DownloadOptions } from '../interfaces/download-options.interface'
 import type { ListOptions, ListResult } from '../interfaces/list-options.interface'
+import type { CopyOptions } from '../interfaces/copy-options.interface'
+import type {
+  DeleteManyOptions,
+  DeleteManyResult,
+  FailedDeletion,
+} from '../interfaces/delete-many-options.interface'
 import type { ListedObject, ObjectMetadata, UploadResult } from '../../shared/types/storage-types'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
@@ -75,33 +81,6 @@ interface S3ListEntry {
   ETag?: string | undefined
   LastModified?: Date | undefined
   StorageClass?: string | undefined
-}
-
-/** Per-call options for a batch delete. */
-interface DeleteManyOptions {
-  bucket?: string
-}
-
-/** Options for a server-side object copy. */
-interface CopyOptions {
-  sourceKey: string
-  destinationKey: string
-  sourceBucket?: string
-  destinationBucket?: string
-  publicRead?: boolean
-  cacheControl?: string
-}
-
-/** A single failed key from a batch delete, with a readable provider error. */
-interface FailedDeletion {
-  key: string
-  error: string
-}
-
-/** Aggregated outcome of a batch delete: succeeded keys and per-key failures. */
-interface DeleteManyResult {
-  deleted: string[]
-  failed: FailedDeletion[]
 }
 
 /** S3's hard cap on the number of keys returned by one `ListObjectsV2` request. */
@@ -693,7 +672,9 @@ export class StorageService {
         new CopyObjectCommand({
           Bucket: destBucket,
           Key: destKey,
-          CopySource: `/${sourceBucket}/${sourceKey}`,
+          // `CopySource` must be URL-encoded per path segment; the slashes that
+          // separate the segments stay literal so the bucket/key boundaries hold.
+          CopySource: `/${sourceBucket}/${sourceKey.split('/').map(encodeURIComponent).join('/')}`,
           CacheControl: options.cacheControl ?? this.options.defaultCacheControl,
           // ACLs are a no-op on modern S3 (Object Ownership) and R2; see header-utils.
           ACL: buildACL(options.publicRead, this.options.defaultPublicRead),
@@ -760,7 +741,9 @@ export class StorageService {
         }
       }
     } catch (err) {
-      const message = (err as Error).message
+      // A non-Error throw (or an Error without a message) must still coerce to the
+      // `string` that `FailedDeletion.error` declares — never `undefined`.
+      const message = err instanceof Error ? err.message : String(err)
       for (const key of chunk) {
         failed.push({ key: this.keyResolver.stripPrefix(key), error: message })
       }
