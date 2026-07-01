@@ -1,6 +1,6 @@
 # Phase 4 — Listing + Pagination + forRootAsync + E2E + Mutation
 
-> **Status**: 🔄 In Progress · **Progress**: 3 / 12 tasks · **Last updated**: 2026-07-01
+> **Status**: 🔄 In Progress · **Progress**: 5 / 12 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §5
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §10, §4.3, §4.4
 
@@ -50,8 +50,8 @@ It also stands up the real **end-to-end** suite: Jest spins up a MinIO container
 | 4.1 | `StorageService.list()` — paginated listing + `commonPrefixes` | ✅ Done | P0 | M | 2.5 |
 | 4.2 | `StorageService.copy()` — server-side copy | ✅ Done | P1 | S | 2.5 |
 | 4.3 | `StorageService.deleteMany()` — batch delete (chunked ≤ 1000) | ✅ Done | P0 | M | 2.5 |
-| 4.4 | Provider Recipes (AWS, DO Spaces, R2, B2, MinIO, Wasabi) | 📋 ToDo | P1 | M | 1.9 |
-| 4.5 | Barrel — export `providerRecipes` | 📋 ToDo | P1 | S | 4.1, 4.2, 4.3, 4.4 |
+| 4.4 | Provider Recipes (AWS, DO Spaces, R2, B2, MinIO, Wasabi) | ✅ Done | P1 | M | 1.9 |
+| 4.5 | Barrel — export `providerRecipes` | ✅ Done | P1 | S | 4.1, 4.2, 4.3, 4.4 |
 | 4.6 | `BymaxStorageModule.forRootAsync()` | 📋 ToDo | P0 | M | 1.15, 2.10, 3.7 |
 | 4.7 | Unit tests — list / copy / deleteMany / recipes / forRootAsync | 📋 ToDo | P0 | L | 4.1, 4.2, 4.3, 4.4, 4.6 |
 | 4.8 | E2E fixtures — MinIO via Testcontainers | 📋 ToDo | P0 | S | 4.6 |
@@ -313,7 +313,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.4 — Provider Recipes (AWS, DO Spaces, R2, B2, MinIO, Wasabi)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 1.9
@@ -324,15 +324,15 @@ Create `providerRecipes` — a frozen object of six strongly-typed factories tha
 
 #### Acceptance criteria
 
-- [ ] `awsS3({ region: 'us-east-1', bucket, ... })` → endpoint `https://s3.us-east-1.amazonaws.com`, `forcePathStyle: false`, `publicBaseUrl: https://${bucket}.s3.us-east-1.amazonaws.com`, `serverSideEncryption: 'AES256'`, and **no** checksum overrides (SDK default `'WHEN_SUPPORTED'`).
-- [ ] `digitalOceanSpaces({ region: 'nyc3', ... })` → endpoint `https://nyc3.digitaloceanspaces.com`, a populated `cdnBaseUrl`, `defaultPublicRead: true`.
-- [ ] `cloudflareR2({ accountId: 'abc', ... })` → `region: 'auto'`; `cloudflareR2({ ..., customDomain })` sets `publicBaseUrl = customDomain` (REQUIRED — no working default for the `*.r2.cloudflarestorage.com` host).
-- [ ] `backblazeB2({ endpointHost: 's3.us-west-002.backblazeb2.com', ... })` → `forcePathStyle: false`.
-- [ ] `minio({ endpoint: 'http://localhost:9000', ... })` → `forcePathStyle: true`, `region` default `'us-east-1'`.
-- [ ] `wasabi({ region: 'us-east-1', ... })` → endpoint `https://s3.us-east-1.wasabisys.com`.
-- [ ] **Every non-AWS recipe** sets `requestChecksumCalculation: 'WHEN_REQUIRED'` and `responseChecksumValidation: 'WHEN_REQUIRED'`.
-- [ ] `sessionToken` is forwarded into `credentials` only when provided (AWS, DO, Wasabi inputs).
-- [ ] Each recipe is deterministic (same input → deep-equal output); object exported `as const` with a JSDoc `@example` showing spread + override; 100% line/branch coverage; `pnpm typecheck` passes.
+- [x] `awsS3({ region: 'us-east-1', bucket, ... })` → endpoint `https://s3.us-east-1.amazonaws.com`, `forcePathStyle: false`, `publicBaseUrl: https://${bucket}.s3.us-east-1.amazonaws.com`, `serverSideEncryption: 'AES256'`, and **no** checksum overrides (SDK default `'WHEN_SUPPORTED'`).
+- [x] `digitalOceanSpaces({ region: 'nyc3', ... })` → endpoint `https://nyc3.digitaloceanspaces.com`, a populated `cdnBaseUrl`, `defaultPublicRead: true`.
+- [x] `cloudflareR2({ accountId: 'abc', ... })` → `region: 'auto'`; `cloudflareR2({ ..., customDomain })` sets `publicBaseUrl = customDomain` (REQUIRED — no working default for the `*.r2.cloudflarestorage.com` host).
+- [x] `backblazeB2({ endpointHost: 's3.us-west-002.backblazeb2.com', ... })` → `forcePathStyle: false`.
+- [x] `minio({ endpoint: 'http://localhost:9000', ... })` → `forcePathStyle: true`, `region` default `'us-east-1'`.
+- [x] `wasabi({ region: 'us-east-1', ... })` → endpoint `https://s3.us-east-1.wasabisys.com`.
+- [x] **Every non-AWS recipe** sets `requestChecksumCalculation: 'WHEN_REQUIRED'` and `responseChecksumValidation: 'WHEN_REQUIRED'`.
+- [x] `sessionToken` is forwarded into `credentials` only when provided (AWS, DO, Wasabi inputs).
+- [x] Each recipe is deterministic (same input → deep-equal output); object exported `as const` with a JSDoc `@example` showing spread + override; 100% line/branch coverage; `pnpm typecheck` passes.
 
 #### Files to create / modify
 
@@ -409,7 +409,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.5 — Barrel — export `providerRecipes`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 4.1, 4.2, 4.3, 4.4
@@ -420,10 +420,10 @@ Expose `providerRecipes` from the server barrel and confirm the public type surf
 
 #### Acceptance criteria
 
-- [ ] `src/server/index.ts` re-exports `providerRecipes` from `./config/provider-recipes`.
-- [ ] `pnpm build` produces `dist/server/index.d.ts` containing the `list` / `copy` / `deleteMany` signatures on `StorageService`.
-- [ ] The built module exports the six recipe keys: `awsS3`, `digitalOceanSpaces`, `cloudflareR2`, `backblazeB2`, `minio`, `wasabi`.
-- [ ] `pnpm typecheck` passes.
+- [x] `src/server/index.ts` re-exports `providerRecipes` from `./config/provider-recipes`.
+- [x] `pnpm build` produces `dist/server/index.d.ts` containing the `list` / `copy` / `deleteMany` signatures on `StorageService`.
+- [x] The built module exports the six recipe keys: `awsS3`, `digitalOceanSpaces`, `cloudflareR2`, `backblazeB2`, `minio`, `wasabi`.
+- [x] `pnpm typecheck` passes.
 
 #### Files to create / modify
 
@@ -1038,3 +1038,5 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 4.1 ✅ 2026-07-01 — Added `StorageService.list()` with maxKeys clamp, prefix normalization/stripping, commonPrefixes, and continuation-token paging.
 - 4.2 ✅ 2026-07-01 — Added `StorageService.copy()` server-side copy with canonical `/{bucket}/{key}` CopySource, ACL, and cache-control fallback.
 - 4.3 ✅ 2026-07-01 — Added `StorageService.deleteMany()` chunked at ≤1000 keys with per-key success/failure aggregation and prefix stripping.
+- 4.4 ✅ 2026-07-01 — Added `providerRecipes` for AWS/DO/R2/B2/MinIO/Wasabi with the non-AWS checksum opt-out and session-token forwarding.
+- 4.5 ✅ 2026-07-01 — Exported `providerRecipes` from the server barrel; verified list/copy/deleteMany signatures and six recipe keys in the built d.ts.

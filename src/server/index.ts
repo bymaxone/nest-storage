@@ -16,6 +16,9 @@ export { SignedUrlService } from './services/signed-url.service'
 export { NoOpUploadValidator } from './providers/no-op-validator'
 export { NoOpFileScanner } from './providers/no-op-scanner'
 
+// Provider Recipes — pre-tuned configs for each supported S3-compatible provider
+export { providerRecipes } from './config/provider-recipes'
+
 // DI Tokens
 export {
   BYMAX_STORAGE_OPTIONS,
