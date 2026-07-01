@@ -1,6 +1,6 @@
 # Phase 5 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 1 / 9 tasks · **Last updated**: 2026-07-01
+> **Status**: 🔄 In Progress · **Progress**: 2 / 9 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §6
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §13, §14, §16
 
@@ -47,7 +47,7 @@ The single largest correctness risk in the documentation is teaching consumers t
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
 | 5.1 | README (badges + quick start + 4 provider scenarios + error table) | ✅ Done | P1 | L | 4.12 |
-| 5.2 | CHANGELOG.md + SECURITY.md | 📋 ToDo | P1 | M | 1.1 |
+| 5.2 | CHANGELOG.md + SECURITY.md | ✅ Done | P1 | M | 1.1 |
 | 5.3 | CLAUDE.md + AGENTS.md | 📋 ToDo | P2 | L | 1.1 |
 | 5.4 | Confirm `ci.yml` is green for the release candidate | 📋 ToDo | P0 | S | 4.12 |
 | 5.5 | Confirm `codeql.yml` + `scorecard.yml` green; finalize `release.yml` publish trigger | 📋 ToDo | P0 | S | 5.4 |
@@ -191,7 +191,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.2 — CHANGELOG.md + SECURITY.md
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 1.1
@@ -202,11 +202,11 @@ Create the `CHANGELOG.md` (Keep a Changelog 1.1.0 + SemVer) with the `0.1.0` ent
 
 #### Acceptance criteria
 
-- [ ] `CHANGELOG.md` follows Keep a Changelog 1.1.0 + Semantic Versioning, with an `## [Unreleased]` section and an `## [0.1.0]` `### Added` entry enumerating the v0.1.0 feature set.
-- [ ] The `0.1.0` entry lists: provider-agnostic single-engine storage; six provider recipes; `StorageService`; `SignedUrlService`; `IUploadValidator`; `IFileScanner`; 17-code `StorageException` catalog; `keyPrefix`; mandatory path-traversal guard; in-memory LRU idempotency; SSE (AES256 / aws:kms); subpaths `.` and `./shared`.
-- [ ] `SECURITY.md` states the private disclosure channel (`security@bymax.one`, no public issues for vulnerabilities) and supported versions.
-- [ ] `SECURITY.md` enumerates the storage-specific security goals: path-traversal mitigation in `KeyResolverService`, signed-URL TTL clamping, never logging signed URLs, SSE recommended in production, plaintext-credentials guidance, and the non-AWS checksum opt-out / ACL caveat as operational hardening notes.
-- [ ] Both files are valid Markdown.
+- [x] `CHANGELOG.md` follows Keep a Changelog 1.1.0 + Semantic Versioning, with an `## [Unreleased]` section and an `## [0.1.0]` `### Added` entry enumerating the v0.1.0 feature set.
+- [x] The `0.1.0` entry lists: provider-agnostic single-engine storage; six provider recipes; `StorageService`; `SignedUrlService`; `IUploadValidator`; `IFileScanner`; 17-code `StorageException` catalog; `keyPrefix`; mandatory path-traversal guard; in-memory LRU idempotency; SSE (AES256 / aws:kms); subpaths `.` and `./shared`.
+- [x] `SECURITY.md` states the private disclosure channel (`security@bymax.one`, no public issues for vulnerabilities) and supported versions.
+- [x] `SECURITY.md` enumerates the storage-specific security goals: path-traversal mitigation in `KeyResolverService`, signed-URL TTL clamping, never logging signed URLs, SSE recommended in production, plaintext-credentials guidance, and the non-AWS checksum opt-out / ACL caveat as operational hardening notes.
+- [x] Both files are valid Markdown.
 
 #### Files to create / modify
 
@@ -896,3 +896,4 @@ Completion Protocol (after you finish):
 _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 
 - 5.1 ✅ 2026-07-01 — README created with badges, four provider quick-starts, error table, and the two provider-trap callouts
+- 5.2 ✅ 2026-07-01 — CHANGELOG.md (Keep a Changelog 1.1.0, full 0.1.0 Added list) and SECURITY.md (disclosure policy, storage-specific security goals, operational hardening) created
