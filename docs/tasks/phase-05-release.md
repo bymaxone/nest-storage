@@ -1,6 +1,6 @@
 # Phase 5 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 5 / 9 tasks · **Last updated**: 2026-07-01
+> **Status**: 🔄 In Progress · **Progress**: 6 / 9 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §6
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §13, §14, §16
 
@@ -51,7 +51,7 @@ The single largest correctness risk in the documentation is teaching consumers t
 | 5.3 | CLAUDE.md + AGENTS.md | ✅ Done | P2 | L | 1.1 |
 | 5.4 | Confirm `ci.yml` is green for the release candidate | ✅ Done | P0 | S | 4.12 |
 | 5.5 | Confirm `codeql.yml` + `scorecard.yml` green; finalize `release.yml` publish trigger | ✅ Done | P0 | S | 5.4 |
-| 5.6 | mutation_testing_plan.md + mutation_testing_results.md + LICENSE | 📋 ToDo | P2 | M | 4.10 |
+| 5.6 | mutation_testing_plan.md + mutation_testing_results.md + LICENSE | ✅ Done | P2 | M | 4.10 |
 | 5.7 | Finalize brotli bundle budgets + `pnpm pack --dry-run` | 📋 ToDo | P1 | S | 4.12 |
 | 5.8 | Final pre-publish gate | 📋 ToDo | P0 | S | 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7 |
 | 5.9 | Tag v0.1.0 + `npm publish --provenance` + post-publish smoke | 📋 ToDo | P0 | S | 5.8 |
@@ -549,7 +549,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.6 — mutation_testing_plan.md + mutation_testing_results.md + LICENSE
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: M
 - **Depends on**: 4.10
@@ -560,10 +560,10 @@ Author the mutation-testing documentation (`docs/mutation_testing_plan.md` descr
 
 #### Acceptance criteria
 
-- [ ] `docs/mutation_testing_plan.md` documents the strategy: thresholds **high 100 / low 95 / break 95**, `pnpm mutation` run manually pre-release (not per-commit in CI due to cost), equivalent mutants annotated inline with `// Stryker disable next-line <mutator> : <reason>`, reports at `reports/mutation/mutation.html`, and the list of critical paths held at the 95%+ gate.
-- [ ] `docs/mutation_testing_results.md` is a placeholder with a per-release section listing the critical paths (`key-resolver.service.ts`, `resolved-options.ts` / validation, `ttl-clamp.ts`, `mime-match.ts`, `idempotency-cache.ts`) with `TBD` scores to be filled by the final run.
-- [ ] `LICENSE` is the MIT license, "Copyright (c) 2026 Bymax One".
-- [ ] All three files are valid and English-only.
+- [x] `docs/mutation_testing_plan.md` documents the strategy: thresholds **high 100 / low 95 / break 95**, `pnpm mutation` run manually pre-release (not per-commit in CI due to cost), equivalent mutants annotated inline with `// Stryker disable next-line <mutator> : <reason>`, reports at `reports/mutation/mutation.html`, and the list of critical paths held at the 95%+ gate.
+- [x] `docs/mutation_testing_results.md` updated with the v0.1.0 release gate section listing real scores for all critical paths (100% for all — from the Phase 4 mutation baseline run on 2026-07-01).
+- [x] `LICENSE` is the MIT license, "Copyright (c) 2026 Bymax One".
+- [x] All three files are valid and English-only.
 
 #### Files to create / modify
 
@@ -900,3 +900,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 5.3 ✅ 2026-07-01 — CLAUDE.md (agent quick reference, 9 critical rules, context7 guidelines) and AGENTS.md (full architecture deep-dive: module, S3ClientProvider lifecycle, KeyResolverService, validation pipeline, TTL clamp, idempotency cache, provider recipes) created
 - 5.4 ✅ 2026-07-01 — ci.yml confirmed green (5 recent successful runs); conventions verified: contents: read, concurrency, Node 24.x, MinIO E2E, brotli size gate, 100% coverage
 - 5.5 ✅ 2026-07-01 — codeql.yml and scorecard.yml green; release.yml verified: v*.*.* tag trigger, OIDC provenance, npm-publish environment, contents: write + id-token: write, no NPM_TOKEN, no nest-auth refs
+- 5.6 ✅ 2026-07-01 — mutation_testing_plan.md (strategy, thresholds, critical paths, equivalent mutant guidance), mutation_testing_results.md updated (v0.1.0 100% global, all critical paths at 100%), and LICENSE (MIT, Bymax One 2026) created

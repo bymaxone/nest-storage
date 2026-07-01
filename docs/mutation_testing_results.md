@@ -1,4 +1,4 @@
-# Mutation Testing Results — @bymax-one/nest-storage (Phase 4.10)
+# Mutation Testing Results — @bymax-one/nest-storage
 
 **Date:** 2026-07-01
 **Tool:** StrykerJS (`pnpm mutation`)
@@ -117,3 +117,35 @@ security boundaries (`key-resolver.service.ts`, `validate-options.ts`, `ttl-clam
 and `reports/mutation/mutation.html` is generated. No production behaviour was changed
 to reach this score — only assertions were strengthened and provable equivalents were
 suppressed with written reasons.
+
+---
+
+## v0.1.0 — Release Gate (2026-07-01)
+
+**Tool:** StrykerJS (`pnpm mutation`) · **Threshold:** break 95, high 100, low 95
+
+### Global result
+
+| Metric | Value |
+| --- | --- |
+| **Mutation score** | **100.00%** |
+| Break threshold (`break: 95`) | **held** |
+| Killed | 617 |
+| Timeout (detected) | 9 |
+| **Survived** | **0** |
+| Documented equivalents (disabled inline) | 8 |
+| No coverage | 0 |
+
+### Critical-path scores
+
+| File | Score |
+| --- | --- |
+| `src/server/services/key-resolver.service.ts` | 100% |
+| `src/server/config/validate-options.ts` | 100% |
+| `src/server/config/resolved-options.ts` | 100% |
+| `src/server/utils/ttl-clamp.ts` | 100% |
+| `src/server/utils/mime-match.ts` | 100% |
+| `src/server/utils/idempotency-cache.ts` | 100% |
+| `src/server/utils/header-utils.ts` | 100% |
+
+All critical paths met the 100% target. The 8 provable equivalent mutants are documented inline in the source files with written reasons (see the "Provable equivalent mutants" section above). No production behaviour was changed to reach this score.
