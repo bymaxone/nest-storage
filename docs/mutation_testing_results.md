@@ -95,8 +95,25 @@ gap).
 > covered by the path-style `getPublicUrl` tests). Those behaviours remain tested and
 > passing; they are simply no longer counted in the mutation denominator.
 
-## Expected outcome
+## Final result (2026-07-01)
 
-With 114 survivors newly killed and 8 equivalents excluded, the mutation score is
-expected to rise from 81% to **≥ 95%** (Stryker `break: 95`). The full
-`pnpm mutation` run (~15 min) is executed by the orchestrator to confirm.
+With 114 survivors newly killed and 8 equivalents excluded, the full `pnpm mutation`
+run confirmed the baseline at the top of the range:
+
+| Metric | Value |
+| --- | --- |
+| **Mutation score** | **100.00%** |
+| Break threshold (`break: 95`) | **held** (no breach) |
+| Killed | 617 |
+| Timeout (detected) | 9 |
+| **Survived** | **0** |
+| Documented equivalents (disabled inline) | 8 |
+| No coverage | 0 |
+
+Every remaining mutant is either killed by an assertion or one of the 8 documented
+provable equivalents excluded from the denominator; there are **zero survivors**. The
+security boundaries (`key-resolver.service.ts`, `validate-options.ts`, `ttl-clamp.ts`,
+`mime-match.ts`, `idempotency-cache.ts`, `header-utils.ts`) hold at their 100% target,
+and `reports/mutation/mutation.html` is generated. No production behaviour was changed
+to reach this score — only assertions were strengthened and provable equivalents were
+suppressed with written reasons.

@@ -1,6 +1,6 @@
 # Phase 4 — Listing + Pagination + forRootAsync + E2E + Mutation
 
-> **Status**: 🔄 In Progress · **Progress**: 10 / 12 tasks · **Last updated**: 2026-07-01
+> **Status**: ✅ Done · **Progress**: 12 / 12 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §5
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §10, §4.3, §4.4
 
@@ -56,9 +56,9 @@ It also stands up the real **end-to-end** suite: Jest spins up a MinIO container
 | 4.7 | Unit tests — list / copy / deleteMany / recipes / forRootAsync | ✅ Done | P0 | L | 4.1, 4.2, 4.3, 4.4, 4.6 |
 | 4.8 | E2E fixtures — MinIO via Testcontainers | ✅ Done | P0 | S | 4.6 |
 | 4.9 | E2E specs against MinIO (basic / multipart / signed / list / validation) | ✅ Done | P0 | L | 4.8 |
-| 4.10 | Mutation testing baseline (Stryker) | 📋 ToDo | P1 | S | 4.7, 4.9 |
+| 4.10 | Mutation testing baseline (Stryker) | ✅ Done | P1 | S | 4.7, 4.9 |
 | 4.11 | `forRootAsync` E2E async-config spec | ✅ Done | P1 | S | 4.6, 4.8 |
-| 4.12 | Phase validation + release gate (`test:cov:all` 100%) | 📋 ToDo | P0 | M | 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11 |
+| 4.12 | Phase validation + release gate (`test:cov:all` 100%) | ✅ Done | P0 | M | 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11 |
 
 ---
 
@@ -813,7 +813,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.10 — Mutation testing baseline (Stryker)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 4.7, 4.9
@@ -824,11 +824,11 @@ Run Stryker to establish the mutation-testing baseline for the library. Validate
 
 #### Acceptance criteria
 
-- [ ] `pnpm mutation:dry-run` validates the config; `pnpm mutation` completes a full run.
-- [ ] Global mutation score meets the baseline (Stryker break 95 — the run does not fall below the break threshold).
-- [ ] Critical paths reach ≥ 95% (and the security boundaries `key-resolver.service.ts`, `validate-options.ts`, `ttl-clamp.ts`, `mime-match.ts`, `idempotency-cache.ts`, `header-utils.ts` stay at their 100% target).
-- [ ] Provably-equivalent mutants are documented inline with `// Stryker disable next-line <Mutator>: <reason>` (notably AWS-error message strings in `try/catch`).
-- [ ] `reports/mutation/mutation.html` is generated; `docs/mutation_testing_results.md` is created/updated with a timestamp, the score, and observations.
+- [x] `pnpm mutation:dry-run` validates the config; `pnpm mutation` completes a full run.
+- [x] Global mutation score meets the baseline (Stryker break 95 — the run does not fall below the break threshold).
+- [x] Critical paths reach ≥ 95% (and the security boundaries `key-resolver.service.ts`, `validate-options.ts`, `ttl-clamp.ts`, `mime-match.ts`, `idempotency-cache.ts`, `header-utils.ts` stay at their 100% target).
+- [x] Provably-equivalent mutants are documented inline with `// Stryker disable next-line <Mutator>: <reason>` (notably AWS-error message strings in `try/catch`).
+- [x] `reports/mutation/mutation.html` is generated; `docs/mutation_testing_results.md` is created/updated with a timestamp, the score, and observations.
 
 #### Files to create / modify
 
@@ -958,7 +958,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.12 — Phase validation + release gate (`test:cov:all` 100%)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11
@@ -969,13 +969,13 @@ Consolidated gate for the phase: the full static + coverage + e2e + build + size
 
 #### Acceptance criteria
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm test:e2e && pnpm build && pnpm size && pnpm mutation` all pass.
-- [ ] `test:cov:all` reports 100% global coverage (release gate via `jest.coverage.config.ts`).
-- [ ] `pnpm size` passes the brotli budgets (server ≤ 30 KB, shared ≤ 3.5 KB).
-- [ ] `pnpm test:e2e` is green for all six e2e specs (the five from Task 4.9 + the async-config spec from Task 4.11).
-- [ ] `pnpm mutation` does not breach the break-95 threshold; critical paths ≥ 95%.
-- [ ] **GitHub CI is green on the PR** — the `ci` (verify + e2e against MinIO), `codeql`, and `scorecard` runs on the PR head all concluded `success` (`gh run list`/`gh run view`); the e2e specs added this phase now run in the front-loaded ci.yml e2e job. The phase is not closed with red or pending CI.
-- [ ] `/bymax-quality:code-review` run for the phase and all findings applied.
+- [x] `pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm test:e2e && pnpm build && pnpm size && pnpm mutation` all pass.
+- [x] `test:cov:all` reports 100% global coverage (release gate via `jest.coverage.config.ts`).
+- [x] `pnpm size` passes the brotli budgets (server ≤ 30 KB, shared ≤ 3.5 KB).
+- [x] `pnpm test:e2e` is green for all six e2e specs (the five from Task 4.9 + the async-config spec from Task 4.11).
+- [x] `pnpm mutation` does not breach the break-95 threshold; critical paths ≥ 95%.
+- [x] **GitHub CI is green on the PR** — the `ci` (verify + e2e against MinIO), `codeql`, and `scorecard` runs on the PR head all concluded `success` (`gh run list`/`gh run view`); the e2e specs added this phase now run in the front-loaded ci.yml e2e job. The phase is not closed with red or pending CI.
+- [x] `/bymax-quality:code-review` run for the phase and all findings applied.
 
 #### Files to create / modify
 
@@ -1045,3 +1045,5 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 4.8 ✅ 2026-07-01 — Added the `startMinio()` Testcontainers fixture (pinned MinIO image, path-style + checksum opt-out bucket creation); confirmed `testTimeout: 60_000`.
 - 4.9 ✅ 2026-07-01 — Added five MinIO e2e specs (basic/multipart/signed-urls/list/validation), each booting its own container; all green with no leaks.
 - 4.11 ✅ 2026-07-01 — Added the `forRootAsync` e2e async-config spec: a stub ConfigService drives the factory and a real upload+head round-trip confirms wiring.
+- 4.10 ✅ 2026-07-01 — Established the Stryker mutation baseline: full run scored 100.00% (break-95 held; 0 survivors; killed 617 / timeout 9), with 8 provable-equivalent mutants documented inline.
+- 4.12 ✅ 2026-07-01 — Ran the consolidated release gate (typecheck/lint/test:cov/test:cov:all 100% global/build/size/e2e against MinIO/mutation) plus code-review and security-review; all green.
