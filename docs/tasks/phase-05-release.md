@@ -1,6 +1,6 @@
 # Phase 5 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 2 / 9 tasks · **Last updated**: 2026-07-01
+> **Status**: 🔄 In Progress · **Progress**: 3 / 9 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §6
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §13, §14, §16
 
@@ -48,7 +48,7 @@ The single largest correctness risk in the documentation is teaching consumers t
 |---|---|---|---|---|---|
 | 5.1 | README (badges + quick start + 4 provider scenarios + error table) | ✅ Done | P1 | L | 4.12 |
 | 5.2 | CHANGELOG.md + SECURITY.md | ✅ Done | P1 | M | 1.1 |
-| 5.3 | CLAUDE.md + AGENTS.md | 📋 ToDo | P2 | L | 1.1 |
+| 5.3 | CLAUDE.md + AGENTS.md | ✅ Done | P2 | L | 1.1 |
 | 5.4 | Confirm `ci.yml` is green for the release candidate | 📋 ToDo | P0 | S | 4.12 |
 | 5.5 | Confirm `codeql.yml` + `scorecard.yml` green; finalize `release.yml` publish trigger | 📋 ToDo | P0 | S | 5.4 |
 | 5.6 | mutation_testing_plan.md + mutation_testing_results.md + LICENSE | 📋 ToDo | P2 | M | 4.10 |
@@ -286,7 +286,7 @@ Completion Protocol (after you finish):
 
 ### Task 5.3 — CLAUDE.md + AGENTS.md
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: L
 - **Depends on**: 1.1
@@ -297,12 +297,12 @@ Create `CLAUDE.md` (quick reference for AI agents) and `AGENTS.md` (architecture
 
 #### Acceptance criteria
 
-- [ ] Both files exist, with every `nest-auth` reference replaced by `nest-storage`.
-- [ ] Critical Rules reflect storage concerns (S3 client lifecycle, signed-URL secrecy, MIME validation, path-traversal guard, idempotency, checksum opt-out for non-AWS providers, ACL caveat) — **not** JWT/MFA/OAuth.
-- [ ] Subpaths documented as exactly two (`.`, `./shared`), not five.
-- [ ] The Guidelines table drops irrelevant rows (CRYPTO, JWT, OAUTH, NEXTJS, REACT), keeps NESTJS/TYPESCRIPT/TESTING, and adds AWS_SDK / MINIO / TESTCONTAINERS.
-- [ ] `AGENTS.md` deep-dives the architecture: dynamic module (`forRoot`/`forRootAsync`), `S3ClientProvider` lifecycle (`onModuleInit` / `onApplicationShutdown` + `destroy()`), `KeyResolverService`, the validation pipeline, signed-URL TTL clamp, the LRU idempotency cache, and the Provider Recipes (with the `'WHEN_REQUIRED'` checksum opt-out for non-AWS providers).
-- [ ] No `signatureVersion`/`maxRetries` mentions; `maxAttempts` (default 3) used where retries are discussed.
+- [x] Both files exist, with every `nest-auth` reference replaced by `nest-storage`.
+- [x] Critical Rules reflect storage concerns (S3 client lifecycle, signed-URL secrecy, MIME validation, path-traversal guard, idempotency, checksum opt-out for non-AWS providers, ACL caveat) — **not** JWT/MFA/OAuth.
+- [x] Subpaths documented as exactly two (`.`, `./shared`), not five.
+- [x] The Guidelines table drops irrelevant rows (CRYPTO, JWT, OAUTH, NEXTJS, REACT), keeps NESTJS/TYPESCRIPT/TESTING, and adds AWS_SDK / MINIO / TESTCONTAINERS.
+- [x] `AGENTS.md` deep-dives the architecture: dynamic module (`forRoot`/`forRootAsync`), `S3ClientProvider` lifecycle (`onModuleInit` / `onApplicationShutdown` + `destroy()`), `KeyResolverService`, the validation pipeline, signed-URL TTL clamp, the LRU idempotency cache, and the Provider Recipes (with the `'WHEN_REQUIRED'` checksum opt-out for non-AWS providers).
+- [x] No `signatureVersion`/`maxRetries` mentions; `maxAttempts` (default 3) used where retries are discussed.
 
 #### Files to create / modify
 
@@ -897,3 +897,4 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 
 - 5.1 ✅ 2026-07-01 — README created with badges, four provider quick-starts, error table, and the two provider-trap callouts
 - 5.2 ✅ 2026-07-01 — CHANGELOG.md (Keep a Changelog 1.1.0, full 0.1.0 Added list) and SECURITY.md (disclosure policy, storage-specific security goals, operational hardening) created
+- 5.3 ✅ 2026-07-01 — CLAUDE.md (agent quick reference, 9 critical rules, context7 guidelines) and AGENTS.md (full architecture deep-dive: module, S3ClientProvider lifecycle, KeyResolverService, validation pipeline, TTL clamp, idempotency cache, provider recipes) created
