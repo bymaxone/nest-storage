@@ -1,6 +1,6 @@
 # Phase 4 — Listing + Pagination + forRootAsync + E2E + Mutation
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 12 tasks · **Last updated**: 2026-07-01
+> **Status**: 🔄 In Progress · **Progress**: 3 / 12 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §5
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §10, §4.3, §4.4
 
@@ -47,9 +47,9 @@ It also stands up the real **end-to-end** suite: Jest spins up a MinIO container
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 4.1 | `StorageService.list()` — paginated listing + `commonPrefixes` | 📋 ToDo | P0 | M | 2.5 |
-| 4.2 | `StorageService.copy()` — server-side copy | 📋 ToDo | P1 | S | 2.5 |
-| 4.3 | `StorageService.deleteMany()` — batch delete (chunked ≤ 1000) | 📋 ToDo | P0 | M | 2.5 |
+| 4.1 | `StorageService.list()` — paginated listing + `commonPrefixes` | ✅ Done | P0 | M | 2.5 |
+| 4.2 | `StorageService.copy()` — server-side copy | ✅ Done | P1 | S | 2.5 |
+| 4.3 | `StorageService.deleteMany()` — batch delete (chunked ≤ 1000) | ✅ Done | P0 | M | 2.5 |
 | 4.4 | Provider Recipes (AWS, DO Spaces, R2, B2, MinIO, Wasabi) | 📋 ToDo | P1 | M | 1.9 |
 | 4.5 | Barrel — export `providerRecipes` | 📋 ToDo | P1 | S | 4.1, 4.2, 4.3, 4.4 |
 | 4.6 | `BymaxStorageModule.forRootAsync()` | 📋 ToDo | P0 | M | 1.15, 2.10, 3.7 |
@@ -66,7 +66,7 @@ It also stands up the real **end-to-end** suite: Jest spins up a MinIO container
 
 ### Task 4.1 — `StorageService.list()` — paginated listing + `commonPrefixes`
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 2.5
@@ -77,14 +77,14 @@ Add `list(options: ListOptions): Promise<ListResult>` to `StorageService` using 
 
 #### Acceptance criteria
 
-- [ ] `list({ prefix: 'avatars/' })` returns only objects whose key matches the (prefixed) filter.
-- [ ] `list({ delimiter: '/' })` returns `commonPrefixes` for the simulated subdirectories.
-- [ ] `list({ maxKeys: 50 })` returns at most 50; `maxKeys: 5000` is clamped to 1000.
-- [ ] `list({ continuationToken })` returns the next page; `nextContinuationToken` is surfaced from `NextContinuationToken`.
-- [ ] Returned `objects[].key` and `commonPrefixes[]` have the global `keyPrefix` removed (via `stripPrefix`).
-- [ ] `isTruncated: true` when there are more results.
-- [ ] AWS failures pass through `mapAwsError`; the method carries `@fileoverview`/`@layer server/services` (file-level) and is ≤ 50 lines.
-- [ ] Co-located seed spec drives the new branch to 100% line/branch; `pnpm typecheck` passes.
+- [x] `list({ prefix: 'avatars/' })` returns only objects whose key matches the (prefixed) filter.
+- [x] `list({ delimiter: '/' })` returns `commonPrefixes` for the simulated subdirectories.
+- [x] `list({ maxKeys: 50 })` returns at most 50; `maxKeys: 5000` is clamped to 1000.
+- [x] `list({ continuationToken })` returns the next page; `nextContinuationToken` is surfaced from `NextContinuationToken`.
+- [x] Returned `objects[].key` and `commonPrefixes[]` have the global `keyPrefix` removed (via `stripPrefix`).
+- [x] `isTruncated: true` when there are more results.
+- [x] AWS failures pass through `mapAwsError`; the method carries `@fileoverview`/`@layer server/services` (file-level) and is ≤ 50 lines.
+- [x] Co-located seed spec drives the new branch to 100% line/branch; `pnpm typecheck` passes.
 
 #### Files to create / modify
 
@@ -154,7 +154,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.2 — `StorageService.copy()` — server-side copy
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 2.5
@@ -165,13 +165,13 @@ Add `copy()` to `StorageService` using `CopyObjectCommand`. It performs a server
 
 #### Acceptance criteria
 
-- [ ] `copy({ sourceKey, destinationKey })` calls `CopyObjectCommand` with `CopySource` in the form `/{bucket}/{key}`.
-- [ ] Same-bucket copy works when `sourceBucket`/`destinationBucket` are omitted (both resolve to the default bucket).
-- [ ] Cross-bucket copy works when both buckets are provided.
-- [ ] `publicRead: true` applies the public-read ACL (via `buildACL`); `cacheControl` falls back to the configured default.
-- [ ] Returns `{ etag }` sourced from `CopyObjectResult.ETag`; AWS failures pass through `mapAwsError`.
-- [ ] Method ≤ 50 lines; English-only, timeless comments; `pnpm typecheck` passes.
-- [ ] Co-located seed spec drives the new path to 100% line/branch.
+- [x] `copy({ sourceKey, destinationKey })` calls `CopyObjectCommand` with `CopySource` in the form `/{bucket}/{key}`.
+- [x] Same-bucket copy works when `sourceBucket`/`destinationBucket` are omitted (both resolve to the default bucket).
+- [x] Cross-bucket copy works when both buckets are provided.
+- [x] `publicRead: true` applies the public-read ACL (via `buildACL`); `cacheControl` falls back to the configured default.
+- [x] Returns `{ etag }` sourced from `CopyObjectResult.ETag`; AWS failures pass through `mapAwsError`.
+- [x] Method ≤ 50 lines; English-only, timeless comments; `pnpm typecheck` passes.
+- [x] Co-located seed spec drives the new path to 100% line/branch.
 
 #### Files to create / modify
 
@@ -233,7 +233,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.3 — `StorageService.deleteMany()` — batch delete (chunked ≤ 1000)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 2.5
@@ -244,13 +244,13 @@ Add `deleteMany(keys, options?)` to `StorageService` using `DeleteObjectsCommand
 
 #### Acceptance criteria
 
-- [ ] `deleteMany([])` returns `{ deleted: [], failed: [] }` without calling S3.
-- [ ] `deleteMany([k1, k2])` calls `DeleteObjectsCommand` with `Quiet: false`.
-- [ ] More than 1000 keys produces multiple calls (chunks of 1000).
-- [ ] Per-key failures are grouped into `failed` with a readable `error` (`Code: Message`); successes land in `deleted`.
-- [ ] A whole-chunk send failure marks every key in that chunk as failed with the error message.
-- [ ] Returned keys have the global `keyPrefix` removed (via `stripPrefix`).
-- [ ] Method ≤ 50 lines; English-only, timeless comments; `pnpm typecheck` passes; seed spec at 100% line/branch on the new path.
+- [x] `deleteMany([])` returns `{ deleted: [], failed: [] }` without calling S3.
+- [x] `deleteMany([k1, k2])` calls `DeleteObjectsCommand` with `Quiet: false`.
+- [x] More than 1000 keys produces multiple calls (chunks of 1000).
+- [x] Per-key failures are grouped into `failed` with a readable `error` (`Code: Message`); successes land in `deleted`.
+- [x] A whole-chunk send failure marks every key in that chunk as failed with the error message.
+- [x] Returned keys have the global `keyPrefix` removed (via `stripPrefix`).
+- [x] Method ≤ 50 lines; English-only, timeless comments; `pnpm typecheck` passes; seed spec at 100% line/branch on the new path.
 
 #### Files to create / modify
 
@@ -1034,3 +1034,7 @@ Completion Protocol (after you finish):
 ## Completion log
 
 _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
+
+- 4.1 ✅ 2026-07-01 — Added `StorageService.list()` with maxKeys clamp, prefix normalization/stripping, commonPrefixes, and continuation-token paging.
+- 4.2 ✅ 2026-07-01 — Added `StorageService.copy()` server-side copy with canonical `/{bucket}/{key}` CopySource, ACL, and cache-control fallback.
+- 4.3 ✅ 2026-07-01 — Added `StorageService.deleteMany()` chunked at ≤1000 keys with per-key success/failure aggregation and prefix stripping.
