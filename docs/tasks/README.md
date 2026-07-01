@@ -16,9 +16,9 @@ Tasks live **one file per phase** in this folder (`phase-NN-<slug>.md`), followi
 | 1 | [`phase-01-foundation-s3-client-config.md`](./phase-01-foundation-s3-client-config.md) | 17 / 17 | ✅ Done |
 | 2 | [`phase-02-upload-download.md`](./phase-02-upload-download.md) | 14 / 14 | ✅ Done |
 | 3 | [`phase-03-signed-urls-validation-scanner.md`](./phase-03-signed-urls-validation-scanner.md) | 12 / 12 | ✅ Done |
-| 4 | [`phase-04-listing-async-e2e-mutation.md`](./phase-04-listing-async-e2e-mutation.md) | 7 / 12 | 🔄 In Progress |
+| 4 | [`phase-04-listing-async-e2e-mutation.md`](./phase-04-listing-async-e2e-mutation.md) | 10 / 12 | 🔄 In Progress |
 | 5 | [`phase-05-release.md`](./phase-05-release.md) | 0 / 9 | 📋 ToDo |
-| | **Total** | **50 / 64** | 🔄 In Progress |
+| | **Total** | **53 / 64** | 🔄 In Progress |
 
 ---
 

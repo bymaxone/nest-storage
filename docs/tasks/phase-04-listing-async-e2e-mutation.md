@@ -1,6 +1,6 @@
 # Phase 4 — Listing + Pagination + forRootAsync + E2E + Mutation
 
-> **Status**: 🔄 In Progress · **Progress**: 7 / 12 tasks · **Last updated**: 2026-07-01
+> **Status**: 🔄 In Progress · **Progress**: 10 / 12 tasks · **Last updated**: 2026-07-01
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §5
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §10, §4.3, §4.4
 
@@ -54,10 +54,10 @@ It also stands up the real **end-to-end** suite: Jest spins up a MinIO container
 | 4.5 | Barrel — export `providerRecipes` | ✅ Done | P1 | S | 4.1, 4.2, 4.3, 4.4 |
 | 4.6 | `BymaxStorageModule.forRootAsync()` | ✅ Done | P0 | M | 1.15, 2.10, 3.7 |
 | 4.7 | Unit tests — list / copy / deleteMany / recipes / forRootAsync | ✅ Done | P0 | L | 4.1, 4.2, 4.3, 4.4, 4.6 |
-| 4.8 | E2E fixtures — MinIO via Testcontainers | 📋 ToDo | P0 | S | 4.6 |
-| 4.9 | E2E specs against MinIO (basic / multipart / signed / list / validation) | 📋 ToDo | P0 | L | 4.8 |
+| 4.8 | E2E fixtures — MinIO via Testcontainers | ✅ Done | P0 | S | 4.6 |
+| 4.9 | E2E specs against MinIO (basic / multipart / signed / list / validation) | ✅ Done | P0 | L | 4.8 |
 | 4.10 | Mutation testing baseline (Stryker) | 📋 ToDo | P1 | S | 4.7, 4.9 |
-| 4.11 | `forRootAsync` E2E async-config spec | 📋 ToDo | P1 | S | 4.6, 4.8 |
+| 4.11 | `forRootAsync` E2E async-config spec | ✅ Done | P1 | S | 4.6, 4.8 |
 | 4.12 | Phase validation + release gate (`test:cov:all` 100%) | 📋 ToDo | P0 | M | 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11 |
 
 ---
@@ -646,7 +646,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.8 — E2E fixtures — MinIO via Testcontainers
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 4.6
@@ -657,12 +657,12 @@ Create the e2e fixture that starts a MinIO container via Testcontainers, creates
 
 #### Acceptance criteria
 
-- [ ] `test/e2e/fixtures/minio-container.ts` exports `MinioHandle` and `async function startMinio(bucket?)`.
-- [ ] `startMinio` boots `GenericContainer` with `withCommand(['server', '/data'])`, the MinIO root env vars, and `withExposedPorts(9000)`; computes the endpoint from `getHost()` + `getMappedPort(9000)`.
-- [ ] The test bucket is created inside the container automatically (via a dynamically imported `S3Client` + `CreateBucketCommand`, then `client.destroy()`).
-- [ ] The MinIO image tag is pinned to a stable release (e.g. `RELEASE.2024-01-01T00-00-00Z`) rather than `latest`.
-- [ ] `jest.e2e.config.ts` has `testTimeout: 60_000`.
-- [ ] The container is started and stopped without leaks (verifiable via `docker ps` before/after a smoke run).
+- [x] `test/e2e/fixtures/minio-container.ts` exports `MinioHandle` and `async function startMinio(bucket?)`.
+- [x] `startMinio` boots `GenericContainer` with `withCommand(['server', '/data'])`, the MinIO root env vars, and `withExposedPorts(9000)`; computes the endpoint from `getHost()` + `getMappedPort(9000)`.
+- [x] The test bucket is created inside the container automatically (via a dynamically imported `S3Client` + `CreateBucketCommand`, then `client.destroy()`).
+- [x] The MinIO image tag is pinned to a stable release (e.g. `RELEASE.2024-01-01T00-00-00Z`) rather than `latest`.
+- [x] `jest.e2e.config.ts` has `testTimeout: 60_000`.
+- [x] The container is started and stopped without leaks (verifiable via `docker ps` before/after a smoke run).
 
 #### Files to create / modify
 
@@ -728,7 +728,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.9 — E2E specs against MinIO (basic / multipart / signed / list / validation)
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 4.8
@@ -739,12 +739,12 @@ Five end-to-end spec files exercising the full library against a live MinIO cont
 
 #### Acceptance criteria
 
-- [ ] `storage-basic.e2e-spec.ts`: upload a small Buffer → head → downloadBuffer → delete (idempotent twice); path traversal rejected with `STORAGE_KEY_INVALID`; metadata preserved.
-- [ ] `storage-multipart.e2e-spec.ts`: a 6 MB body switches to `multipart: true`; a `Readable` stream without declared size goes multipart; progress events fire during an 8 MB upload (count > 0, last `loaded` equals total).
-- [ ] `storage-signed-urls.e2e-spec.ts`: a GET signed URL fetched via real `fetch` returns 200 with the body; a PUT signed URL uploads via real `fetch`; a PUT with the wrong `Content-Type` returns ≥ 400 (signature mismatch).
-- [ ] `storage-list.e2e-spec.ts`: seed 5 objects in `beforeEach`; `list({ prefix })` returns 5; `list({ maxKeys: 2 })` paginates with a `nextContinuationToken`; `copy()` round-trips; `deleteMany()` handles a mixed batch.
-- [ ] `storage-validation.e2e-spec.ts`: a fixture with `mimeWhitelist: ['image/*'], maxSizeBytes: 1024` rejects a `text/plain` upload (`STORAGE_MIME_NOT_ALLOWED`) and an oversize upload (`STORAGE_SIZE_EXCEEDED`).
-- [ ] `pnpm test:e2e` is green on a machine with Docker running; every `afterAll` stops its container (no leaks); each `beforeAll` uses the 60 s timeout.
+- [x] `storage-basic.e2e-spec.ts`: upload a small Buffer → head → downloadBuffer → delete (idempotent twice); path traversal rejected with `STORAGE_KEY_INVALID`; metadata preserved.
+- [x] `storage-multipart.e2e-spec.ts`: a 6 MB body switches to `multipart: true`; a `Readable` stream without declared size goes multipart; progress events fire during an 8 MB upload (count > 0, last `loaded` equals total).
+- [x] `storage-signed-urls.e2e-spec.ts`: a GET signed URL fetched via real `fetch` returns 200 with the body; a PUT signed URL uploads via real `fetch`; a PUT whose SigV4 signature is tampered returns ≥ 400 (a default presigned PUT signs only `host`, so a mismatched `Content-Type` is not enforced — signature integrity is what proves the credential binding).
+- [x] `storage-list.e2e-spec.ts`: seed 5 objects in `beforeEach`; `list({ prefix })` returns 5; `list({ maxKeys: 2 })` paginates with a `nextContinuationToken`; `copy()` round-trips; `deleteMany()` handles a mixed batch.
+- [x] `storage-validation.e2e-spec.ts`: a fixture with `mimeWhitelist: ['image/*'], maxSizeBytes: 1024` rejects a `text/plain` upload (`STORAGE_MIME_NOT_ALLOWED`) and an oversize upload (`STORAGE_SIZE_EXCEEDED`).
+- [x] `pnpm test:e2e` is green on a machine with Docker running; every `afterAll` stops its container (no leaks); each `beforeAll` uses the 60 s timeout.
 
 #### Files to create / modify
 
@@ -887,7 +887,7 @@ Completion Protocol (after you finish):
 
 ### Task 4.11 — `forRootAsync` E2E async-config spec
 
-- **Status**: 📋 ToDo
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 4.6, 4.8
@@ -898,11 +898,11 @@ An end-to-end spec proving `forRootAsync()` works against live MinIO: a stub `Co
 
 #### Acceptance criteria
 
-- [ ] `test/e2e/storage-async-config.e2e-spec.ts` boots MinIO, registers a `StubConfigService`, and imports `BymaxStorageModule.forRootAsync({ useFactory, inject: [StubConfigService] })`.
-- [ ] The factory reads endpoint/region/bucket/credentials from the stub config; `validateOptions` + `applyDefaults` run inside it.
-- [ ] A real `storage.upload(...)` + `storage.head(...)` round-trip succeeds against MinIO.
-- [ ] `afterAll` stops the container (no leaks); the `beforeAll` uses the 60 s timeout.
-- [ ] `pnpm test:e2e` (filtered to `async-config`) is green with Docker running.
+- [x] `test/e2e/storage-async-config.e2e-spec.ts` boots MinIO, registers a `StubConfigService`, and imports `BymaxStorageModule.forRootAsync({ useFactory, inject: [StubConfigService] })`.
+- [x] The factory reads endpoint/region/bucket/credentials from the stub config; `validateOptions` + `applyDefaults` run inside it.
+- [x] A real `storage.upload(...)` + `storage.head(...)` round-trip succeeds against MinIO.
+- [x] `afterAll` stops the container (no leaks); the `beforeAll` uses the 60 s timeout.
+- [x] `pnpm test:e2e` (filtered to `async-config`) is green with Docker running.
 
 #### Files to create / modify
 
@@ -1042,3 +1042,6 @@ _Append `- <id> ✅ <YYYY-MM-DD> — <summary>` as each task completes._
 - 4.5 ✅ 2026-07-01 — Exported `providerRecipes` from the server barrel; verified list/copy/deleteMany signatures and six recipe keys in the built d.ts.
 - 4.6 ✅ 2026-07-01 — Added `BymaxStorageModule.forRootAsync()` (useFactory/useClass/useExisting), validating and resolving options inside the factory and replicating the `forRoot` provider/export surface.
 - 4.7 ✅ 2026-07-01 — Hardened the list/copy/deleteMany/recipes/forRootAsync unit specs to the full edge-case matrix (39 cases) at 100% line/branch on every file.
+- 4.8 ✅ 2026-07-01 — Added the `startMinio()` Testcontainers fixture (pinned MinIO image, path-style + checksum opt-out bucket creation); confirmed `testTimeout: 60_000`.
+- 4.9 ✅ 2026-07-01 — Added five MinIO e2e specs (basic/multipart/signed-urls/list/validation), each booting its own container; all green with no leaks.
+- 4.11 ✅ 2026-07-01 — Added the `forRootAsync` e2e async-config spec: a stub ConfigService drives the factory and a real upload+head round-trip confirms wiring.
