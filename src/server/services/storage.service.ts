@@ -8,9 +8,13 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
+  type ListObjectsV2CommandOutput,
   PutObjectCommand,
   type PutObjectCommandInput,
 } from '@aws-sdk/client-s3'
@@ -22,7 +26,8 @@ import {
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
 import type { DownloadOptions } from '../interfaces/download-options.interface'
-import type { ObjectMetadata, UploadResult } from '../../shared/types/storage-types'
+import type { ListOptions, ListResult } from '../interfaces/list-options.interface'
+import type { ListedObject, ObjectMetadata, UploadResult } from '../../shared/types/storage-types'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { ValidationService } from './validation.service'
@@ -62,6 +67,48 @@ interface BucketScopedOptions {
 interface SdkByteStream {
   transformToByteArray(): Promise<Uint8Array>
 }
+
+/** Minimal shape of a `ListObjectsV2` `Contents` entry consumed by the mapper. */
+interface S3ListEntry {
+  Key?: string | undefined
+  Size?: number | undefined
+  ETag?: string | undefined
+  LastModified?: Date | undefined
+  StorageClass?: string | undefined
+}
+
+/** Per-call options for a batch delete. */
+interface DeleteManyOptions {
+  bucket?: string
+}
+
+/** Options for a server-side object copy. */
+interface CopyOptions {
+  sourceKey: string
+  destinationKey: string
+  sourceBucket?: string
+  destinationBucket?: string
+  publicRead?: boolean
+  cacheControl?: string
+}
+
+/** A single failed key from a batch delete, with a readable provider error. */
+interface FailedDeletion {
+  key: string
+  error: string
+}
+
+/** Aggregated outcome of a batch delete: succeeded keys and per-key failures. */
+interface DeleteManyResult {
+  deleted: string[]
+  failed: FailedDeletion[]
+}
+
+/** S3's hard cap on the number of keys returned by one `ListObjectsV2` request. */
+const MAX_LIST_KEYS = 1000
+
+/** S3's hard cap on the number of keys accepted by one `DeleteObjects` request. */
+const DELETE_BATCH_LIMIT = 1000
 
 @Injectable()
 export class StorageService {
@@ -555,5 +602,159 @@ export class StorageService {
       ...(total !== undefined ? { total } : {}),
       ...(part !== undefined ? { part } : {}),
     })
+  }
+
+  /**
+   * Lists objects in the bucket as a single page. Applies the global key prefix
+   * to the caller's `prefix`, caps `maxKeys` at the S3 hard limit of 1000, threads
+   * the continuation token, and strips the global prefix from every returned key.
+   *
+   * @param options - The listing request.
+   * @returns One page of objects plus `commonPrefixes`, truncation, and the next token.
+   * @throws StorageException mapped from any AWS failure.
+   */
+  async list(options: ListOptions): Promise<ListResult> {
+    this.assertConfigured()
+    const bucket = this.resolveBucket(options.bucket)
+    const maxKeys = Math.min(options.maxKeys ?? MAX_LIST_KEYS, MAX_LIST_KEYS)
+    const prefix = options.prefix
+      ? this.keyResolver.normalize(options.prefix)
+      : this.keyResolver.getPrefix()
+    try {
+      const response = await this.s3Provider.getClient().send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: prefix,
+          MaxKeys: maxKeys,
+          ContinuationToken: options.continuationToken,
+          Delimiter: options.delimiter,
+        }),
+      )
+      return this.toListResult(response)
+    } catch (err) {
+      throw mapAwsError(err, { bucket, prefix, op: 'list' })
+    }
+  }
+
+  /** Maps a `ListObjectsV2` response onto the public `ListResult` shape. */
+  private toListResult(response: ListObjectsV2CommandOutput): ListResult {
+    const objects = (response.Contents ?? []).map((obj) => this.toListedObject(obj))
+    const commonPrefixes = (response.CommonPrefixes ?? [])
+      .map((cp) => cp.Prefix ?? '')
+      .filter((cp) => cp.length > 0)
+      .map((cp) => this.keyResolver.stripPrefix(cp))
+    return {
+      objects,
+      commonPrefixes,
+      isTruncated: response.IsTruncated ?? false,
+      ...(response.NextContinuationToken !== undefined
+        ? { nextContinuationToken: response.NextContinuationToken }
+        : {}),
+    }
+  }
+
+  /** Maps one `Contents` entry onto `ListedObject`, stripping the global prefix. */
+  private toListedObject(obj: S3ListEntry): ListedObject {
+    return {
+      key: this.keyResolver.stripPrefix(obj.Key ?? ''),
+      size: obj.Size ?? 0,
+      etag: obj.ETag ?? '',
+      lastModified: obj.LastModified ?? new Date(0),
+      ...(obj.StorageClass !== undefined ? { storageClass: obj.StorageClass } : {}),
+    }
+  }
+
+  /**
+   * Server-side copy of an object (no bytes flow through the app). Supports both
+   * same-bucket and cross-bucket copies and preserves the source metadata.
+   *
+   * @param options - Source/destination keys and buckets plus copy overrides.
+   * @returns The new object's ETag.
+   * @throws StorageException mapped from any AWS failure.
+   */
+  async copy(options: CopyOptions): Promise<{ etag: string }> {
+    this.assertConfigured()
+    const sourceKey = this.keyResolver.normalize(options.sourceKey)
+    const destKey = this.keyResolver.normalize(options.destinationKey)
+    const sourceBucket = this.resolveBucket(options.sourceBucket)
+    const destBucket = this.resolveBucket(options.destinationBucket)
+    try {
+      const response = await this.s3Provider.getClient().send(
+        new CopyObjectCommand({
+          Bucket: destBucket,
+          Key: destKey,
+          CopySource: `/${sourceBucket}/${sourceKey}`,
+          CacheControl: options.cacheControl ?? this.options.defaultCacheControl,
+          // ACLs are a no-op on modern S3 (Object Ownership) and R2; see header-utils.
+          ACL: buildACL(options.publicRead, this.options.defaultPublicRead),
+          MetadataDirective: 'COPY',
+        }),
+      )
+      return { etag: response.CopyObjectResult?.ETag ?? '' }
+    } catch (err) {
+      throw mapAwsError(err, { sourceKey, destKey, op: 'copy' })
+    }
+  }
+
+  /**
+   * Deletes many objects, chunking the input at the S3 hard limit of 1000 keys
+   * per request. Reports both successes and per-key failures; a whole-chunk send
+   * failure marks every key in that chunk as failed. Returned keys are stripped of
+   * the global prefix.
+   *
+   * @param keys - The raw object keys to delete.
+   * @param options - Optional per-call bucket override.
+   * @returns The deleted keys and the per-key failures.
+   */
+  async deleteMany(keys: string[], options?: DeleteManyOptions): Promise<DeleteManyResult> {
+    this.assertConfigured()
+    if (keys.length === 0) {
+      return { deleted: [], failed: [] }
+    }
+    const bucket = this.resolveBucket(options?.bucket)
+    const normalized = keys.map((key) => this.keyResolver.normalize(key))
+    const deleted: string[] = []
+    const failed: FailedDeletion[] = []
+    for (let i = 0; i < normalized.length; i += DELETE_BATCH_LIMIT) {
+      const chunk = normalized.slice(i, i + DELETE_BATCH_LIMIT)
+      const outcome = await this.deleteChunk(bucket, chunk)
+      deleted.push(...outcome.deleted)
+      failed.push(...outcome.failed)
+    }
+    return { deleted, failed }
+  }
+
+  /** Deletes one chunk (≤ 1000 keys); a whole-chunk failure fails every key. */
+  private async deleteChunk(bucket: string, chunk: string[]): Promise<DeleteManyResult> {
+    const deleted: string[] = []
+    const failed: FailedDeletion[] = []
+    try {
+      const response = await this.s3Provider.getClient().send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          // `Quiet: false` returns both successes and per-key errors.
+          Delete: { Objects: chunk.map((key) => ({ Key: key })), Quiet: false },
+        }),
+      )
+      for (const ok of response.Deleted ?? []) {
+        if (ok.Key !== undefined) {
+          deleted.push(this.keyResolver.stripPrefix(ok.Key))
+        }
+      }
+      for (const failure of response.Errors ?? []) {
+        if (failure.Key !== undefined) {
+          failed.push({
+            key: this.keyResolver.stripPrefix(failure.Key),
+            error: `${failure.Code ?? 'Unknown'}: ${failure.Message ?? ''}`,
+          })
+        }
+      }
+    } catch (err) {
+      const message = (err as Error).message
+      for (const key of chunk) {
+        failed.push({ key: this.keyResolver.stripPrefix(key), error: message })
+      }
+    }
+    return { deleted, failed }
   }
 }
