@@ -352,4 +352,27 @@ describe('StorageService — getPublicUrl', () => {
     const { service } = makeService({ publicBaseUrl: 'https://s3.example.com/test-bucket' })
     expect(service.getPublicUrl('a.png')).toBe('https://s3.example.com/test-bucket/a.png')
   })
+
+  it('appends the bucket when its name is only an incidental substring of the base', () => {
+    // bucket "test" must not match "latest" in the base — it is not a real path
+    // segment there, so the bucket segment is still appended.
+    const { service } = makeService({ cdnBaseUrl: 'https://cdn.example.com/latest' }, { bucket: 'test' })
+    expect(service.getPublicUrl('a.png')).toBe('https://cdn.example.com/latest/test/a.png')
+  })
+
+  it('does not duplicate a bucket that is a genuine trailing path segment of the base', () => {
+    // A base whose path ends in "/test" already carries the bucket segment.
+    const { service } = makeService({ cdnBaseUrl: 'https://s3.example.com/test' }, { bucket: 'test' })
+    expect(service.getPublicUrl('a.png')).toBe('https://s3.example.com/test/a.png')
+  })
+
+  it('does not duplicate a bucket carried as the virtual-hosted host label', () => {
+    // Virtual-hosted-style base: the bucket is the leading host label, not a path
+    // segment, so it must not be appended a second time.
+    const { service } = makeService(
+      { cdnBaseUrl: 'https://test-bucket.s3.example.com' },
+      { bucket: 'test-bucket' },
+    )
+    expect(service.getPublicUrl('a.png')).toBe('https://test-bucket.s3.example.com/a.png')
+  })
 })

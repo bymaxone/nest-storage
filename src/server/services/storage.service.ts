@@ -287,7 +287,25 @@ export class StorageService {
   /** Builds a public URL, avoiding a duplicated bucket segment in the base. */
   private buildPublicUrl(finalKey: string, bucket: string): string {
     const base = (this.options.cdnBaseUrl ?? this.options.publicBaseUrl).replace(/\/+$/, '')
-    return base.includes(bucket) ? `${base}/${finalKey}` : `${base}/${bucket}/${finalKey}`
+    return this.baseCarriesBucket(base, bucket)
+      ? `${base}/${finalKey}`
+      : `${base}/${bucket}/${finalKey}`
+  }
+
+  /**
+   * Reports whether the base URL already carries the bucket as a real segment —
+   * the leading host label (virtual-hosted-style `bucket.host`) or a path segment
+   * (path-style `/bucket` or `/bucket/…`) — rather than an incidental substring,
+   * so `bucket="test"` is not matched by a `latest` elsewhere in the base.
+   */
+  private baseCarriesBucket(base: string, bucket: string): boolean {
+    const schemeless = base.replace(/^[a-z][a-z\d+.-]*:\/\//i, '')
+    const pathStart = schemeless.indexOf('/')
+    const authority = pathStart === -1 ? schemeless : schemeless.slice(0, pathStart)
+    const path = pathStart === -1 ? '' : schemeless.slice(pathStart)
+    const leadingHostLabel = authority.split('.')[0]
+    const pathSegments = path.split('/').filter((segment) => segment.length > 0)
+    return leadingHostLabel === bucket || pathSegments.includes(bucket)
   }
 
   /** Maps an S3 metadata response onto the public `ObjectMetadata` shape. */
