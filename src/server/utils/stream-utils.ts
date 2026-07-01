@@ -68,7 +68,14 @@ export async function peekFirstBytes(
 
 /**
  * Tees a source stream: the peek side receives at most `maxBytes`, the upload
- * side receives the full stream. Only `maxBytes` are ever held in memory.
+ * side receives the full stream.
+ *
+ * The upload consumer only attaches after the peek resolves, so once the peek
+ * side is closed the source's flowing output would have nowhere to drain. To
+ * keep memory bounded — rather than buffering the entire body — the source is
+ * paused whenever the upload transform signals backpressure and resumed on its
+ * `drain`; before the peek closes, buffering is inherently capped near
+ * `maxBytes`.
  */
 async function teeAndPeek(
   source: NodeJS.ReadableStream,
@@ -86,7 +93,6 @@ async function teeAndPeek(
   }
   source.on('data', (chunk: Buffer | string) => {
     const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
-    uploadPT.write(buf)
     if (peeked < maxBytes) {
       const slice = buf.subarray(0, maxBytes - peeked)
       peekPT.write(slice)
@@ -94,6 +100,11 @@ async function teeAndPeek(
       if (peeked >= maxBytes) {
         closePeek()
       }
+    }
+    const hasCapacity = uploadPT.write(buf)
+    if (!hasCapacity && isPeekClosed) {
+      source.pause()
+      uploadPT.once('drain', () => source.resume())
     }
   })
   source.on('end', () => {

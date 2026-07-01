@@ -21,6 +21,27 @@ async function collect(stream: NodeJS.ReadableStream): Promise<string> {
   return Buffer.concat(chunks).toString()
 }
 
+/** Drains a stream and returns the total number of bytes seen. */
+async function drainBytes(stream: NodeJS.ReadableStream): Promise<number> {
+  let total = 0
+  for await (const chunk of stream as AsyncIterable<Buffer>) {
+    total += chunk.byteLength
+  }
+  return total
+}
+
+/** Yields to the event loop so pending stream 'data' handlers can run. */
+function tick(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
+/** Polls until a predicate holds or a bounded number of ticks elapses. */
+async function waitUntil(predicate: () => boolean, maxTicks = 100): Promise<void> {
+  for (let attempt = 0; attempt < maxTicks && !predicate(); attempt += 1) {
+    await tick()
+  }
+}
+
 describe('stream-utils', () => {
   describe('type guards', () => {
     it('isReadable is true for a stream and false for buffer-like bodies', () => {
@@ -101,6 +122,35 @@ describe('stream-utils', () => {
       const { head, replacementBody } = await peekFirstBytes(Readable.from(['hello']), 3)
       expect(head.toString()).toBe('hel')
       expect(await collect(replacementBody as NodeJS.ReadableStream)).toBe('hello')
+    })
+
+    it('pauses a fast source instead of buffering the whole body before a consumer attaches', async () => {
+      // With no consumer on the replacement body yet, a source that races ahead
+      // must be paused by upload-side backpressure — only a bounded amount is
+      // buffered, never the entire payload.
+      const source = new PassThrough()
+      const peekPromise = peekFirstBytes(source, 4)
+      source.write(Buffer.from('head'))
+      const { head, replacementBody } = await peekPromise
+      expect(head.toString()).toBe('head')
+      const uploadPT = replacementBody as PassThrough
+
+      const chunkCount = 64
+      const chunk = Buffer.alloc(64 * 1024, 1)
+      for (let i = 0; i < chunkCount; i += 1) {
+        source.write(chunk)
+      }
+
+      await waitUntil(() => source.isPaused())
+      expect(source.isPaused()).toBe(true)
+      expect(uploadPT.writableLength).toBeLessThan(chunkCount * chunk.byteLength)
+
+      // Attaching a consumer relieves backpressure (drain → resume); the full
+      // body still streams through. Completing at all proves the source was
+      // resumed — otherwise the drain would hang on the paused source.
+      source.end()
+      const bytes = await drainBytes(replacementBody as NodeJS.ReadableStream)
+      expect(bytes).toBe('head'.length + chunkCount * chunk.byteLength)
     })
 
     it('propagates a source error to the replacement body', async () => {
