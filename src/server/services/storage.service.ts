@@ -19,10 +19,7 @@ import {
   type PutObjectCommandInput,
 } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
-import {
-  BYMAX_STORAGE_IDEMPOTENCY_CACHE,
-  BYMAX_STORAGE_OPTIONS,
-} from '../bymax-storage.constants'
+import { BYMAX_STORAGE_IDEMPOTENCY_CACHE, BYMAX_STORAGE_OPTIONS } from '../bymax-storage.constants'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
 import type { DownloadOptions } from '../interfaces/download-options.interface'
@@ -50,6 +47,7 @@ import {
 import { getBodySize, isBufferLike, type UploadBody } from '../utils/stream-utils'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import { IdempotencyCache } from '../utils/idempotency-cache'
+import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
 
 /** Common metadata fields shared by `HeadObject` and `GetObject` responses. */
 interface S3ObjectResponse {
@@ -269,7 +267,10 @@ export class StorageService {
       await this.head(key, options)
       return true
     } catch (err) {
-      if (err instanceof StorageException && err.code === STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND) {
+      if (
+        err instanceof StorageException &&
+        err.code === STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND
+      ) {
         return false
       }
       this.logger.warn(`exists() — treating a non-404 error as "false": ${(err as Error).message}`)
@@ -395,7 +396,7 @@ export class StorageService {
 
   /** Builds a public URL, avoiding a duplicated bucket segment in the base. */
   private buildPublicUrl(finalKey: string, bucket: string): string {
-    const base = (this.options.cdnBaseUrl ?? this.options.publicBaseUrl).replace(/\/+$/, '')
+    const base = trimTrailingSlashes(this.options.cdnBaseUrl ?? this.options.publicBaseUrl)
     return this.baseCarriesBucket(base, bucket)
       ? `${base}/${finalKey}`
       : `${base}/${bucket}/${finalKey}`

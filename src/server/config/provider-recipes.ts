@@ -8,6 +8,7 @@
  * @layer server/config
  */
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
+import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
 
 /** Shared input for the region-addressed providers (AWS, DO Spaces, Wasabi). */
 interface BaseInput {
@@ -146,7 +147,7 @@ export const providerRecipes = {
       bucket: input.bucket,
       credentials: toCredentials(input),
       forcePathStyle: true,
-      publicBaseUrl: `${input.endpoint.replace(/\/+$/, '')}/${input.bucket}`,
+      publicBaseUrl: `${trimTrailingSlashes(input.endpoint)}/${input.bucket}`,
       ...NON_AWS_CHECKSUM,
     }
   },

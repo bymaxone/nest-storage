@@ -92,6 +92,16 @@ jobs:
           done
           echo "Both subpaths produced ESM + CJS + .d.ts"
 
+      - name: Verify published type resolution
+        # A source-level typecheck compiles `src`, so it cannot catch a broken
+        # `exports` map: a consumer resolving through the packed tarball may
+        # still land on declarations for the wrong module format. `attw` packs
+        # the tarball and resolves every entry point as each mode would.
+        run: pnpm check:exports
+      - name: Consumer load
+        # attw proves the declarations resolve; it never runs the JavaScript.
+        # This loads every subpath from the packed tarball in ESM and CommonJS.
+        run: pnpm check:runtime
       - name: Bundle size budget (brotli)
         run: pnpm size
 

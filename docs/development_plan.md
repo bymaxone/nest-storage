@@ -1484,8 +1484,8 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
 
 **Acceptance criteria:**
 
-- [ ] `STORAGE_ERROR_MESSAGES` covers **all** 17 codes in the catalog (verifiable via type-check: `Record<StorageErrorCode, string>` forces exhaustiveness)
-- [ ] `STORAGE_ERROR_STATUS` covers **all** 17 codes with the §12.2 HTTP status (`Record<StorageErrorCode, HttpStatus>` forces exhaustiveness); `STORAGE_ERROR_MESSAGES`/`STORAGE_ERROR_STATUS` are internal (not exported from the barrel)
+- [ ] `STORAGE_ERROR_MESSAGES` covers **all** 18 codes in the catalog (verifiable via type-check: `Record<StorageErrorCode, string>` forces exhaustiveness)
+- [ ] `STORAGE_ERROR_STATUS` covers **all** 18 codes with the §12.2 HTTP status (`Record<StorageErrorCode, HttpStatus>` forces exhaustiveness); `STORAGE_ERROR_MESSAGES`/`STORAGE_ERROR_STATUS` are internal (not exported from the barrel)
 - [ ] `new StorageException('STORAGE_NOT_CONFIGURED')` (no explicit status) yields HTTP 503; `'STORAGE_OBJECT_NOT_FOUND'` yields 404 (status derived from `STORAGE_ERROR_STATUS[code]`)
 - [ ] `StorageException` extends `HttpException` correctly (assertion: `new StorageException(...) instanceof HttpException` === true)
 - [ ] `StorageException.code` exposed as a public property so filters can read without deserializing body
@@ -4834,7 +4834,7 @@ pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm test:e2e && pnpm build 
 
 - [ ] 4+ complete copy-pasteable usage scenarios (AWS, R2, DO, MinIO local)
 - [ ] Badges npm version, CI status, coverage, mutation, scorecard, license
-- [ ] Complete table of the 17 error codes with HTTP status
+- [ ] Complete table of the 18 error codes with HTTP status
 - [ ] Example of `IUploadValidator` (magic-byte check)
 - [ ] Example of `IFileScanner` (ClamAV stub)
 - [ ] Links for SECURITY.md, CHANGELOG.md, spec, plan
@@ -4855,7 +4855,7 @@ pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm test:e2e && pnpm build 
 - `IUploadValidator` interface (MIME whitelist with wildcards, size limit, custom validators)
 - `IFileScanner` interface (virus scan hook with pre/post modes)
 - Provider Recipes for 6 providers
-- 17 error codes catalog (`StorageException`)
+- 18 error codes catalog (`StorageException`)
 - `keyPrefix` global for multi-tenant isolation
 - Path traversal guard mandatory
 - LRU idempotency cache (in-memory, per-instance)
