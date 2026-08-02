@@ -57,8 +57,8 @@ importers:
         specifier: ^9
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(typescript@5.9.3)
       '@testcontainers/minio':
-        specifier: ^10
-        version: 10.28.0
+        specifier: ^12
+        version: 12.0.4
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -1292,8 +1292,8 @@ packages:
   '@stryker-mutator/util@9.6.1':
     resolution: {integrity: sha512-Lk/ALVctJjFv1vvwR+CFoKzDCWvsBlq7flDUnmnpuwTrGbm156EdZD1Jjq4o8KdOap0ezUZqQNE9OAI1m2+pUQ==}
 
-  '@testcontainers/minio@10.28.0':
-    resolution: {integrity: sha512-ZClD7CNl791lcX277rZSdLMJ+gEbwDGJFNZImdVp32cg7/htSqxYjgp+BSK8JlkF2wwxuofQcOBc8yYMWduInA==}
+  '@testcontainers/minio@12.0.4':
+    resolution: {integrity: sha512-RTSans479Cif8gFNSC7xudKBVBgHYd/5HI9r98STZtc3bdnrhDhlLA2F81NKvw57xp0gu7OCaMtNrYTRNSLLuw==}
 
   '@tokenizer/inflate@0.4.1':
     resolution: {integrity: sha512-2mAv+8pkG6GIZiF1kNg1jAjh27IDxEPKwdGul3snfztFerfPGI1LjDezZp3i7BElXompqEtPmoPx6c2wgtWsOA==}
@@ -5224,9 +5224,9 @@ snapshots:
 
   '@stryker-mutator/util@9.6.1': {}
 
-  '@testcontainers/minio@10.28.0':
+  '@testcontainers/minio@12.0.4':
     dependencies:
-      testcontainers: 10.28.0
+      testcontainers: 12.0.4
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
