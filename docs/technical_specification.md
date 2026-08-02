@@ -1016,8 +1016,8 @@ Following `@bymax-one/nest-auth`: the target is `"dependencies": {}` in `package
 ```json
 {
   "peerDependencies": {
-    "@nestjs/common": "^11.0.0",
-    "@nestjs/core": "^11.0.0",
+    "@nestjs/common": "^11.0.16",
+    "@nestjs/core": "^11.1.18",
     "@aws-sdk/client-s3": "^3.700.0",
     "@aws-sdk/lib-storage": "^3.700.0",
     "@aws-sdk/s3-request-presigner": "^3.700.0",

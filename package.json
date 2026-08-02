@@ -22,53 +22,80 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/server/index.d.ts",
-      "import": "./dist/server/index.mjs",
-      "require": "./dist/server/index.cjs"
+      "import": {
+        "types": "./dist/server/index.d.ts",
+        "default": "./dist/server/index.mjs"
+      },
+      "require": {
+        "types": "./dist/server/index.d.cts",
+        "default": "./dist/server/index.cjs"
+      }
     },
     "./shared": {
-      "types": "./dist/shared/index.d.ts",
-      "import": "./dist/shared/index.mjs",
-      "require": "./dist/shared/index.cjs"
-    }
+      "import": {
+        "types": "./dist/shared/index.d.ts",
+        "default": "./dist/shared/index.mjs"
+      },
+      "require": {
+        "types": "./dist/shared/index.d.cts",
+        "default": "./dist/shared/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "pnpm clean && tsup",
+    "check:exports": "attw --pack . --profile strict",
+    "check:published": "node scripts/check-published-surface.mjs",
+    "check:runtime": "node scripts/check-consumer-runtime.mjs",
+    "clean": "rm -rf dist coverage",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "test": "jest",
-    "test:cov": "jest --coverage",
-    "test:watch": "jest --watch",
-    "test:e2e": "jest --config jest.e2e.config.ts",
-    "test:all": "pnpm test && pnpm test:e2e",
-    "test:cov:all": "jest --config jest.coverage.config.ts --coverage",
     "mutation": "stryker run",
-    "mutation:incremental": "stryker run --incremental",
     "mutation:dry-run": "stryker run --dryRunOnly",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
+    "mutation:incremental": "stryker run --incremental",
+    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm check:exports && pnpm check:published && pnpm check:runtime",
+    "release": "pnpm publish --provenance",
     "size": "node scripts/check-size.mjs",
-    "clean": "rm -rf dist coverage",
-    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build",
-    "release": "pnpm publish --provenance"
+    "test": "jest",
+    "test:all": "pnpm test && pnpm test:e2e",
+    "test:cov": "jest --coverage",
+    "test:cov:all": "jest --config jest.coverage.config.ts --coverage",
+    "test:e2e": "jest --config jest.e2e.config.ts",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },
   "dependencies": {},
   "peerDependencies": {
-    "@nestjs/common": "^11.0.0",
-    "@nestjs/core": "^11.0.0",
+    "@nestjs/common": "^11.0.16",
+    "@nestjs/core": "^11.1.18",
     "@aws-sdk/client-s3": "^3.700.0",
     "@aws-sdk/lib-storage": "^3.700.0",
     "@aws-sdk/s3-request-presigner": "^3.700.0",
     "reflect-metadata": "^0.2.0"
   },
   "peerDependenciesMeta": {
-    "@nestjs/common": { "optional": false },
-    "@nestjs/core": { "optional": false },
-    "@aws-sdk/client-s3": { "optional": false },
-    "@aws-sdk/lib-storage": { "optional": false },
-    "@aws-sdk/s3-request-presigner": { "optional": false },
-    "reflect-metadata": { "optional": false }
+    "@nestjs/common": {
+      "optional": false
+    },
+    "@nestjs/core": {
+      "optional": false
+    },
+    "@aws-sdk/client-s3": {
+      "optional": false
+    },
+    "@aws-sdk/lib-storage": {
+      "optional": false
+    },
+    "@aws-sdk/s3-request-presigner": {
+      "optional": false
+    },
+    "reflect-metadata": {
+      "optional": false
+    }
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
     "@aws-sdk/client-s3": "^3.700.0",
     "@aws-sdk/lib-storage": "^3.700.0",
     "@aws-sdk/s3-request-presigner": "^3.700.0",
@@ -100,8 +127,13 @@
   },
   "pnpm": {
     "overrides": {
+      "brace-expansion@1": "^1.1.17",
+      "brace-expansion@2": "^2.1.3",
+      "brace-expansion@5": "^5.0.8",
       "esbuild": "0.28.1",
+      "fast-uri": "^3.1.4",
       "multer": "2.2.0",
+      "protobufjs": "^7.6.5",
       "qs": "6.15.2",
       "undici": "8.5.0",
       "uuid": "11.1.1"
@@ -129,5 +161,15 @@
     "access": "public",
     "provenance": true,
     "registry": "https://registry.npmjs.org/"
+  },
+  "main": "./dist/server/index.cjs",
+  "module": "./dist/server/index.mjs",
+  "types": "./dist/server/index.d.cts",
+  "typesVersions": {
+    "*": {
+      "shared": [
+        "./dist/shared/index.d.cts"
+      ]
+    }
   }
 }

@@ -5,6 +5,7 @@
  * @layer server/config
  */
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
+import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
 import type { ResolvedBymaxStorageOptions } from './resolved-options'
 import {
   DEFAULT_CACHE_CONTROL,
@@ -33,7 +34,7 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     Boolean(options.credentials.accessKeyId) && Boolean(options.credentials.secretAccessKey)
 
   const publicBaseUrl =
-    options.publicBaseUrl ?? `${options.endpoint.replace(/\/+$/, '')}/${options.bucket}`
+    options.publicBaseUrl ?? `${trimTrailingSlashes(options.endpoint)}/${options.bucket}`
 
   return {
     endpoint: options.endpoint,
