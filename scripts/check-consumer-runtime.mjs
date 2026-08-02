@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Consumer load gate (zero external dependencies).
+ * Consumer load gate.
  *
  * Every other gate reads the source or the type declarations. This one packs the
  * tarball, lays it out the way npm would, and loads every subpath from it — in
@@ -10,6 +10,12 @@
  * `attw` proves the declarations *resolve*; it never runs the JavaScript. A
  * broken `exports` map, a bundler misconfiguration, or an entry that ships an
  * empty module all pass a type check and fail here.
+ *
+ * It shells out to `npm pack` and `tar`, both of which have to be on PATH. That
+ * is deliberate: packing through npm itself is what makes the gate inspect the
+ * same tarball a publish would produce, rather than a directory that resembles
+ * it. On Windows, run it from a shell that provides `tar` (Git Bash, WSL, or
+ * Windows 10 1803+, which ships bsdtar).
  *
  * Usage: `node scripts/check-consumer-runtime.mjs` (run after `pnpm build`).
  */
