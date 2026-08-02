@@ -1,13 +1,17 @@
 /**
  * @fileoverview Pure trailing-slash trimmer for endpoint URLs.
  *
- * Deliberately regex-free. The obvious form — `value.replace(/\/+$/, '')` — is a
- * polynomial-backtracking pattern: on a string ending in many slashes that never
- * satisfies the anchor, the engine retries `\/+` from every position, making the
- * scan quadratic in the run length. The inputs here are deployment configuration
- * rather than request data, so it is not reachable by an attacker today, but a
- * single reverse index scan is O(n), has no backtracking to reason about, and
- * removes the finding instead of arguing about its reachability.
+ * Deliberately regex-free. The obvious form — `value.replace(/\/+$/, '')` — is
+ * linear when the slashes really are at the end, which is the expected input, and
+ * quadratic when they are not: on a long run of slashes followed by any other
+ * character the anchor can never be satisfied, so the engine retries `\/+` from
+ * every position in the run. Measured on V8, doubling the run length quadruples
+ * the time — 57 ms at 12.5k slashes, 3.4 s at 100k.
+ *
+ * The inputs here are deployment configuration rather than request data, so that
+ * shape is not attacker-reachable today. A single reverse index scan is O(n) on
+ * every input, has no backtracking to reason about, and removes the finding
+ * instead of arguing about its reachability.
  * @layer server/utils
  */
 

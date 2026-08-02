@@ -6,7 +6,7 @@ import { trimTrailingSlashes } from './trim-trailing-slashes'
 
 describe('trimTrailingSlashes', () => {
   it('returns the value unchanged when there is no trailing slash', () => {
-    // the early-return branch: nothing to trim, same reference back
+    // the early-return branch: nothing to trim, so the value comes back unchanged
     expect(trimTrailingSlashes('https://s3.example.com')).toBe('https://s3.example.com')
   })
 
@@ -37,9 +37,16 @@ describe('trimTrailingSlashes', () => {
     expect(trimTrailingSlashes('')).toBe('')
   })
 
-  it('scans a long slash run in linear time', () => {
-    // the reason this helper exists: the regex form backtracks quadratically here
+  it('scans a long trailing slash run in linear time', () => {
     const input = `https://s3.example.com${'/'.repeat(50_000)}`
     expect(trimTrailingSlashes(input)).toBe('https://s3.example.com')
+  })
+
+  it('scans a long slash run that is not trailing in linear time', () => {
+    // The shape the regex form is quadratic on: the run never reaches the end, so
+    // `/\/+$/` retries from every position in it. This helper walks back from the
+    // end once, sees a non-slash, and returns — which is why the input is here.
+    const input = `https://s3.example.com${'/'.repeat(50_000)}x`
+    expect(trimTrailingSlashes(input)).toBe(input)
   })
 })
