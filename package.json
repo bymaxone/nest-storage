@@ -1,6 +1,6 @@
 {
   "name": "@bymax-one/nest-storage",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Provider-agnostic S3-compatible object storage for NestJS. Works with AWS S3, DigitalOcean Spaces, Cloudflare R2, Backblaze B2, MinIO, Wasabi.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
@@ -135,7 +135,7 @@
       "multer": "2.2.0",
       "protobufjs": "^7.6.5",
       "qs": "6.15.2",
-      "undici": "8.5.0",
+      "undici": "^8.9.0",
       "uuid": "11.1.1"
     }
   },
