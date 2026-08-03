@@ -124,6 +124,29 @@ minimal.
 | `.`        | Server runtime: `BymaxStorageModule`, `StorageService`, `SignedUrlService`, `providerRecipes`, DI tokens, interfaces, `StorageException`, `NoOpUploadValidator`, `NoOpFileScanner` |
 | `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`) + `STORAGE_ERROR_CODES` + `StorageErrorCode`                                            |
 
+```
+@bymax-one/nest-storage          (server — NestJS + @aws-sdk/client-s3)
+        │
+        └── re-exports ──▶ @bymax-one/nest-storage/shared   (zero dependencies)
+```
+
+Both subpaths ship ESM **and** CommonJS with declarations for each format, so a
+`require()` consumer receives CommonJS declarations rather than ESM ones. The
+`pnpm check:exports` gate verifies this against the packed tarball.
+
+### Peer dependency matrix
+
+| Subpath      | Required peers                                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.` (server) | `@nestjs/common ^11.0.16`, `@nestjs/core ^11.1.18`, `@aws-sdk/client-s3 ^3.700`, `@aws-sdk/lib-storage ^3.700`, `@aws-sdk/s3-request-presigner ^3.700`, `reflect-metadata ^0.2` |
+| `./shared`   | None                                                                                                                                                                            |
+
+---
+
+> [!TIP]
+> A reference application lives in
+> [`bymaxone/nest-storage-example`](https://github.com/bymaxone/nest-storage-example).
+
 ---
 
 ## 🚀 Quick Start
