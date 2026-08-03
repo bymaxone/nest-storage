@@ -1,30 +1,41 @@
 <p align="center">
-  <a href="https://www.npmjs.com/package/@bymax-one/nest-storage"><img src="https://img.shields.io/npm/v/@bymax-one/nest-storage.svg" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/@bymax-one/nest-storage"><img src="https://img.shields.io/npm/dm/@bymax-one/nest-storage.svg" alt="npm downloads" /></a>
-  <a href="https://github.com/bymaxone/nest-storage/actions/workflows/ci.yml"><img src="https://github.com/bymaxone/nest-storage/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://codecov.io/gh/bymaxone/nest-storage"><img src="https://codecov.io/gh/bymaxone/nest-storage/branch/main/graph/badge.svg" alt="coverage" /></a>
-  <a href="https://stryker-mutator.io"><img src="https://img.shields.io/badge/mutation%20score-100%25-brightgreen" alt="mutation score" /></a>
-  <a href="https://api.securityscorecards.dev/projects/github.com/bymaxone/nest-storage"><img src="https://api.securityscorecards.dev/projects/github.com/bymaxone/nest-storage/badge" alt="OpenSSF Scorecard" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/npm/l/@bymax-one/nest-storage.svg" alt="license" /></a>
-  <img src="https://img.shields.io/badge/TypeScript-5.x-blue.svg" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Node-%3E%3D24-green.svg" alt="Node 24+" />
+  <img src="https://img.shields.io/badge/%40bymax--one-nest--storage-000000?style=for-the-badge&logo=nestjs&logoColor=E0234E" alt="@bymax-one/nest-storage" />
 </p>
 
 <h1 align="center">@bymax-one/nest-storage</h1>
 
 <p align="center">
-  Provider-agnostic S3-compatible object storage for NestJS.<br/>
-  Single <code>@aws-sdk/client-s3</code> engine — works with AWS S3, Cloudflare R2, Backblaze B2,<br/>
-  DigitalOcean Spaces, MinIO, and Wasabi with zero runtime dependencies.
+  <strong>Provider-agnostic S3-compatible object storage for NestJS</strong><br />
+  <sub>AWS S3 · Cloudflare R2 · Backblaze B2 · DigitalOcean Spaces · MinIO · Wasabi · Presigned URLs · Multipart · Virus Scanning · Zero Runtime Dependencies</sub>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@bymax-one/nest-storage"><img src="https://img.shields.io/npm/v/@bymax-one/nest-storage?style=flat-square&colorA=000000&colorB=000000" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@bymax-one/nest-storage"><img src="https://img.shields.io/npm/dm/@bymax-one/nest-storage?style=flat-square&colorA=000000&colorB=000000" alt="npm downloads" /></a>
+  <a href="https://github.com/bymaxone/nest-storage/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/bymaxone/nest-storage/ci.yml?branch=main&style=flat-square&colorA=000000&label=CI" alt="CI status" /></a>
+  <a href="https://github.com/bymaxone/nest-storage/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&colorA=000000" alt="coverage" /></a>
+  <a href="https://github.com/bymaxone/nest-storage/blob/main/docs/mutation_testing_results.md"><img src="https://img.shields.io/badge/mutation-100%25-brightgreen?style=flat-square&colorA=000000" alt="mutation score" /></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/bymaxone/nest-storage"><img src="https://api.scorecard.dev/projects/github.com/bymaxone/nest-storage/badge?style=flat-square" alt="OpenSSF Scorecard" /></a>
+  <a href="https://github.com/bymaxone/nest-storage/blob/main/LICENSE"><img src="https://img.shields.io/github/license/bymaxone/nest-storage?style=flat-square&colorA=000000&colorB=000000" alt="license" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-24%2B-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/bymaxone/nest-storage">GitHub</a> ·
+  <a href="https://github.com/bymaxone/nest-storage/issues">Issues</a> ·
+  <a href="#-quick-start">Quick Start</a> ·
+  <a href="#-api-reference">API Reference</a> ·
+  <a href="https://github.com/bymaxone/nest-storage-example">Example App</a>
 </p>
 
 ---
 
-## Overview
+## ✨ Overview
 
 `@bymax-one/nest-storage` is a NestJS dynamic module that wraps the AWS SDK v3 (`@aws-sdk/client-s3`) to provide a unified, provider-agnostic API for any S3-compatible object storage service. A single `StorageService` covers the full lifecycle — upload, download, signed URLs, listing, copy, and batch delete — while the pluggable `IUploadValidator` and `IFileScanner` hooks let you enforce your own MIME rules and virus-scan policies without coupling the library to any specific scanner.
 
-## Features
+## 🔥 Features
 
 - **Multipart upload** via `@aws-sdk/lib-storage` with automatic abort on failure (`leavePartsOnError: false`), progress events, and a configurable part-size threshold
 - **Presigned GET / PUT / multipart URLs** with TTL clamping and a hard 7-day SigV4 ceiling
@@ -38,16 +49,16 @@
 - **`forRoot` / `forRootAsync`** dynamic module API; `@Global()` scope; `Symbol()` DI tokens
 - **`BYMAX_STORAGE_S3_CLIENT` token** for injecting the raw `S3Client` for provider-specific operations
 
-## Subpath Exports
+## 📦 Subpath Exports
 
-| Subpath | Contents |
-|---|---|
-| `.` | Server runtime: `BymaxStorageModule`, `StorageService`, `SignedUrlService`, `providerRecipes`, DI tokens, interfaces, `StorageException`, `NoOpUploadValidator`, `NoOpFileScanner` |
-| `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`) + `STORAGE_ERROR_CODES` + `StorageErrorCode` |
+| Subpath    | Contents                                                                                                                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.`        | Server runtime: `BymaxStorageModule`, `StorageService`, `SignedUrlService`, `providerRecipes`, DI tokens, interfaces, `StorageException`, `NoOpUploadValidator`, `NoOpFileScanner` |
+| `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`) + `STORAGE_ERROR_CODES` + `StorageErrorCode`                                            |
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
 ### 1 — AWS S3
 
@@ -141,45 +152,45 @@ BymaxStorageModule.forRoot({
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
 The full configuration reference lives in `docs/technical_specification.md` §4. Key options:
 
-| Option | Type | Default | Notes |
-|---|---|---|---|
-| `endpoint` | `string` | — | Required. S3-compatible endpoint URL |
-| `region` | `string` | — | Required. Provider region or `'auto'` (R2) |
-| `bucket` | `string` | — | Default bucket (can be overridden per-call) |
-| `credentials` | `{ accessKeyId, secretAccessKey, sessionToken? }` | — | Load from env / Secrets Manager |
-| `forcePathStyle` | `boolean` | `false` | Set to `true` for MinIO and self-hosted |
-| `publicBaseUrl` | `string` | — | Base URL for public `getPublicUrl()` results |
-| `cdnBaseUrl` | `string` | — | CDN edge URL (preferred over `publicBaseUrl`) |
-| `keyPrefix` | `string` | — | Prepended to every resolved key (multi-tenant) |
-| `maxAttempts` | `number` | `3` | SDK v3 retry count |
-| `serverSideEncryption` | `'AES256' \| 'aws:kms' \| 'NONE'` | — | Global SSE policy |
-| `requestChecksumCalculation` | `'WHEN_SUPPORTED' \| 'WHEN_REQUIRED'` | SDK default | Set to `'WHEN_REQUIRED'` for non-AWS providers |
-| `responseChecksumValidation` | `'WHEN_SUPPORTED' \| 'WHEN_REQUIRED'` | SDK default | Set to `'WHEN_REQUIRED'` for non-AWS providers |
-| `signedUrls.defaultTtlSeconds` | `number` | `3600` | Default signed-URL TTL |
-| `signedUrls.maxTtlSeconds` | `number` | `604800` | Hard ceiling; clamped to 7 days at init |
-| `multipart.thresholdBytes` | `number` | `10 MiB` | Switch to multipart above this size |
-| `multipart.partSizeBytes` | `number` | `8 MiB` | Part size (S3 minimum: 5 MiB) |
-| `validation.mimeWhitelist` | `string[]` | sensible defaults | Wildcards: `'image/*'` |
-| `validation.maxSizeBytes` | `number` | — | Maximum upload size in bytes |
+| Option                         | Type                                              | Default           | Notes                                          |
+| ------------------------------ | ------------------------------------------------- | ----------------- | ---------------------------------------------- |
+| `endpoint`                     | `string`                                          | —                 | Required. S3-compatible endpoint URL           |
+| `region`                       | `string`                                          | —                 | Required. Provider region or `'auto'` (R2)     |
+| `bucket`                       | `string`                                          | —                 | Default bucket (can be overridden per-call)    |
+| `credentials`                  | `{ accessKeyId, secretAccessKey, sessionToken? }` | —                 | Load from env / Secrets Manager                |
+| `forcePathStyle`               | `boolean`                                         | `false`           | Set to `true` for MinIO and self-hosted        |
+| `publicBaseUrl`                | `string`                                          | —                 | Base URL for public `getPublicUrl()` results   |
+| `cdnBaseUrl`                   | `string`                                          | —                 | CDN edge URL (preferred over `publicBaseUrl`)  |
+| `keyPrefix`                    | `string`                                          | —                 | Prepended to every resolved key (multi-tenant) |
+| `maxAttempts`                  | `number`                                          | `3`               | SDK v3 retry count                             |
+| `serverSideEncryption`         | `'AES256' \| 'aws:kms' \| 'NONE'`                 | —                 | Global SSE policy                              |
+| `requestChecksumCalculation`   | `'WHEN_SUPPORTED' \| 'WHEN_REQUIRED'`             | SDK default       | Set to `'WHEN_REQUIRED'` for non-AWS providers |
+| `responseChecksumValidation`   | `'WHEN_SUPPORTED' \| 'WHEN_REQUIRED'`             | SDK default       | Set to `'WHEN_REQUIRED'` for non-AWS providers |
+| `signedUrls.defaultTtlSeconds` | `number`                                          | `3600`            | Default signed-URL TTL                         |
+| `signedUrls.maxTtlSeconds`     | `number`                                          | `604800`          | Hard ceiling; clamped to 7 days at init        |
+| `multipart.thresholdBytes`     | `number`                                          | `10 MiB`          | Switch to multipart above this size            |
+| `multipart.partSizeBytes`      | `number`                                          | `8 MiB`           | Part size (S3 minimum: 5 MiB)                  |
+| `validation.mimeWhitelist`     | `string[]`                                        | sensible defaults | Wildcards: `'image/*'`                         |
+| `validation.maxSizeBytes`      | `number`                                          | —                 | Maximum upload size in bytes                   |
 
 > **Do not use `maxRetries` or `signatureVersion`** — these are AWS SDK v2 options that do not exist in v3. The v3 SDK is SigV4-only. Use `maxAttempts` (default `3`) for retry configuration.
 
 ---
 
-## Provider Recipes
+## 🧩 Provider Recipes
 
-| Recipe | Provider | Notes |
-|---|---|---|
-| `providerRecipes.awsS3(...)` | AWS S3 | Keeps the SDK default checksum mode (`'WHEN_SUPPORTED'`); sets SSE-AES256 |
-| `providerRecipes.cloudflareR2(...)` | Cloudflare R2 | `customDomain` required; checksums `'WHEN_REQUIRED'`; `region: 'auto'` |
-| `providerRecipes.backblazeB2(...)` | Backblaze B2 | `forcePathStyle: false` (B2 supports virtual-hosted); checksums `'WHEN_REQUIRED'` |
-| `providerRecipes.digitalOceanSpaces(...)` | DigitalOcean Spaces | Sets `cdnBaseUrl` to `*.cdn.digitaloceanspaces.com`; checksums `'WHEN_REQUIRED'` |
-| `providerRecipes.minio(...)` | MinIO / self-hosted | `forcePathStyle: true`; checksums `'WHEN_REQUIRED'`; region defaults to `'us-east-1'` |
-| `providerRecipes.wasabi(...)` | Wasabi Hot Cloud | Virtual-hosted; checksums `'WHEN_REQUIRED'` |
+| Recipe                                    | Provider            | Notes                                                                                 |
+| ----------------------------------------- | ------------------- | ------------------------------------------------------------------------------------- |
+| `providerRecipes.awsS3(...)`              | AWS S3              | Keeps the SDK default checksum mode (`'WHEN_SUPPORTED'`); sets SSE-AES256             |
+| `providerRecipes.cloudflareR2(...)`       | Cloudflare R2       | `customDomain` required; checksums `'WHEN_REQUIRED'`; `region: 'auto'`                |
+| `providerRecipes.backblazeB2(...)`        | Backblaze B2        | `forcePathStyle: false` (B2 supports virtual-hosted); checksums `'WHEN_REQUIRED'`     |
+| `providerRecipes.digitalOceanSpaces(...)` | DigitalOcean Spaces | Sets `cdnBaseUrl` to `*.cdn.digitaloceanspaces.com`; checksums `'WHEN_REQUIRED'`      |
+| `providerRecipes.minio(...)`              | MinIO / self-hosted | `forcePathStyle: true`; checksums `'WHEN_REQUIRED'`; region defaults to `'us-east-1'` |
+| `providerRecipes.wasabi(...)`             | Wasabi Hot Cloud    | Virtual-hosted; checksums `'WHEN_REQUIRED'`                                           |
 
 ### Provider Compatibility — The #1 Trap
 
@@ -209,7 +220,7 @@ For public access on either provider, use a **bucket policy**, a **CDN**, or **s
 
 ---
 
-## Upload
+## ⬆️ Upload
 
 ### Single-shot / Buffer
 
@@ -248,7 +259,13 @@ Uploads are automatically routed to multipart when `size >= multipart.thresholdB
 
 ```typescript
 const key = `uploads/${randomUUID()}.png`
-const opts = { key, body: buf, contentType: 'image/png', size: buf.length, idempotencyKey: 'order-42-avatar' }
+const opts = {
+  key,
+  body: buf,
+  contentType: 'image/png',
+  size: buf.length,
+  idempotencyKey: 'order-42-avatar',
+}
 
 const r1 = await storage.upload(opts)
 const r2 = await storage.upload(opts) // returns cached result instantly
@@ -257,7 +274,7 @@ console.log(r2.fromIdempotencyCache) // true
 
 ---
 
-## Download
+## ⬇️ Download
 
 ### As a Stream
 
@@ -283,7 +300,7 @@ const { buffer, metadata } = await this.storage.downloadBuffer({ key: 'docs/repo
 
 ---
 
-## Signed URLs (GET / PUT / Multipart)
+## 🔗 Signed URLs (GET / PUT / Multipart)
 
 > **Security:** signed URLs are temporary credentials. **Never log them** — a logged signed URL is accessible to anyone with log access.
 
@@ -343,7 +360,7 @@ const { uploadId, parts, key } = await signedUrls.getMultipartUploadUrls({
 
 ---
 
-## Validation
+## ✅ Validation
 
 ```typescript
 import { Injectable } from '@nestjs/common'
@@ -352,7 +369,10 @@ import type { IUploadValidator } from '@bymax-one/nest-storage'
 /** Magic-byte PDF check — reads the first 4 bytes of the stream. */
 @Injectable()
 export class PdfValidator implements IUploadValidator {
-  async validate(input: { body: Buffer | NodeJS.ReadableStream; readBytes: (n: number) => Promise<Buffer> }) {
+  async validate(input: {
+    body: Buffer | NodeJS.ReadableStream
+    readBytes: (n: number) => Promise<Buffer>
+  }) {
     const header = await input.readBytes(4)
     if (header.toString('ascii', 0, 4) !== '%PDF') {
       return { valid: false, reason: 'Not a valid PDF (magic bytes mismatch)' }
@@ -377,7 +397,7 @@ BymaxStorageModule.forRoot({
 
 ---
 
-## Virus Scanning (`IFileScanner`)
+## 🦠 Virus Scanning (`IFileScanner`)
 
 ```typescript
 import type { IFileScanner, FileScanResult } from '@bymax-one/nest-storage'
@@ -405,7 +425,7 @@ BymaxStorageModule.forRoot({
 
 ---
 
-## Lifecycle Operations
+## ♻️ Lifecycle Operations
 
 ### List / Paginate
 
@@ -413,7 +433,11 @@ BymaxStorageModule.forRoot({
 const page1 = await storage.list({ prefix: 'avatars/', maxKeys: 100 })
 // { objects: [...], nextContinuationToken?: '...' }
 if (page1.nextContinuationToken) {
-  const page2 = await storage.list({ prefix: 'avatars/', maxKeys: 100, continuationToken: page1.nextContinuationToken })
+  const page2 = await storage.list({
+    prefix: 'avatars/',
+    maxKeys: 100,
+    continuationToken: page1.nextContinuationToken,
+  })
 }
 ```
 
@@ -476,29 +500,30 @@ BymaxStorageModule.forRootAsync({
 
 ---
 
-## Error Codes
+## 🚨 Error Codes
 
 All errors are thrown as `StorageException extends HttpException`. The response body is `{ error: { code, message, details? } }`.
 
-| Code | HTTP | When |
-|---|---|---|
-| `STORAGE_NOT_CONFIGURED` | 503 | Credentials missing and an operation was called |
-| `STORAGE_KEY_INVALID` | 400 | Path traversal (`..`), key starts with `/`, or empty after normalization |
-| `STORAGE_BODY_MISSING` | 400 | `upload()` called without a body |
-| `STORAGE_CONTENT_TYPE_REQUIRED` | 400 | `upload()` called without `contentType` |
-| `STORAGE_MIME_NOT_ALLOWED` | 415 | `contentType` outside `mimeWhitelist` |
-| `STORAGE_SIZE_EXCEEDED` | 413 | `size > maxSizeBytes` |
-| `STORAGE_VALIDATION_FAILED` | 400 | `IUploadValidator` rejected the file (`details.reason`) |
-| `STORAGE_SCAN_INFECTED` | 422 | Scanner returned `'infected'` (`details.threat`) |
-| `STORAGE_SCAN_INCONCLUSIVE` | 422 | Scanner returned `'unknown'` and `rejectOnUnknown: true` |
-| `STORAGE_OBJECT_NOT_FOUND` | 404 | `head()`, `download()`, or `copy()` on a nonexistent key |
-| `STORAGE_PROVIDER_ERROR` | 502 | AWS SDK error (network, 5xx, throttling, `AccessControlListNotSupported`); `details.awsCode`, `httpStatus`, `requestId` |
-| `STORAGE_SIGNED_URL_TTL_INVALID` | 400 | Per-request `ttlSeconds` ≤ 0 |
-| `STORAGE_PART_TOO_SMALL` | 400 | Multipart with part < 5 MiB (S3 limit) |
-| `STORAGE_BUCKET_UNDEFINED` | 400 | Operation without a bucket and no default in config |
-| `STORAGE_MULTIPART_ABORTED` | 500 | Multipart upload failed and was aborted |
-| `STORAGE_INVALID_CONFIG` | 500 | `BymaxStorageModuleOptions` validation failed at initialization |
-| `STORAGE_TIMEOUT` | 504 | Request exceeded `requestTimeoutMs` |
+| Code                             | HTTP | When                                                                                                                                                                                                               |
+| -------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `STORAGE_NOT_CONFIGURED`         | 503  | Credentials missing and an operation was called                                                                                                                                                                    |
+| `STORAGE_KEY_INVALID`            | 400  | Path traversal (`..`), key starts with `/`, or empty after normalization                                                                                                                                           |
+| `STORAGE_BODY_MISSING`           | 400  | `upload()` called without a body                                                                                                                                                                                   |
+| `STORAGE_CONTENT_TYPE_REQUIRED`  | 400  | `upload()` called without `contentType`                                                                                                                                                                            |
+| `STORAGE_MIME_NOT_ALLOWED`       | 415  | `contentType` outside `mimeWhitelist`                                                                                                                                                                              |
+| `STORAGE_SIZE_EXCEEDED`          | 413  | `size > maxSizeBytes`                                                                                                                                                                                              |
+| `STORAGE_VALIDATION_FAILED`      | 400  | `IUploadValidator` rejected the file (`details.reason`)                                                                                                                                                            |
+| `STORAGE_SCAN_INFECTED`          | 422  | Scanner returned `'infected'` (`details.threat`)                                                                                                                                                                   |
+| `STORAGE_SCAN_INCONCLUSIVE`      | 422  | Scanner returned `'unknown'` and `rejectOnUnknown: true`                                                                                                                                                           |
+| `STORAGE_OBJECT_NOT_FOUND`       | 404  | `head()`, `download()`, or `copy()` on a nonexistent key                                                                                                                                                           |
+| `STORAGE_PROVIDER_ERROR`         | 502  | AWS SDK error (network, 5xx, throttling, `AccessControlListNotSupported`); `details` carries `awsCode`, `awsMessage`, `httpStatus`, `requestId` plus the operation context (`op`, `bucket`, and `key` or `prefix`) |
+| `STORAGE_SIGNED_URL_TTL_INVALID` | 400  | Per-request `ttlSeconds` ≤ 0                                                                                                                                                                                       |
+| `STORAGE_PART_TOO_SMALL`         | 400  | Multipart with part < 5 MiB (S3 limit)                                                                                                                                                                             |
+| `STORAGE_INVALID_PART_COUNT`     | 400  | `getMultipartUploadUrls()` with `parts <= 0` (`details.provided`)                                                                                                                                                  |
+| `STORAGE_BUCKET_UNDEFINED`       | 400  | Operation without a bucket and no default in config                                                                                                                                                                |
+| `STORAGE_MULTIPART_ABORTED`      | 500  | Multipart upload failed and was aborted                                                                                                                                                                            |
+| `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                                                                                                                    |
+| `STORAGE_TIMEOUT`                | 504  | Request exceeded `requestTimeoutMs`                                                                                                                                                                                |
 
 ```typescript
 import { StorageException, STORAGE_ERROR_CODES } from '@bymax-one/nest-storage'
@@ -515,7 +540,152 @@ try {
 
 ---
 
-## Testing
+## 📖 API Reference
+
+Every operation below is documented with a runnable example in the sections above.
+This is the index.
+
+### `StorageService`
+
+| Method           | Signature                                                     | Notes                                                        |
+| ---------------- | ------------------------------------------------------------- | ------------------------------------------------------------ |
+| `upload`         | `(options: UploadOptions) => Promise<UploadResult>`           | Multipart via `@aws-sdk/lib-storage`; aborts on failure      |
+| `download`       | `(options: DownloadOptions) => Promise<{ stream, metadata }>` | Streaming; the body is never buffered                        |
+| `downloadBuffer` | `(options: DownloadOptions) => Promise<{ buffer, metadata }>` | Buffers — bounded by the caller's own memory                 |
+| `head`           | `(key, options?) => Promise<ObjectMetadata>`                  | Metadata without transferring the body                       |
+| `exists`         | `(key, options?) => Promise<boolean>`                         | `head` reduced to a boolean                                  |
+| `getPublicUrl`   | `(key, options?) => string`                                   | Composed, not signed — for buckets that are public by policy |
+| `delete`         | `(key, options?) => Promise<void>`                            | Idempotent, as S3 delete is                                  |
+| `deleteMany`     | `(keys: string[], options?) => Promise<DeleteManyResult>`     | Partial failures are reported, not thrown                    |
+| `list`           | `(options: ListOptions) => Promise<ListResult>`               | Paginated by continuation token                              |
+| `copy`           | `(options: CopyOptions) => Promise<{ key, etag }>`            | Server-side; the bytes never reach this process              |
+
+### `SignedUrlService`
+
+| Method                   | Signature                                                                     | Notes                                                         |
+| ------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `getDownloadUrl`         | `(options: SignedGetUrlOptions) => Promise<SignedUrlResult>`                  | GET presign                                                   |
+| `getUploadUrl`           | `(options: SignedPutUrlOptions) => Promise<SignedUrlResult>`                  | PUT presign, with optional content-type and length conditions |
+| `getMultipartUploadUrls` | `(options: MultipartUploadUrlsOptions) => Promise<MultipartUploadUrlsResult>` | One signed URL per part, plus the upload id                   |
+
+### Key normalization
+
+`KeyResolverService` is internal — it is not exported, and it is not something a
+consumer calls. It is named here because every method above passes the key you
+supply through it first: the guard below, then `keyPrefix`. The key you read back in
+`UploadResult` and `ListedObject` is the resolved one.
+
+### DI tokens
+
+`BYMAX_STORAGE_OPTIONS` · `BYMAX_STORAGE_S3_CLIENT` · `BYMAX_STORAGE_FILE_SCANNER` ·
+`BYMAX_STORAGE_UPLOAD_VALIDATORS` · `BYMAX_STORAGE_IDEMPOTENCY_CACHE` ·
+`BYMAX_STORAGE_LOGGER` — all `Symbol()`, so no string token can collide with them.
+
+---
+
+## 🏗️ Architecture
+
+```
+BymaxStorageModule (@Global, forRoot / forRootAsync)
+  │
+  ├── validate-options ──────── refuses a malformed configuration at bootstrap.
+  │                             Credentials are the deliberate exception: empty
+  │                             values are tolerated so a dev workflow boots without
+  │                             storage, and operations then fail with
+  │                             STORAGE_NOT_CONFIGURED rather than at module load
+  │
+  ├── S3ClientProvider ───────── one @aws-sdk/client-s3 S3Client, built from the
+  │                             resolved provider recipe; exposed as
+  │                             BYMAX_STORAGE_S3_CLIENT for anything this surface
+  │                             deliberately does not wrap
+  │
+  ├── KeyResolverService ─────── the only place a caller-supplied key becomes an
+  │                             object key: guard, then keyPrefix
+  │
+  ├── StorageService ─────────── upload · download · head · exists · list · copy ·
+  │                             delete · deleteMany
+  │       ├── IUploadValidator[] (MIME + size, then any you register)
+  │       ├── IFileScanner       (pre- and/or post-upload)
+  │       └── IdempotencyCache   (LRU, in-process)
+  │
+  └── SignedUrlService ───────── GET / PUT / multipart presigns, TTL-clamped
+```
+
+One engine, six recipes. `providerRecipes` differ only in endpoint, region and the
+handful of flags each provider needs (`forcePathStyle` for MinIO, `auto` region for
+R2) — there is no per-provider code path, so a provider swap is a configuration
+change and every operation behaves the same way afterwards.
+
+The idempotency cache is **in-process**. It collapses a retried `upload` inside one
+instance; it does not coordinate between replicas.
+
+---
+
+## 🔐 Security Model
+
+**The object key is the attack surface.** Everything a caller sends becomes part of a
+key, and a key is a path. `KeyResolverService.normalize` is the single chokepoint:
+it refuses an empty key, a key containing a null byte, a key starting with `/`, and
+any key with a `..` segment; it collapses duplicate slashes; and only then does it
+prepend `keyPrefix`. Nothing in this library composes a key any other way, so a
+tenant cannot climb out of its prefix by naming one.
+
+**Presigned URLs are bearer credentials.** Anyone holding one has the access it
+encodes, for as long as it lives. TTLs are clamped, and SigV4's hard ceiling of
+604 800 s (7 days) is enforced rather than passed through to a signature the provider
+would reject at use time.
+
+**Credentials stay where they were put.** They arrive through module options and are
+handed to the SDK. This library never reads `process.env`, never logs them, and never
+places them — or a signed URL — in an exception. What `aws-error-mapper` does put in
+`details` is the provider's error code and message, the HTTP status, the request id,
+and the operation context the call site supplies: which operation, which bucket, and
+the resolved key or prefix. That is enough to diagnose a failure, and it means an
+object key reaches whatever consumes the exception — so if a key is itself sensitive
+in your deployment, do not log the envelope verbatim.
+
+**Uploads are refused before they are stored, not after.** MIME allowlist (wildcards
+included) and size limit run first, then any `IUploadValidator` you register, then the
+`IFileScanner` if configured. A scanner can run pre-upload, post-upload, or both — the
+post-upload position exists because some scanners only accept an object they can fetch.
+
+---
+
+## 🛡️ Security Table
+
+| Layer            | Implementation                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Object keys      | Guarded and normalized in one place; `..`, leading `/`, null bytes and empty keys refused                                                              |
+| Multi-tenancy    | `keyPrefix` prepended after normalization, so it cannot be escaped by the key                                                                          |
+| Credentials      | Injected options only; never read from `process.env`, never logged, never in an exception                                                              |
+| Error payloads   | Provider code and message, HTTP status, request id, and the operation context (`op`, `bucket`, `key`/`prefix`) — never credentials, never a signed URL |
+| Presign lifetime | TTL clamped, SigV4's 7-day ceiling enforced locally                                                                                                    |
+| Encryption       | Server-side (AES256 / `aws:kms`) configurable globally or per upload                                                                                   |
+| Content          | MIME allowlist + size limit, then registered validators, then the scanner                                                                              |
+| Supply chain     | `dependencies: {}`; third-party Actions pinned by commit SHA (org-internal reusables by tag); CodeQL, OSV-Scanner and OpenSSF Scorecard                |
+
+> [!IMPORTANT]
+> **`keyPrefix` is not an access boundary.** It scopes the keys this library composes;
+> it does not restrict what the credentials can reach. Anything holding the bucket's
+> credentials can read every prefix in it. Enforce tenant isolation with IAM policies
+> or separate buckets when the boundary has to hold against the application itself.
+
+---
+
+## 🧱 Tech Stack
+
+- **Runtime:** Node.js 24+
+- **Framework:** NestJS 11 (`ConfigurableModuleBuilder`, `@Global()`, `Symbol()` tokens)
+- **Storage engine:** `@aws-sdk/client-s3 ^3.700` (peer), with `@aws-sdk/lib-storage`
+  for multipart and `@aws-sdk/s3-request-presigner` for presigns — all peers
+- **Providers:** AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, MinIO, Wasabi
+- **Build:** tsup — ESM + CJS per subpath, with `.d.ts` _and_ `.d.cts` declarations
+- **Tests:** Jest + Testcontainers (MinIO, E2E) + Stryker (mutation)
+- **TypeScript:** 5.x strict (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), zero `any`
+
+---
+
+## 🧪 Testing & Quality
 
 ```bash
 # Unit tests
@@ -533,14 +703,21 @@ pnpm mutation
 
 ---
 
-## Contributing
-
-Security issues: report privately to [security@bymax.one](mailto:security@bymax.one) — do not open a public issue. See [SECURITY.md](SECURITY.md) for the full disclosure policy and storage-specific security goals.
+## 🤝 Contributing
 
 For feature requests and bugs, open a GitHub issue. Pull requests are welcome; please run `pnpm test:cov` and `pnpm lint` before submitting.
 
 ---
 
-## License
+## 🔒 Security Policy
+
+If you discover a security vulnerability, please **do not** open a public issue.
+Instead, email us at **security@bymax.one** with details. We take security seriously
+and will respond promptly. See [`SECURITY.md`](SECURITY.md) for the full policy,
+including the storage-specific security goals.
+
+---
+
+## 📄 License
 
 [MIT](LICENSE) — Copyright (c) 2026 Bymax One
