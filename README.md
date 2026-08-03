@@ -662,7 +662,7 @@ post-upload position exists because some scanners only accept an object they can
 | Presign lifetime | TTL clamped, SigV4's 7-day ceiling enforced locally                                                                                                    |
 | Encryption       | Server-side (AES256 / `aws:kms`) configurable globally or per upload                                                                                   |
 | Content          | MIME allowlist + size limit, then registered validators, then the scanner                                                                              |
-| Supply chain     | `dependencies: {}`; SHA-pinned Actions, OSV-Scanner, TruffleHog, OpenSSF Scorecard                                                                     |
+| Supply chain     | `dependencies: {}`; third-party Actions pinned by commit SHA (org-internal reusables by tag); CodeQL, OSV-Scanner and OpenSSF Scorecard                |
 
 > [!IMPORTANT]
 > **`keyPrefix` is not an access boundary.** It scopes the keys this library composes;
@@ -711,9 +711,10 @@ For feature requests and bugs, open a GitHub issue. Pull requests are welcome; p
 
 ## 🔒 Security Policy
 
-If you discover a security vulnerability, please **do not** open a public issue. Instead, email us
-at **security@bymax.one** with details. We take security seriously and will respond promptly. See
-[`SECURITY.md`](SECURITY.md) for the full policy, including the storage-specific security goals.
+If you discover a security vulnerability, please **do not** open a public issue.
+Instead, email us at **security@bymax.one** with details. We take security seriously
+and will respond promptly. See [`SECURITY.md`](SECURITY.md) for the full policy,
+including the storage-specific security goals.
 
 ---
 
