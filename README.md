@@ -504,25 +504,26 @@ BymaxStorageModule.forRootAsync({
 
 All errors are thrown as `StorageException extends HttpException`. The response body is `{ error: { code, message, details? } }`.
 
-| Code                             | HTTP | When                                                                                                                    |
-| -------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------- |
-| `STORAGE_NOT_CONFIGURED`         | 503  | Credentials missing and an operation was called                                                                         |
-| `STORAGE_KEY_INVALID`            | 400  | Path traversal (`..`), key starts with `/`, or empty after normalization                                                |
-| `STORAGE_BODY_MISSING`           | 400  | `upload()` called without a body                                                                                        |
-| `STORAGE_CONTENT_TYPE_REQUIRED`  | 400  | `upload()` called without `contentType`                                                                                 |
-| `STORAGE_MIME_NOT_ALLOWED`       | 415  | `contentType` outside `mimeWhitelist`                                                                                   |
-| `STORAGE_SIZE_EXCEEDED`          | 413  | `size > maxSizeBytes`                                                                                                   |
-| `STORAGE_VALIDATION_FAILED`      | 400  | `IUploadValidator` rejected the file (`details.reason`)                                                                 |
-| `STORAGE_SCAN_INFECTED`          | 422  | Scanner returned `'infected'` (`details.threat`)                                                                        |
-| `STORAGE_SCAN_INCONCLUSIVE`      | 422  | Scanner returned `'unknown'` and `rejectOnUnknown: true`                                                                |
-| `STORAGE_OBJECT_NOT_FOUND`       | 404  | `head()`, `download()`, or `copy()` on a nonexistent key                                                                |
-| `STORAGE_PROVIDER_ERROR`         | 502  | AWS SDK error (network, 5xx, throttling, `AccessControlListNotSupported`); `details.awsCode`, `httpStatus`, `requestId` |
-| `STORAGE_SIGNED_URL_TTL_INVALID` | 400  | Per-request `ttlSeconds` ≤ 0                                                                                            |
-| `STORAGE_PART_TOO_SMALL`         | 400  | Multipart with part < 5 MiB (S3 limit)                                                                                  |
-| `STORAGE_BUCKET_UNDEFINED`       | 400  | Operation without a bucket and no default in config                                                                     |
-| `STORAGE_MULTIPART_ABORTED`      | 500  | Multipart upload failed and was aborted                                                                                 |
-| `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                         |
-| `STORAGE_TIMEOUT`                | 504  | Request exceeded `requestTimeoutMs`                                                                                     |
+| Code                             | HTTP | When                                                                                                                                                                                                               |
+| -------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `STORAGE_NOT_CONFIGURED`         | 503  | Credentials missing and an operation was called                                                                                                                                                                    |
+| `STORAGE_KEY_INVALID`            | 400  | Path traversal (`..`), key starts with `/`, or empty after normalization                                                                                                                                           |
+| `STORAGE_BODY_MISSING`           | 400  | `upload()` called without a body                                                                                                                                                                                   |
+| `STORAGE_CONTENT_TYPE_REQUIRED`  | 400  | `upload()` called without `contentType`                                                                                                                                                                            |
+| `STORAGE_MIME_NOT_ALLOWED`       | 415  | `contentType` outside `mimeWhitelist`                                                                                                                                                                              |
+| `STORAGE_SIZE_EXCEEDED`          | 413  | `size > maxSizeBytes`                                                                                                                                                                                              |
+| `STORAGE_VALIDATION_FAILED`      | 400  | `IUploadValidator` rejected the file (`details.reason`)                                                                                                                                                            |
+| `STORAGE_SCAN_INFECTED`          | 422  | Scanner returned `'infected'` (`details.threat`)                                                                                                                                                                   |
+| `STORAGE_SCAN_INCONCLUSIVE`      | 422  | Scanner returned `'unknown'` and `rejectOnUnknown: true`                                                                                                                                                           |
+| `STORAGE_OBJECT_NOT_FOUND`       | 404  | `head()`, `download()`, or `copy()` on a nonexistent key                                                                                                                                                           |
+| `STORAGE_PROVIDER_ERROR`         | 502  | AWS SDK error (network, 5xx, throttling, `AccessControlListNotSupported`); `details` carries `awsCode`, `awsMessage`, `httpStatus`, `requestId` plus the operation context (`op`, `bucket`, and `key` or `prefix`) |
+| `STORAGE_SIGNED_URL_TTL_INVALID` | 400  | Per-request `ttlSeconds` ≤ 0                                                                                                                                                                                       |
+| `STORAGE_PART_TOO_SMALL`         | 400  | Multipart with part < 5 MiB (S3 limit)                                                                                                                                                                             |
+| `STORAGE_INVALID_PART_COUNT`     | 400  | `getMultipartUploadUrls()` with `parts <= 0` (`details.provided`)                                                                                                                                                  |
+| `STORAGE_BUCKET_UNDEFINED`       | 400  | Operation without a bucket and no default in config                                                                                                                                                                |
+| `STORAGE_MULTIPART_ABORTED`      | 500  | Multipart upload failed and was aborted                                                                                                                                                                            |
+| `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                                                                                                                    |
+| `STORAGE_TIMEOUT`                | 504  | Request exceeded `requestTimeoutMs`                                                                                                                                                                                |
 
 ```typescript
 import { StorageException, STORAGE_ERROR_CODES } from '@bymax-one/nest-storage'
@@ -567,13 +568,12 @@ This is the index.
 | `getUploadUrl`           | `(options: SignedPutUrlOptions) => Promise<SignedUrlResult>`                  | PUT presign, with optional content-type and length conditions |
 | `getMultipartUploadUrls` | `(options: MultipartUploadUrlsOptions) => Promise<MultipartUploadUrlsResult>` | One signed URL per part, plus the upload id                   |
 
-### `KeyResolverService`
+### Key normalization
 
-| Method        | Signature                     | Notes                                            |
-| ------------- | ----------------------------- | ------------------------------------------------ |
-| `normalize`   | `(rawKey: string) => string`  | Applies the guard below and prepends `keyPrefix` |
-| `stripPrefix` | `(fullKey: string) => string` | The inverse, for presenting keys to callers      |
-| `getPrefix`   | `() => string`                | The resolved prefix                              |
+`KeyResolverService` is internal — it is not exported, and it is not something a
+consumer calls. It is named here because every method above passes the key you
+supply through it first: the guard below, then `keyPrefix`. The key you read back in
+`UploadResult` and `ListedObject` is the resolved one.
 
 ### DI tokens
 
@@ -588,8 +588,11 @@ This is the index.
 ```
 BymaxStorageModule (@Global, forRoot / forRootAsync)
   │
-  ├── validate-options ──────── refuses an unusable configuration at bootstrap,
-  │                             not at the first upload
+  ├── validate-options ──────── refuses a malformed configuration at bootstrap.
+  │                             Credentials are the deliberate exception: empty
+  │                             values are tolerated so a dev workflow boots without
+  │                             storage, and operations then fail with
+  │                             STORAGE_NOT_CONFIGURED rather than at module load
   │
   ├── S3ClientProvider ───────── one @aws-sdk/client-s3 S3Client, built from the
   │                             resolved provider recipe; exposed as
@@ -634,9 +637,12 @@ would reject at use time.
 
 **Credentials stay where they were put.** They arrive through module options and are
 handed to the SDK. This library never reads `process.env`, never logs them, and never
-places them — or a signed URL — in an exception. `aws-error-mapper` carries the
-provider's error code, HTTP status and request id into `details` for observability,
-and nothing else.
+places them — or a signed URL — in an exception. What `aws-error-mapper` does put in
+`details` is the provider's error code and message, the HTTP status, the request id,
+and the operation context the call site supplies: which operation, which bucket, and
+the resolved key or prefix. That is enough to diagnose a failure, and it means an
+object key reaches whatever consumes the exception — so if a key is itself sensitive
+in your deployment, do not log the envelope verbatim.
 
 **Uploads are refused before they are stored, not after.** MIME allowlist (wildcards
 included) and size limit run first, then any `IUploadValidator` you register, then the
@@ -647,16 +653,16 @@ post-upload position exists because some scanners only accept an object they can
 
 ## 🛡️ Security Table
 
-| Layer            | Implementation                                                                            |
-| ---------------- | ----------------------------------------------------------------------------------------- |
-| Object keys      | Guarded and normalized in one place; `..`, leading `/`, null bytes and empty keys refused |
-| Multi-tenancy    | `keyPrefix` prepended after normalization, so it cannot be escaped by the key             |
-| Credentials      | Injected options only; never read from `process.env`, never logged, never in an exception |
-| Error payloads   | Provider error code, HTTP status and request id only — no credentials, no signed URLs     |
-| Presign lifetime | TTL clamped, SigV4's 7-day ceiling enforced locally                                       |
-| Encryption       | Server-side (AES256 / `aws:kms`) configurable globally or per upload                      |
-| Content          | MIME allowlist + size limit, then registered validators, then the scanner                 |
-| Supply chain     | `dependencies: {}`; SHA-pinned Actions, OSV-Scanner, TruffleHog, OpenSSF Scorecard        |
+| Layer            | Implementation                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Object keys      | Guarded and normalized in one place; `..`, leading `/`, null bytes and empty keys refused                                                              |
+| Multi-tenancy    | `keyPrefix` prepended after normalization, so it cannot be escaped by the key                                                                          |
+| Credentials      | Injected options only; never read from `process.env`, never logged, never in an exception                                                              |
+| Error payloads   | Provider code and message, HTTP status, request id, and the operation context (`op`, `bucket`, `key`/`prefix`) — never credentials, never a signed URL |
+| Presign lifetime | TTL clamped, SigV4's 7-day ceiling enforced locally                                                                                                    |
+| Encryption       | Server-side (AES256 / `aws:kms`) configurable globally or per upload                                                                                   |
+| Content          | MIME allowlist + size limit, then registered validators, then the scanner                                                                              |
+| Supply chain     | `dependencies: {}`; SHA-pinned Actions, OSV-Scanner, TruffleHog, OpenSSF Scorecard                                                                     |
 
 > [!IMPORTANT]
 > **`keyPrefix` is not an access boundary.** It scopes the keys this library composes;
