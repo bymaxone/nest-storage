@@ -57,8 +57,6 @@ have regressed from. They are kept because the reasoning is worth having.
 - **`BYMAX_STORAGE_S3_CLIENT` DI token** — raw `S3Client` injection for provider-specific advanced operations (spec §11.2)
 - **Non-AWS checksum opt-out** — the five non-AWS recipes set `requestChecksumCalculation` / `responseChecksumValidation` to `'WHEN_REQUIRED'` to prevent the SDK's default CRC32 `x-amz-checksum-*` headers from being sent to providers that reject them
 
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/bymaxone/nest-storage/releases/tag/v0.1.0
 
 - **`pnpm check:exports`** runs `attw --pack . --profile strict` against the packed
   tarball. Its absence is why both defects above went unnoticed: a source-level
@@ -97,3 +95,5 @@ have regressed from. They are kept because the reasoning is worth having.
 
 ---
 
+[0.1.0]: https://github.com/bymaxone/nest-storage/releases/tag/v0.1.0
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v0.1.0...HEAD
