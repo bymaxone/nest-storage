@@ -8,6 +8,44 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-03
+
+Documentation only. `dist/` is byte-identical to the one published in 1.0.0 —
+verified by unpacking `@bymax-one/nest-storage@1.0.0` from the registry and
+diffing it against a fresh build, not asserted. The README ships inside the
+package, so a README that is wrong on npm stays wrong until a release replaces
+it; that is the whole reason this version exists.
+
+### Fixed
+
+- **Four statements in the README that the code does not support.**
+  `KeyResolverService` was documented as public API — it is not exported from the
+  barrel, so `import { KeyResolverService } from '@bymax-one/nest-storage'` does
+  not resolve. The module was described as refusing an unusable configuration at
+  bootstrap; `validate-options` deliberately tolerates empty credentials so a
+  development workflow boots without storage, and operations then fail with
+  `STORAGE_NOT_CONFIGURED`. `STORAGE_INVALID_PART_COUNT` was missing from the
+  error table although `getMultipartUploadUrls()` throws it for `parts <= 0`.
+- **The error-payload claim, in both places it was made.** The error table and
+  the security table said `details` carries the provider code, HTTP status and
+  request id _only_. `mapAwsError` also includes `awsMessage` and spreads the
+  call site's context — `op`, `bucket`, and the resolved `key` or `prefix` — so an
+  object key does reach whatever consumes the exception. Both now list what is
+  actually there, and the security model says the consequence plainly.
+- **The supply-chain row named tools this repository does not run.** It claimed
+  OSV-Scanner _and_ TruffleHog; only OSV-Scanner is wired up here, alongside
+  CodeQL and OpenSSF Scorecard. It also called the Actions SHA-pinned without
+  qualification, where the org-internal reusables are referenced by tag.
+
+### Changed
+
+- **The README follows the `@bymax-one` family layout.** Header rebuilt to the
+  shared shape — wordmark, package name, claim and feature line, one badge row,
+  one navigation row — and the section spine completed with API Reference,
+  Architecture, Security Model, Security Table, Tech Stack, Testing & Quality and
+  Security Policy, which every published library in the family carries and this
+  one did not.
+
 ## [1.0.0] - 2026-08-03
 
 First published release. Everything below ships in it.
@@ -57,12 +95,11 @@ have regressed from. They are kept because the reasoning is worth having.
 - **`BYMAX_STORAGE_S3_CLIENT` DI token** — raw `S3Client` injection for provider-specific advanced operations (spec §11.2)
 - **Non-AWS checksum opt-out** — the five non-AWS recipes set `requestChecksumCalculation` / `responseChecksumValidation` to `'WHEN_REQUIRED'` to prevent the SDK's default CRC32 `x-amz-checksum-*` headers from being sent to providers that reject them
 
-
 - **`pnpm check:exports`** runs `attw --pack . --profile strict` against the packed
   tarball. Its absence is why both defects above went unnoticed: a source-level
   typecheck compiles `src` and never resolves through the `exports` map.
 - **`pnpm check:runtime`** packs the tarball, lays it out the way npm would, and
-  loads every subpath from it in ESM *and* CommonJS, asserting the expected values
+  loads every subpath from it in ESM _and_ CommonJS, asserting the expected values
   are really exported. `attw` proves the declarations resolve; it never runs the
   JavaScript. Both gates run in CI.
 
@@ -70,7 +107,7 @@ have regressed from. They are kept because the reasoning is worth having.
 
 - **CommonJS consumers resolved ESM type declarations.** The `exports` map
   declared a single `types` condition, so `require()` landed on `.d.ts` instead of
-  `.d.cts` — `attw --profile strict` reports it as *Masquerading as ESM* on every
+  `.d.cts` — `attw --profile strict` reports it as _Masquerading as ESM_ on every
   subpath. Types are now declared per condition.
 
 - **`node10` type resolution failed outright**: the manifest carried no complete
@@ -96,4 +133,5 @@ have regressed from. They are kept because the reasoning is worth having.
 ---
 
 [1.0.0]: https://github.com/bymaxone/nest-storage/releases/tag/v1.0.0
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.0...HEAD
+[1.0.1]: https://github.com/bymaxone/nest-storage/compare/v1.0.0...v1.0.1
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.1...HEAD
