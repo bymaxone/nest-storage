@@ -33,21 +33,89 @@
 
 ## ✨ Overview
 
-`@bymax-one/nest-storage` is a NestJS dynamic module that wraps the AWS SDK v3 (`@aws-sdk/client-s3`) to provide a unified, provider-agnostic API for any S3-compatible object storage service. A single `StorageService` covers the full lifecycle — upload, download, signed URLs, listing, copy, and batch delete — while the pluggable `IUploadValidator` and `IFileScanner` hooks let you enforce your own MIME rules and virus-scan policies without coupling the library to any specific scanner.
+`@bymax-one/nest-storage` is a NestJS dynamic module that wraps the AWS SDK v3
+(`@aws-sdk/client-s3`) behind one typed surface for object storage. Instead of building an
+`S3Client`, deciding per provider whether path-style addressing is required, and hand-rolling
+multipart, presigning, validation and key normalization in every service, you install one
+library and get all of it — against AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces,
+MinIO or Wasabi, with the same code.
+
+The library has **zero direct dependencies** — the three `@aws-sdk/*` packages and `@nestjs/*`
+arrive as peer dependencies, so you control exact versions and the supply-chain surface stays
+minimal.
+
+### Why nest-storage?
+
+- **One engine, six providers.** `providerRecipes` differ only in endpoint, region and the flags
+  each provider needs (`forcePathStyle` for MinIO, `auto` region for R2). There is no
+  per-provider code path, so switching provider is a configuration change and every operation
+  behaves the same way afterwards.
+- **The key guard is one chokepoint.** Every caller-supplied key passes through
+  `KeyResolverService` before it reaches S3 — `..` segments, a leading `/`, null bytes and empty
+  keys are refused, and only then is `keyPrefix` prepended. A tenant cannot climb out of its
+  prefix by naming a key.
+- **Uploads are refused before they are stored.** MIME allowlist and size limit first, then any
+  `IUploadValidator` you register, then the `IFileScanner` if configured — pre-upload,
+  post-upload, or both.
+- **Presigned URLs cannot outlive what SigV4 allows.** TTLs are clamped and the hard ceiling of
+  604 800 s is enforced locally, rather than handed to a signature the provider rejects at use
+  time.
+
+---
 
 ## 🔥 Features
 
-- **Multipart upload** via `@aws-sdk/lib-storage` with automatic abort on failure (`leavePartsOnError: false`), progress events, and a configurable part-size threshold
-- **Presigned GET / PUT / multipart URLs** with TTL clamping and a hard 7-day SigV4 ceiling
-- **MIME whitelist + size limit** (wildcards supported: `image/*`, `text/*`) with a pluggable `IUploadValidator` hook for magic-byte checks and custom business rules
-- **Pluggable `IFileScanner` hook** (pre- and/or post-upload) for ClamAV, AWS Macie, or any scanner that returns `'clean' | 'infected' | 'unknown'`
-- **Six ready-to-use provider recipes** — `awsS3`, `cloudflareR2`, `backblazeB2`, `digitalOceanSpaces`, `minio`, `wasabi`
-- **Path-traversal guard** in `KeyResolverService` — blocks `..`, leading `/`, and empty-after-normalize keys
-- **In-memory LRU idempotency cache** (default 1 000 entries / 24 h) — identical `idempotencyKey` returns the cached `UploadResult`
-- **Server-side encryption** (AES256 / aws:kms) configurable globally or per-upload
-- **`keyPrefix` multi-tenant isolation** — prepended to every resolved key
-- **`forRoot` / `forRootAsync`** dynamic module API; `@Global()` scope; `Symbol()` DI tokens
-- **`BYMAX_STORAGE_S3_CLIENT` token** for injecting the raw `S3Client` for provider-specific operations
+### ⬆️ Uploading
+
+- ✅ **Multipart upload** — `@aws-sdk/lib-storage` with automatic abort on failure
+  (`leavePartsOnError: false`), progress events, and a configurable threshold and part size
+- ✅ **Content validation** — MIME allowlist with wildcards (`image/*`, `text/*`) and a size
+  limit, refused before a byte is stored
+- ✅ **Pluggable validators** — register any number of `IUploadValidator`s; each runs after the
+  built-in checks and can refuse with its own reason
+- ✅ **Virus scanning hook** — `IFileScanner` pre-upload, post-upload or both, for ClamAV, AWS
+  Macie or anything that answers `'clean' | 'infected' | 'unknown'`
+- ✅ **Idempotent retries** — an in-memory LRU (1 000 entries / 24 h by default) returns the
+  cached `UploadResult` for a repeated `idempotencyKey` instead of storing the object twice
+
+### 🔗 Access & URLs
+
+- ✅ **Presigned GET / PUT** — with optional content-type and length conditions on the PUT
+- ✅ **Presigned multipart** — one signed URL per part plus the upload id, so a browser can
+  upload directly without the bytes passing through your process
+- ✅ **TTL clamping** — SigV4's hard ceiling of 604 800 s (7 days) is enforced locally, not
+  discovered when the provider rejects the signature
+- ✅ **Public URL composition** — `getPublicUrl` builds from `cdnBaseUrl` or `publicBaseUrl` for
+  buckets that are public by policy; it composes, it does not sign
+
+### 🗄️ Objects & Lifecycle
+
+- ✅ **Streaming download** — `download` returns a stream; the body is never buffered unless you
+  ask for `downloadBuffer`
+- ✅ **Metadata without transfer** — `head` and `exists` answer from object metadata alone
+- ✅ **Paginated listing** — `list` over continuation tokens, with the prefix stripped back off
+  the keys it returns
+- ✅ **Server-side copy** — `copy` moves bytes inside the provider; they never reach this process
+- ✅ **Bulk delete with partial results** — `deleteMany` reports what failed instead of throwing
+  away the successes
+
+### 🧩 Developer Experience
+
+- ✅ **Six provider recipes** — `awsS3`, `cloudflareR2`, `backblazeB2`, `digitalOceanSpaces`,
+  `minio`, `wasabi`
+- ✅ **Zero runtime dependencies** — `@aws-sdk/*` and `@nestjs/*` all arrive as peer
+  dependencies, so you pin the versions
+- ✅ **Two subpaths** — the server surface, and `./shared` carrying types and the error catalog
+  that pull in nothing at all
+- ✅ **Escape hatch** — `BYMAX_STORAGE_S3_CLIENT` injects the raw `S3Client` for the
+  provider-specific operations this surface deliberately does not wrap
+- ✅ **Multi-tenant key prefix** — `keyPrefix` prepended after normalization, so it cannot be
+  escaped by the key
+- ✅ **Server-side encryption** — AES256 or `aws:kms`, globally or per upload
+- ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and
+  `noUncheckedIndexedAccess`; zero `any`
+
+---
 
 ## 📦 Subpath Exports
 
@@ -55,6 +123,29 @@
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `.`        | Server runtime: `BymaxStorageModule`, `StorageService`, `SignedUrlService`, `providerRecipes`, DI tokens, interfaces, `StorageException`, `NoOpUploadValidator`, `NoOpFileScanner` |
 | `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`) + `STORAGE_ERROR_CODES` + `StorageErrorCode`                                            |
+
+```
+@bymax-one/nest-storage          (server — NestJS + @aws-sdk/client-s3)
+        │
+        └── re-exports ──▶ @bymax-one/nest-storage/shared   (zero dependencies)
+```
+
+Both subpaths ship ESM **and** CommonJS with declarations for each format, so a
+`require()` consumer receives CommonJS declarations rather than ESM ones. The
+`pnpm check:exports` gate verifies this against the packed tarball.
+
+### Peer dependency matrix
+
+| Subpath      | Required peers                                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.` (server) | `@nestjs/common ^11.0.16`, `@nestjs/core ^11.1.18`, `@aws-sdk/client-s3 ^3.700`, `@aws-sdk/lib-storage ^3.700`, `@aws-sdk/s3-request-presigner ^3.700`, `reflect-metadata ^0.2` |
+| `./shared`   | None                                                                                                                                                                            |
+
+---
+
+> [!TIP]
+> A reference application lives in
+> [`bymaxone/nest-storage-example`](https://github.com/bymaxone/nest-storage-example).
 
 ---
 
@@ -619,35 +710,66 @@ change and every operation behaves the same way afterwards.
 The idempotency cache is **in-process**. It collapses a retried `upload` inside one
 instance; it does not coordinate between replicas.
 
+### Design Principles
+
+| Principle                        | Description                                                                                                                                                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🔑 **One key chokepoint**        | Every caller-supplied key passes through `KeyResolverService` before it reaches S3. `..`, a leading `/`, null bytes and empty keys are refused, and `keyPrefix` is prepended after normalization — so it cannot be escaped by the key |
+| 🧩 **One engine, six recipes**   | `providerRecipes` differ in endpoint, region and per-provider flags only. There is no per-provider code path, so a provider swap is configuration and every operation behaves the same afterwards                                     |
+| 🚫 **Refuse before storing**     | MIME allowlist and size limit, then registered `IUploadValidator`s, then the `IFileScanner`. An upload that will be rejected is rejected before a byte is written                                                                     |
+| ⏱️ **Bounded signatures**        | Presign TTLs are clamped and SigV4's 604 800 s ceiling is enforced locally, not discovered when the provider rejects the signature                                                                                                    |
+| 💥 **Fail at boot, mostly**      | Options are validated before any client is built. Credentials are the deliberate exception: empty values are tolerated so a development workflow boots, and operations then fail with `STORAGE_NOT_CONFIGURED`                        |
+| 🧊 **Zero runtime dependencies** | `dependencies` is `{}`. You choose the exact `@aws-sdk/*` versions and the supply-chain surface stays yours                                                                                                                           |
+
 ---
 
 ## 🔐 Security Model
 
-**The object key is the attack surface.** Everything a caller sends becomes part of a
-key, and a key is a path. `KeyResolverService.normalize` is the single chokepoint:
-it refuses an empty key, a key containing a null byte, a key starting with `/`, and
-any key with a `..` segment; it collapses duplicate slashes; and only then does it
-prepend `keyPrefix`. Nothing in this library composes a key any other way, so a
-tenant cannot climb out of its prefix by naming one.
+This library turns caller input into object keys, signs URLs that grant access on their
+own, and holds the credentials for a bucket. Its security contract is about what a key can
+reach, how long a signature lives, and what leaves in an error.
 
-**Presigned URLs are bearer credentials.** Anyone holding one has the access it
-encodes, for as long as it lives. TTLs are clamped, and SigV4's hard ceiling of
-604 800 s (7 days) is enforced rather than passed through to a signature the provider
-would reject at use time.
+### The object key is the attack surface
 
-**Credentials stay where they were put.** They arrive through module options and are
-handed to the SDK. This library never reads `process.env`, never logs them, and never
-places them — or a signed URL — in an exception. What `aws-error-mapper` does put in
-`details` is the provider's error code and message, the HTTP status, the request id,
-and the operation context the call site supplies: which operation, which bucket, and
-the resolved key or prefix. That is enough to diagnose a failure, and it means an
-object key reaches whatever consumes the exception — so if a key is itself sensitive
-in your deployment, do not log the envelope verbatim.
+Everything a caller sends becomes part of a key, and a key is a path.
+`KeyResolverService.normalize` is the single chokepoint: it refuses an empty key, a key
+containing a null byte, a key starting with `/`, and any key with a `..` segment; it
+collapses duplicate slashes; and only then does it prepend `keyPrefix`. Nothing in this
+library composes a key any other way, so a tenant cannot climb out of its prefix by naming
+one.
 
-**Uploads are refused before they are stored, not after.** MIME allowlist (wildcards
-included) and size limit run first, then any `IUploadValidator` you register, then the
-`IFileScanner` if configured. A scanner can run pre-upload, post-upload, or both — the
-post-upload position exists because some scanners only accept an object they can fetch.
+### Presigned URLs are bearer credentials
+
+Anyone holding one has the access it encodes, for as long as it lives. TTLs are clamped,
+and SigV4's hard ceiling of 604 800 s (7 days) is enforced here rather than passed through
+to a signature the provider would reject at use time. Treat a signed URL like a password
+with an expiry, not like a link.
+
+### Credentials stay where they were put
+
+They arrive through module options and are handed to the SDK. This library never reads
+`process.env`, never logs them, and never places them — or a signed URL — in an exception.
+
+### Error payloads carry the operation, and that includes the key
+
+What `aws-error-mapper` puts in `details` is the provider's error code and message, the
+HTTP status, the request id, and the operation context the call site supplies: which
+operation, which bucket, and the resolved key or prefix. That is enough to diagnose a
+failure, and it means an object key reaches whatever consumes the exception — so if a key
+is itself sensitive in your deployment, do not log the envelope verbatim.
+
+### Uploads are refused before they are stored
+
+MIME allowlist (wildcards included) and size limit run first, then any `IUploadValidator`
+you register, then the `IFileScanner` if configured. A scanner can run pre-upload,
+post-upload, or both — the post-upload position exists because some scanners only accept an
+object they can fetch.
+
+### `keyPrefix` is a namespace, not an access boundary
+
+It scopes the keys this library composes; it does not restrict what the credentials can
+reach. Anything holding the bucket's credentials can read every prefix in it. Isolation
+that must survive a compromised client belongs in IAM policies or separate buckets.
 
 ---
 
@@ -687,37 +809,57 @@ post-upload position exists because some scanners only accept an object they can
 
 ## 🧪 Testing & Quality
 
+Object storage is where a bug is expensive to discover later — a key written to the wrong
+place stays there — so the suite is held to a bar beyond "the tests pass".
+
+- ✅ **100% line coverage** — statements, branches, functions and lines, enforced as a gate
+- ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at
+  `break: 95`; every survivor was killed by a strengthened assertion, and the eight provable
+  equivalents are documented inline
+- ✅ **Real object storage in e2e** — MinIO through Testcontainers, so multipart, presigning
+  and listing are exercised against an actual S3 API rather than a mock
+- ✅ **Published-artifact gates** — `check:exports` resolves the types the way each module
+  system does, `check:runtime` loads every subpath from the packed tarball in ESM and
+  CommonJS, and `check:published` compiles this README's snippets against `dist/`
+- ✅ **Every suppression is justified** — no coverage directives anywhere; the five
+  `// Stryker disable` comments in the production source each name why the mutant they
+  silence is provably equivalent, and the mutation report lists them
+
 ```bash
-# Unit tests
-pnpm test
-
-# Unit tests with coverage (100% threshold enforced)
-pnpm test:cov
-
-# E2E tests (requires Docker — spins MinIO via Testcontainers)
-pnpm test:e2e
-
-# Mutation testing (Stryker — run manually pre-release, not on every CI commit)
-pnpm mutation
+pnpm test          # unit tests (Jest)
+pnpm test:cov      # unit tests with the 100% coverage gate
+pnpm test:e2e      # end-to-end against MinIO (requires Docker)
+pnpm mutation      # Stryker mutation testing (break: 95)
+pnpm typecheck     # tsc strict check
+pnpm lint          # ESLint
 ```
 
 ---
 
 ## 🤝 Contributing
 
-For feature requests and bugs, open a GitHub issue. Pull requests are welcome; please run `pnpm test:cov` and `pnpm lint` before submitting.
+Pull requests are welcome. Please open an issue first for significant changes.
+
+- Read [`docs/technical_specification.md`](docs/technical_specification.md) for architecture decisions.
+- Run `pnpm test:cov` and `pnpm lint` before opening a PR.
+- Please use Conventional Commits for the message; nothing enforces it here, so it is a convention rather than a gate.
 
 ---
 
 ## 🔒 Security Policy
 
-If you discover a security vulnerability, please **do not** open a public issue.
-Instead, email us at **security@bymax.one** with details. We take security seriously
-and will respond promptly. See [`SECURITY.md`](SECURITY.md) for the full policy,
-including the storage-specific security goals.
+If you discover a security vulnerability, please **do not** open a public issue. Instead, email us
+at **security@bymax.one** with details. We take security seriously and will respond promptly. See
+[`SECURITY.md`](SECURITY.md) for the full policy, including the storage-specific security goals.
 
 ---
 
 ## 📄 License
 
-[MIT](LICENSE) — Copyright (c) 2026 Bymax One
+[MIT](./LICENSE) © [Bymax One](https://github.com/bymaxone)
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ by <a href="https://github.com/bymaxone">Bymax One</a></sub>
+</p>
