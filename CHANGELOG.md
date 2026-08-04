@@ -8,6 +8,22 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-08-04
+
+Documentation only. `dist/` is byte-identical to 1.0.0, 1.0.1 and 1.0.2 — verified by
+unpacking the published tarball and diffing it against a fresh build, not asserted.
+
+### Changed
+
+- **The architecture diagram is drawn rather than listed.** Every published
+  `@bymax-one` library draws this section with box-drawing characters, laid out so the
+  picture shows what flows into what. This one had an indented tree of bullets with a
+  description beside each entry, which says what exists but not how a request moves
+  through it, which step feeds which, or where the decision is made. The redrawn
+  diagram carries what the prose underneath was saying alone: the single chokepoint
+  every caller-supplied key passes before it reaches S3, and the escape hatch beside
+  the two services rather than buried under them.
+
 ## [1.0.2] - 2026-08-04
 
 Documentation only, again — and for the same reason 1.0.1 existed: the README ships
@@ -169,4 +185,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.0.0]: https://github.com/bymaxone/nest-storage/releases/tag/v1.0.0
 [1.0.1]: https://github.com/bymaxone/nest-storage/compare/v1.0.0...v1.0.1
 [1.0.2]: https://github.com/bymaxone/nest-storage/compare/v1.0.1...v1.0.2
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.2...HEAD
+[1.0.3]: https://github.com/bymaxone/nest-storage/compare/v1.0.2...v1.0.3
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.3...HEAD
