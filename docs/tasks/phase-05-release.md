@@ -204,7 +204,7 @@ Create the `CHANGELOG.md` (Keep a Changelog 1.1.0 + SemVer) with the `0.1.0` ent
 
 - [x] `CHANGELOG.md` follows Keep a Changelog 1.1.0 + Semantic Versioning, with an `## [Unreleased]` section and an `## [0.1.0]` `### Added` entry enumerating the v0.1.0 feature set.
 - [x] The `0.1.0` entry lists: provider-agnostic single-engine storage; six provider recipes; `StorageService`; `SignedUrlService`; `IUploadValidator`; `IFileScanner`; 17-code `StorageException` catalog; `keyPrefix`; mandatory path-traversal guard; in-memory LRU idempotency; SSE (AES256 / aws:kms); subpaths `.` and `./shared`.
-- [x] `SECURITY.md` states the private disclosure channel (`security@bymax.one`, no public issues for vulnerabilities) and supported versions.
+- [x] `SECURITY.md` states the private disclosure channel (`support@bymax.one`, no public issues for vulnerabilities) and supported versions.
 - [x] `SECURITY.md` enumerates the storage-specific security goals: path-traversal mitigation in `KeyResolverService`, signed-URL TTL clamping, never logging signed URLs, SSE recommended in production, plaintext-credentials guidance, and the non-AWS checksum opt-out / ACL caveat as operational hardening notes.
 - [x] Both files are valid Markdown.
 
@@ -252,7 +252,7 @@ DELIVERABLES
      aws:kms); subpaths `.` (server) and `./shared`.
    - Leave the exact date as `2026-XX-XX` for Task 5.8 to fill at the gate.
 2. `SECURITY.md`:
-   - Supported versions table + private disclosure process (report to `security@bymax.one`; do not
+   - Supported versions table + private disclosure process (report to `support@bymax.one`; do not
      open public issues for vulnerabilities).
    - Storage-specific SECURITY GOALS: path-traversal mitigation in `KeyResolverService`; signed-URL
      TTL clamping (and the absolute 7-day ceiling); NEVER log signed URLs; SSE recommended in
@@ -269,7 +269,7 @@ Constraints:
 
 Verification:
 - `grep -q '0.1.0' CHANGELOG.md` and `grep -qi 'unreleased' CHANGELOG.md` — expected: both match.
-- `grep -qi 'security@bymax.one' SECURITY.md` — expected: match.
+- `grep -qi 'support@bymax.one' SECURITY.md` — expected: match.
 - `grep -qi 'TTL' SECURITY.md && grep -qi 'traversal' SECURITY.md` — expected: both match.
 
 Completion Protocol (after you finish):
