@@ -760,6 +760,13 @@ with an expiry, not like a link.
 They arrive through module options and are handed to the SDK. This library never reads
 `process.env`, never logs them, and never places them — or a signed URL — in an exception.
 
+They are also not reachable by serializing the objects that hold them. The resolved
+options are injected into every service, so `credentials` is attached as a non-enumerable
+accessor: `JSON.stringify`, object spread, `util.inspect` and `util.inspect` with
+`showHidden` all omit it. Those are the paths taken by code that renders a provider it was
+handed incidentally — a structured logger formatting its arguments, an error reporter
+capturing the scope of a throw. Reading on purpose is unchanged.
+
 ### Error payloads carry the operation, and that includes the key
 
 What `aws-error-mapper` puts in `details` is the provider's error code and message, the
@@ -789,7 +796,7 @@ that must survive a compromised client belongs in IAM policies or separate bucke
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Object keys      | Guarded and normalized in one place; `..`, leading `/`, null bytes and empty keys refused                                                              |
 | Multi-tenancy    | `keyPrefix` prepended after normalization, so it cannot be escaped by the key                                                                          |
-| Credentials      | Injected options only; never read from `process.env`, never logged, never in an exception                                                              |
+| Credentials      | Injected options only; never read from `process.env`, never logged, never in an exception; held in a non-enumerable accessor, so serializing a service omits them |
 | Error payloads   | Provider code and message, HTTP status, request id, and the operation context (`op`, `bucket`, `key`/`prefix`) — never credentials, never a signed URL |
 | Presign lifetime | TTL clamped, SigV4's 7-day ceiling enforced locally                                                                                                    |
 | Encryption       | Server-side (AES256 / `aws:kms`) configurable globally or per upload                                                                                   |

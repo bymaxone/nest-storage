@@ -8,6 +8,25 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-08-04
+
+### Security
+
+- The AWS credentials are no longer disclosed when a service that holds the resolved
+  options is serialized. `credentials` moves from a plain field on the resolved options
+  object to a non-enumerable accessor, so `JSON.stringify`, object spread, `util.inspect`
+  and `util.inspect` with `showHidden` all omit it. The resolved options are injected into
+  `StorageService`, `SignedUrlService`, `ValidationService` and `FileScannerService`, so
+  the long-lived `accessKeyId`, `secretAccessKey` and `sessionToken` were previously
+  emitted in plaintext by anything that rendered one of them incidentally — a structured
+  logger formatting its arguments, an error reporter capturing the scope of a throw.
+  Plain `JSON.stringify` happened not to disclose them only because it throws on the S3
+  client's circular graph, which is an accident rather than a defence: the circular-safe
+  stringifier that pino and winston use disclosed them, as did `util.inspect`.
+
+Reading on purpose is unchanged. `options.credentials.accessKeyId` and its siblings
+resolve exactly as before, and no public type changed.
+
 ## [1.0.3] - 2026-08-04
 
 Documentation only. `dist/` is byte-identical to the one 1.0.2 published — verified by
@@ -188,4 +207,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.0.1]: https://github.com/bymaxone/nest-storage/compare/v1.0.0...v1.0.1
 [1.0.2]: https://github.com/bymaxone/nest-storage/compare/v1.0.1...v1.0.2
 [1.0.3]: https://github.com/bymaxone/nest-storage/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.3...HEAD
+[1.0.4]: https://github.com/bymaxone/nest-storage/compare/v1.0.3...v1.0.4
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.4...HEAD
