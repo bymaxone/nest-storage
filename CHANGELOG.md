@@ -8,6 +8,40 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-04
+
+Documentation only, again — and for the same reason 1.0.1 existed: the README ships
+inside the package, so a correction that stays on `main` leaves the npm page wrong.
+`dist/` is byte-identical to 1.0.0 and 1.0.1, verified by unpacking the published
+tarball and diffing it against a fresh build rather than asserting it.
+
+### Fixed
+
+- **The vulnerability contact pointed at a mailbox that does not exist.** The README's
+  Security Policy and `SECURITY.md` both named `security@bymax.one`. A researcher
+  following those instructions sent a private disclosure into nothing — and from their
+  side, an unread inbox and a maintainer ignoring them look identical, so a report that
+  gets no acknowledgement is usually published anyway. Everything now names
+  `support@bymax.one`, the single inbox that routes.
+
+### Changed
+
+- **The README follows the layout of the published `@bymax-one` libraries, not just
+  their section names.** The previous release standardized which sections exist and
+  left the inside of each as it was. Features is now grouped under subheadings with
+  one entry per capability, Overview carries a `Why nest-storage?` block, Architecture
+  carries the design-principles table that follows its diagram everywhere else,
+  Security Model is one subheading per property, and Testing & Quality states what the
+  suite is held to before listing the commands. The tail gained the family's license
+  line and footer, and Subpath Exports gained the dependency diagram and peer matrix.
+- **Four statements corrected against the source.** `KeyResolverService` was listed as
+  public API and is not exported; the module was described as refusing an unusable
+  configuration at bootstrap, where `validate-options` deliberately tolerates empty
+  credentials so a development workflow boots; `STORAGE_INVALID_PART_COUNT` was missing
+  from the error table; and the suppression claim said the production source carries no
+  mutation directives, where it carries five, each naming why its mutant is provably
+  equivalent.
+
 ## [1.0.1] - 2026-08-03
 
 Documentation only. `dist/` is byte-identical to the one published in 1.0.0 —
@@ -134,4 +168,5 @@ have regressed from. They are kept because the reasoning is worth having.
 
 [1.0.0]: https://github.com/bymaxone/nest-storage/releases/tag/v1.0.0
 [1.0.1]: https://github.com/bymaxone/nest-storage/compare/v1.0.0...v1.0.1
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.1...HEAD
+[1.0.2]: https://github.com/bymaxone/nest-storage/compare/v1.0.1...v1.0.2
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.2...HEAD
