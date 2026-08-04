@@ -821,7 +821,9 @@ place stays there — so the suite is held to a bar beyond "the tests pass".
 - ✅ **Published-artifact gates** — `check:exports` resolves the types the way each module
   system does, `check:runtime` loads every subpath from the packed tarball in ESM and
   CommonJS, and `check:published` compiles this README's snippets against `dist/`
-- ✅ **Zero suppressions** — no coverage or mutation directives in the production source
+- ✅ **Every suppression is justified** — no coverage directives anywhere; the five
+  `// Stryker disable` comments in the production source each name why the mutant they
+  silence is provably equivalent, and the mutation report lists them
 
 ```bash
 pnpm test          # unit tests (Jest)
@@ -840,7 +842,7 @@ Pull requests are welcome. Please open an issue first for significant changes.
 
 - Read [`docs/technical_specification.md`](docs/technical_specification.md) for architecture decisions.
 - Run `pnpm test:cov` and `pnpm lint` before opening a PR.
-- Conventional Commits are used for every change.
+- Please use Conventional Commits for the message; nothing enforces it here, so it is a convention rather than a gate.
 
 ---
 
