@@ -677,29 +677,39 @@ supply through it first: the guard below, then `keyPrefix`. The key you read bac
 ## 🏗️ Architecture
 
 ```
-BymaxStorageModule (@Global, forRoot / forRootAsync)
-  │
-  ├── validate-options ──────── refuses a malformed configuration at bootstrap.
-  │                             Credentials are the deliberate exception: empty
-  │                             values are tolerated so a dev workflow boots without
-  │                             storage, and operations then fail with
-  │                             STORAGE_NOT_CONFIGURED rather than at module load
-  │
-  ├── S3ClientProvider ───────── one @aws-sdk/client-s3 S3Client, built from the
-  │                             resolved provider recipe; exposed as
-  │                             BYMAX_STORAGE_S3_CLIENT for anything this surface
-  │                             deliberately does not wrap
-  │
-  ├── KeyResolverService ─────── the only place a caller-supplied key becomes an
-  │                             object key: guard, then keyPrefix
-  │
-  ├── StorageService ─────────── upload · download · head · exists · list · copy ·
-  │                             delete · deleteMany
-  │       ├── IUploadValidator[] (MIME + size, then any you register)
-  │       ├── IFileScanner       (pre- and/or post-upload)
-  │       └── IdempotencyCache   (LRU, in-process)
-  │
-  └── SignedUrlService ───────── GET / PUT / multipart presigns, TTL-clamped
+                 BymaxStorageModule.forRoot / forRootAsync
+                                    │
+                          validateOptions (fail fast)
+                     credentials tolerated empty on purpose
+                                    │
+                    ┌───────────────┴────────────────┐
+                    │        S3ClientProvider        │
+                    │  one @aws-sdk/client-s3 client │
+                    │  built from a provider recipe  │
+                    └───────────────┬────────────────┘
+                                    │
+                        BYMAX_STORAGE_S3_CLIENT
+                     (escape hatch — the raw S3Client)
+                                    │
+          ┌─────────────────────────┴─────────────────────────┐
+          │                                                   │
+    StorageService                                     SignedUrlService
+  upload · download                                  GET · PUT · multipart
+  head · exists · list                                   TTL-clamped
+  copy · delete · deleteMany                         SigV4 ceiling 7 days
+          │                                                   │
+          └──────────────┬────────────────────────────────────┘
+                         │
+                  KeyResolverService
+        every caller key passes here before S3:
+        refuse `..`, leading `/`, NUL, empty → then keyPrefix
+                         │
+    ┌────────────────────┼────────────────────┐
+    │                    │                    │
+IUploadValidator[]   IFileScanner       IdempotencyCache
+MIME + size, then    pre- and/or        LRU, in-process,
+yours                post-upload        collapses a retry
+   (yours)             (yours)          within one instance
 ```
 
 One engine, six recipes. `providerRecipes` differ only in endpoint, region and the
