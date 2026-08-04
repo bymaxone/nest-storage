@@ -3,8 +3,8 @@
 ## Supported Versions
 
 | Version | Supported |
-|---|---|
-| 1.0.x | ✅ |
+| ------- | --------- |
+| 1.0.x   | ✅        |
 
 Only the latest minor release receives security patches. Upgrade to the current version before reporting.
 
@@ -12,7 +12,7 @@ Only the latest minor release receives security patches. Upgrade to the current 
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Email **[security@bymax.one](mailto:security@bymax.one)** with:
+Email **[support@bymax.one](mailto:support@bymax.one)** with:
 
 - A clear description of the vulnerability and its impact
 - Steps to reproduce (minimal reproduction preferred)
@@ -97,11 +97,11 @@ If you build a custom configuration instead of using a recipe, you must add this
 
 The following files have elevated security relevance and warrant close review on any change:
 
-| File | Concern |
-|---|---|
-| `src/server/services/key-resolver.service.ts` | Path-traversal guard; keyPrefix isolation |
-| `src/server/utils/ttl-clamp.ts` | Signed-URL TTL clamping and SigV4 ceiling |
-| `src/server/utils/mime-match.ts` | MIME wildcard matching (mismatches could allow disallowed types) |
-| `src/server/utils/idempotency-cache.ts` | In-memory LRU; per-instance (not shared across replicas) |
-| `src/server/services/signed-url.service.ts` | Presigned URL generation; never log the output |
-| `src/server/config/validate-options.ts` | Module-options validation; malformed config must fail closed |
+| File                                          | Concern                                                          |
+| --------------------------------------------- | ---------------------------------------------------------------- |
+| `src/server/services/key-resolver.service.ts` | Path-traversal guard; keyPrefix isolation                        |
+| `src/server/utils/ttl-clamp.ts`               | Signed-URL TTL clamping and SigV4 ceiling                        |
+| `src/server/utils/mime-match.ts`              | MIME wildcard matching (mismatches could allow disallowed types) |
+| `src/server/utils/idempotency-cache.ts`       | In-memory LRU; per-instance (not shared across replicas)         |
+| `src/server/services/signed-url.service.ts`   | Presigned URL generation; never log the output                   |
+| `src/server/config/validate-options.ts`       | Module-options validation; malformed config must fail closed     |
