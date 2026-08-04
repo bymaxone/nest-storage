@@ -10,8 +10,10 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [1.0.3] - 2026-08-04
 
-Documentation only. `dist/` is byte-identical to 1.0.0, 1.0.1 and 1.0.2 — verified by
-unpacking the published tarball and diffing it against a fresh build, not asserted.
+Documentation only. `dist/` is byte-identical to the one 1.0.2 published — verified by
+unpacking `@bymax-one/nest-storage@1.0.2` from the registry and diffing it against a
+fresh build (`diff -r`, no output), not asserted. 1.0.0 and 1.0.1 shipped the same
+`dist/`, so the artifact has not changed since the first release.
 
 ### Changed
 
