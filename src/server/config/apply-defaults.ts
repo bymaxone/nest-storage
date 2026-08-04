@@ -36,11 +36,12 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
   const publicBaseUrl =
     options.publicBaseUrl ?? `${trimTrailingSlashes(options.endpoint)}/${options.bucket}`
 
-  return {
+  const credentials = { ...options.credentials }
+
+  const resolved: Omit<ResolvedBymaxStorageOptions, 'credentials'> = {
     endpoint: options.endpoint,
     region: options.region,
     bucket: options.bucket,
-    credentials: { ...options.credentials },
     forcePathStyle: options.forcePathStyle ?? DEFAULT_FORCE_PATH_STYLE,
     publicBaseUrl,
     ...(options.cdnBaseUrl !== undefined ? { cdnBaseUrl: options.cdnBaseUrl } : {}),
@@ -62,4 +63,21 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     requestTimeoutMs: options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
     hasCredentials,
   }
+
+  // The long-lived AWS keys are attached as a non-enumerable accessor rather
+  // than as a plain field. This object is injected into every service, so an
+  // enumerable `credentials` is emitted by whatever serializes one of them
+  // incidentally: a structured logger rendering its arguments, an error
+  // reporter capturing the scope of a throw, an object spread. Non-enumerable
+  // removes it from `JSON.stringify`, spread and `util.inspect`; making it an
+  // accessor also keeps it out of `inspect({ showHidden: true })`, which is
+  // what a diagnostic dump uses and which still prints a hidden data property.
+  // Reads are unchanged — `options.credentials.accessKeyId` resolves as before.
+  Object.defineProperty(resolved, 'credentials', {
+    get: (): ResolvedBymaxStorageOptions['credentials'] => credentials,
+    enumerable: false,
+    configurable: false,
+  })
+
+  return resolved as ResolvedBymaxStorageOptions
 }

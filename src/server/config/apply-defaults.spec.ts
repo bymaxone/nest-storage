@@ -3,6 +3,8 @@
  * detection, public-base-URL derivation, and exact-optional handling.
  * @layer server/config
  */
+import { inspect } from 'node:util'
+
 import { applyDefaults } from './apply-defaults'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 import type { IFileScanner } from '../interfaces/file-scanner.interface'
@@ -85,7 +87,11 @@ describe('applyDefaults', () => {
       defaultPutTtlSeconds: 300,
       maxTtlSeconds: 604_800,
     })
-    expect(r.multipart).toEqual({ thresholdBytes: 5_242_880, partSizeBytes: 5_242_880, queueSize: 4 })
+    expect(r.multipart).toEqual({
+      thresholdBytes: 5_242_880,
+      partSizeBytes: 5_242_880,
+      queueSize: 4,
+    })
     expect(r.requestChecksumCalculation).toBe('WHEN_SUPPORTED')
     expect(r.responseChecksumValidation).toBe('WHEN_SUPPORTED')
     expect(r.maxAttempts).toBe(3)
@@ -128,7 +134,11 @@ describe('applyDefaults', () => {
       defaultPutTtlSeconds: 120,
       maxTtlSeconds: 1000,
     })
-    expect(r.multipart).toEqual({ thresholdBytes: 10_000_000, partSizeBytes: 6_000_000, queueSize: 8 })
+    expect(r.multipart).toEqual({
+      thresholdBytes: 10_000_000,
+      partSizeBytes: 6_000_000,
+      queueSize: 8,
+    })
     expect(r.requestChecksumCalculation).toBe('WHEN_REQUIRED')
     expect(r.responseChecksumValidation).toBe('WHEN_REQUIRED')
     expect(r.maxAttempts).toBe(5)
@@ -139,6 +149,55 @@ describe('applyDefaults', () => {
     expect(r.serverSideEncryption).toBe('aws:kms')
     expect(r.kmsKeyId).toBe('key-1')
     expect(r.credentials.sessionToken).toBe('t')
+  })
+
+  it('should keep the credentials out of every incidental serialization path', () => {
+    // The resolved options are injected into every service, so whatever
+    // serializes one of them incidentally reaches this object: a structured
+    // logger rendering its arguments, an error reporter capturing the scope of
+    // a throw, an object spread. A circular-safe stringifier stands in for the
+    // logger because that is what pino and winston use, and because plain
+    // `JSON.stringify` only fails here by accident — it throws on the S3
+    // client's circular graph rather than by withholding anything.
+    const secret = 'wJalrXUtnFEMI-canary'
+    const r = applyDefaults({
+      ...base,
+      credentials: { accessKeyId: 'AKIA', secretAccessKey: secret },
+    })
+
+    const safeStringify = (value: unknown): string => {
+      const seen = new WeakSet()
+      return JSON.stringify(value, (_key: string, val: unknown): unknown => {
+        if (typeof val === 'object' && val !== null) {
+          if (seen.has(val)) return '[Circular]'
+          seen.add(val)
+        }
+        return val
+      })
+    }
+
+    expect(safeStringify(r)).not.toContain(secret)
+    expect(safeStringify({ ...r })).not.toContain(secret)
+    expect(inspect(r, { depth: null })).not.toContain(secret)
+    // `showHidden` is why the property is an accessor and not merely a
+    // non-enumerable value: a hidden data property is still printed here.
+    expect(inspect(r, { depth: null, showHidden: true })).not.toContain(secret)
+    expect(Object.keys(r)).not.toContain('credentials')
+  })
+
+  it('should still expose the credentials to code that reads them on purpose', () => {
+    // Containment must cost nothing at the supported surface: the S3 client
+    // provider reads these fields to authenticate, so hiding the property from
+    // serialization must not hide it from property access.
+    const r = applyDefaults({
+      ...base,
+      credentials: { accessKeyId: 'AKIA', secretAccessKey: 's3cret', sessionToken: 'tok' },
+    })
+
+    expect(r.credentials.accessKeyId).toBe('AKIA')
+    expect(r.credentials.secretAccessKey).toBe('s3cret')
+    expect(r.credentials.sessionToken).toBe('tok')
+    expect(r.hasCredentials).toBe(true)
   })
 
   it('should shallow-merge a partial signedUrls over the defaults', () => {
