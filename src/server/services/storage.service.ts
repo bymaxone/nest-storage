@@ -46,7 +46,7 @@ import {
 } from '../utils/header-utils'
 import { getBodySize, isBufferLike, type UploadBody } from '../utils/stream-utils'
 import { pickUploadStrategy } from '../utils/upload-strategy'
-import { IdempotencyCache } from '../utils/idempotency-cache'
+import type { IdempotencyCache } from '../utils/idempotency-cache'
 import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
 
 /** Common metadata fields shared by `HeadObject` and `GetObject` responses. */
