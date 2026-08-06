@@ -8,7 +8,7 @@
  * @layer server/module
  */
 import { type DynamicModule, Global, Module, type Provider } from '@nestjs/common'
-import { S3Client } from '@aws-sdk/client-s3'
+import type { S3Client } from '@aws-sdk/client-s3'
 import {
   BYMAX_STORAGE_FILE_SCANNER,
   BYMAX_STORAGE_IDEMPOTENCY_CACHE,
