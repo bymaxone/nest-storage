@@ -8,6 +8,30 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-08-06
+
+**Documentation and tooling, not behaviour.** `dist/` differs from `1.0.5` only in the text
+of five comments; no runtime code changed.
+
+### Fixed
+
+- **Five of the six suppression reasons never reached the mutation report.** Stryker captures
+  a directive's reason only after the colon and only to the end of that comment line. Five
+  directives wrapped their reason onto following `//` lines, so the report kept a truncated
+  half-sentence — and for the one on `storage.service.ts` it kept nothing, falling back to
+  `Ignored using a comment`. `docs/mutation_testing_results.md` had specified the right shape
+  (`<Mutator>: <reason>`) all along; the source did not follow it. Each reason is now on its
+  directive line.
+- The README counted **five** `// Stryker disable` comments where the source carries six.
+
+### Added
+
+- `check:mutants` gate (`scripts/check-mutation-directives.mjs`) — validates every
+  `// Stryker` comment against the parser's own regular expression, rejecting a reason
+  wrapped onto a second line, a reason written after `--` instead of a colon, and a mutator
+  name Stryker does not know, which would silence nothing. Wired into CI and
+  `prepublishOnly`.
+
 ## [1.0.5] - 2026-08-06
 
 **Published-artifact change, not a behavioural one.** `dist/` differs from `1.0.4` — this
@@ -221,6 +245,7 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.0.1]: https://github.com/bymaxone/nest-storage/compare/v1.0.0...v1.0.1
 [1.0.2]: https://github.com/bymaxone/nest-storage/compare/v1.0.1...v1.0.2
 [1.0.3]: https://github.com/bymaxone/nest-storage/compare/v1.0.2...v1.0.3
-[1.0.5]: https://github.com/bymaxone/nest-storage/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/bymaxone/nest-storage/compare/v1.0.3...v1.0.4
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.4...HEAD
+[1.0.5]: https://github.com/bymaxone/nest-storage/compare/v1.0.4...v1.0.5
+[1.0.6]: https://github.com/bymaxone/nest-storage/compare/v1.0.5...v1.0.6
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.6...HEAD

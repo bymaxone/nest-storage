@@ -32,9 +32,7 @@ export function mimeMatches(mime: string, whitelist: readonly string[]): boolean
   // Strip RFC 2045 parameters (text after the first semicolon) without optional chaining
   const mimeBase = mime.includes(';') ? mime.slice(0, mime.indexOf(';')) : mime
   const normalized = mimeBase.trim().toLowerCase()
-  // Stryker disable next-line ConditionalExpression: an empty `normalized` can never
-  // contain '/', so `!normalized.includes('/')` already covers the length===0 case —
-  // forcing the first operand to false is behaviourally identical (equivalent mutant).
+  // Stryker disable next-line ConditionalExpression: an empty `normalized` can never contain '/', so `!normalized.includes('/')` already covers the length===0 case — forcing the first operand to false is behaviourally identical (equivalent mutant).
   if (normalized.length === 0 || !normalized.includes('/')) {
     return false
   }
