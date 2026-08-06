@@ -149,3 +149,34 @@ suppressed with written reasons.
 | `src/server/utils/header-utils.ts` | 100% |
 
 All critical paths met the 100% target. The 8 provable equivalent mutants are documented inline in the source files with written reasons (see the "Provable equivalent mutants" section above). No production behaviour was changed to reach this score.
+
+---
+
+## Re-run — 2026-08-06
+
+| Metric              | Value            |
+| ------------------- | ---------------- |
+| **Mutation score**  | **100.00 %**  |
+| Surviving mutants   | 0               |
+| Break threshold     | 95 % -> PASS     |
+
+The AWS keys are withheld behind a non-enumerable accessor, and the suite already checked every
+serialization path that would leak them. What it did not check is the flag those assertions rest
+on: a CONFIGURABLE accessor can be redefined back into a plain enumerable value by anything
+holding the object, which is exactly the exposure the accessor exists to prevent.
+
+That flag is load-bearing here specifically. The sibling cache and queue packages resolve their
+options through `Object.freeze`, which makes every property non-configurable anyway; there the
+same mutant is equivalent and says so in place. This options object is not frozen, so nothing but
+the flag enforces it — and until now nothing asserted the flag.
+
+The two remaining equivalents: the trailing-slash loop exits on the character test, never on the
+index bound, because `value[-1]` is undefined; and `slice(0, length)` returns the same string the
+guard returns directly.
+
+Every equivalence claim in this section was checked by running the mutant, not by reading it.
+Where a `// Stryker disable next-line` directive was found not to apply — above a `} catch {`, a
+`.replace()` inside a method chain, a multi-line `sort(...)` argument, or anywhere inside a
+builder chain — it was replaced with the block `disable`/`restore` form, or, where that does not
+work either, with a plain comment at the line so the reasoning is visible rather than silently
+ineffective.

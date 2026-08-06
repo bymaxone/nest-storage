@@ -8,6 +8,19 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-08-06
+
+**Runtime change.** `dist/` differs from `1.0.4`: the source carries new mutation-suppression
+comments, and this package's bundler preserves comments.
+
+### Tests
+
+- `configurable: false` on the withheld credentials accessor had nothing asserting it. That flag
+  is the guarantee behind every serialization assertion already in the suite: a configurable
+  accessor can be redefined back into a plain enumerable value by anything holding the object.
+  It is load-bearing in this package specifically — the sibling cache and queue packages freeze
+  their resolved options, which makes every property non-configurable anyway; this one does not.
+
 ## [1.0.4] - 2026-08-04
 
 ### Security
