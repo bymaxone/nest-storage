@@ -10,8 +10,9 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [1.0.5] - 2026-08-06
 
-**Runtime change.** `dist/` differs from `1.0.4`: the source carries new mutation-suppression
-comments, and this package's bundler preserves comments.
+**Published-artifact change, not a behavioural one.** `dist/` differs from `1.0.4` — this
+bundler preserves comments and the source gained mutation-suppression notes — but no runtime
+path changed. Measured by building both revisions and diffing the output.
 
 ### Tests
 
