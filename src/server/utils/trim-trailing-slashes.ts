@@ -36,8 +36,10 @@ const SLASH = '/'
  */
 export function trimTrailingSlashes(value: string): string {
   let end = value.length
+  // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — the index bound never decides the exit, the character test does: `value[-1]` is undefined, which is not a slash
   while (end > 0 && value[end - 1] === SLASH) {
     end -= 1
   }
+  // Stryker disable next-line ConditionalExpression: equivalent in value — `slice(0, length)` returns the same string; the guard returns the original reference instead of a copy, which no caller can observe
   return end === value.length ? value : value.slice(0, end)
 }
