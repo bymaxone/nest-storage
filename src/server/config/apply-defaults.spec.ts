@@ -183,6 +183,17 @@ describe('applyDefaults', () => {
     // non-enumerable value: a hidden data property is still printed here.
     expect(inspect(r, { depth: null, showHidden: true })).not.toContain(secret)
     expect(Object.keys(r)).not.toContain('credentials')
+    // …and the accessor has to be non-configurable, which is the guarantee behind all of the
+    // above. A configurable one can be redefined back into a plain enumerable value by anything
+    // holding the object — the exact serialization these assertions exist to prevent — and this
+    // object is injected into every service. Nothing else here can tell `false` from `true`,
+    // because every assertion above passes either way, and this options object is NOT frozen, so
+    // the flag is the only thing enforcing it.
+    const descriptor = Object.getOwnPropertyDescriptor(r, 'credentials')
+    expect(descriptor?.configurable).toBe(false)
+    expect(() => {
+      Object.defineProperty(r, 'credentials', { value: 'rewritten', enumerable: true })
+    }).toThrow(TypeError)
   })
 
   it('should still expose the credentials to code that reads them on purpose', () => {

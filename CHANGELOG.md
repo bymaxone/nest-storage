@@ -8,6 +8,20 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-08-06
+
+**Published-artifact change, not a behavioural one.** `dist/` differs from `1.0.4` — this
+bundler preserves comments and the source gained mutation-suppression notes — but no runtime
+path changed. Measured by building both revisions and diffing the output.
+
+### Tests
+
+- `configurable: false` on the withheld credentials accessor had nothing asserting it. That flag
+  is the guarantee behind every serialization assertion already in the suite: a configurable
+  accessor can be redefined back into a plain enumerable value by anything holding the object.
+  It is load-bearing in this package specifically — the sibling cache and queue packages freeze
+  their resolved options, which makes every property non-configurable anyway; this one does not.
+
 ## [1.0.4] - 2026-08-04
 
 ### Security
@@ -207,5 +221,6 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.0.1]: https://github.com/bymaxone/nest-storage/compare/v1.0.0...v1.0.1
 [1.0.2]: https://github.com/bymaxone/nest-storage/compare/v1.0.1...v1.0.2
 [1.0.3]: https://github.com/bymaxone/nest-storage/compare/v1.0.2...v1.0.3
+[1.0.5]: https://github.com/bymaxone/nest-storage/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/bymaxone/nest-storage/compare/v1.0.3...v1.0.4
 [Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.4...HEAD
