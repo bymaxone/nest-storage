@@ -838,9 +838,11 @@ place stays there — so the suite is held to a bar beyond "the tests pass".
 - ✅ **Published-artifact gates** — `check:exports` resolves the types the way each module
   system does, `check:runtime` loads every subpath from the packed tarball in ESM and
   CommonJS, and `check:published` compiles this README's snippets against `dist/`
-- ✅ **Every suppression is justified** — no coverage directives anywhere; the five
+- ✅ **Every suppression is justified** — no coverage directives anywhere; the six
   `// Stryker disable` comments in the production source each name why the mutant they
-  silence is provably equivalent, and the mutation report lists them
+  silence is provably equivalent, and `check:mutants` proves each reason is written in the
+  grammar Stryker parses, so the mutation report carries it in full rather than the
+  `Ignored using a comment` fallback
 
 ```bash
 pnpm test          # unit tests (Jest)
