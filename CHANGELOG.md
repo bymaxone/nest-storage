@@ -24,6 +24,15 @@ of five comments; no runtime code changed.
   directive line.
 - The README counted **five** `// Stryker disable` comments where the source carries six.
 
+### Security
+
+- **`js-yaml` is patched to the fixed release** (GHSA-5p4m-2wfm-xmqj, CVSS 7.5). It reaches
+  this repo only through `jest` -> `babel-plugin-istanbul` -> `@istanbuljs/load-nyc-config`,
+  and `dependencies` is empty, so nothing here ships it and no consumer was exposed. Fixed
+  with a `pnpm-workspace.yaml` override to `3.15.1` / `4.3.1` — a patch bump within each
+  major — rather than by telling the scanner to ignore dev dependencies, which would leave it
+  blind after this advisory is gone. `dist/` is unaffected.
+
 ### Added
 
 - `check:mutants` gate (`scripts/check-mutation-directives.mjs`) — validates every

@@ -22,6 +22,13 @@ overrides:
   'brace-expansion@5': '^5.0.8'
   'esbuild': '0.28.1'
   'fast-uri': '^3.1.4'
+  # GHSA-5p4m-2wfm-xmqj (CVSS 7.5). Reaches this repo only through
+  # jest -> babel-plugin-istanbul -> @istanbuljs/load-nyc-config, and `dependencies` is
+  # empty, so nothing here ships it. Patched rather than excluded from the scan: the fix
+  # is a patch bump within each major, and a scanner told to ignore dev dependencies would
+  # stay blind after this advisory is gone.
+  'js-yaml@3': '^3.15.1'
+  'js-yaml@4': '^4.3.1'
   'multer': '2.2.0'
   'protobufjs': '^7.6.5'
   'qs': '6.15.2'
