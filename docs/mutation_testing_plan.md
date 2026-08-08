@@ -27,9 +27,7 @@ Mutation testing is **not** run on every CI commit — a full run takes 10–20 
 pnpm mutation
 
 # Incremental (re-checks only files changed since last run — much faster):
-pnpm mutation:incremental
-
-# Dry run (reports what would be mutated without running tests):
+pnpm mutation:full        # cold — deletes the baseline first, measures the truth
 pnpm mutation:dry-run
 ```
 
