@@ -8,6 +8,23 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-11
+
+Coordinated ecosystem release aligning every `@bymax-one/*` package after the ioredis 6 /
+bullmq 6 migration. **No source, runtime, or public-API change in this package** — the
+published `dist/` is byte-identical to `1.0.6`; the changes below are development
+and CI tooling only.
+
+### Changed
+
+- Bumped the `dev-dependencies` group with 6 updates. None of these reaches the published bundle.
+- Bumped the pinned `google/osv-scanner-action` CI action from 2.3.8 to 2.5.0.
+- Bumped the pinned `step-security/harden-runner` CI action from 2.20.0 to 2.20.1.
+- Bumped the pinned `pnpm/action-setup` CI action from 6.0.9 to 6.0.10.
+- Bumped the pinned `github/codeql-action/upload-sarif` CI action from 4.37.4 to 4.37.6 in the
+  codeql group.
+- Reworked the mutation workflow to run incrementally on each push and to measure cold once a week.
+
 ## [1.0.6] - 2026-08-06
 
 **Documentation and tooling, not behaviour.** `dist/` differs from `1.0.5` only in the text
@@ -257,4 +274,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.0.4]: https://github.com/bymaxone/nest-storage/compare/v1.0.3...v1.0.4
 [1.0.5]: https://github.com/bymaxone/nest-storage/compare/v1.0.4...v1.0.5
 [1.0.6]: https://github.com/bymaxone/nest-storage/compare/v1.0.5...v1.0.6
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.0.6...HEAD
+[1.1.0]: https://github.com/bymaxone/nest-storage/compare/v1.0.6...v1.1.0
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.0...HEAD
