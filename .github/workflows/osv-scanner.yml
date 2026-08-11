@@ -1,3 +1,8 @@
+# Scans the full resolved dependency tree (the lockfile) against the OSV
+# database — the audit dependency-review (PR diff only) and peer-advisory-drift
+# (declared ranges only) do not do. A transitive package already installed can
+# turn vulnerable between releases; this re-reads the whole tree on push, PR,
+# and a weekly schedule. The scan itself lives once in bymaxone/.github.
 name: OSV-Scanner
 
 on:
@@ -6,6 +11,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
+    # Weekly, off the hour so the scheduled run does not cluster at :00.
     - cron: '42 6 * * 3'
 
 permissions:
@@ -13,23 +19,4 @@ permissions:
 
 jobs:
   scan:
-    name: OSV vulnerability scan
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Run OSV-Scanner
-        uses: google/osv-scanner-action/osv-scanner-action@8deb546fdb875b9996d27d4950be7312dac076a1 # v2.5.0
-        with:
-          scan-args: |-
-            --recursive
-            ./
+    uses: bymaxone/.github/.github/workflows/osv-scanner.yml@v1
