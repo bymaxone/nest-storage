@@ -1,285 +1,309 @@
-# @bymax-one/nest-storage — Architecture Deep Dive
+# @bymax-one/nest-storage — AGENTS.md
+
+`@bymax-one/nest-storage` is a published NestJS library that wraps a single `@aws-sdk/client-s3`
+`S3Client` behind a provider-agnostic API — upload, download, head, list, copy, delete, and
+presigned GET/PUT/multipart URLs — across AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces,
+MinIO and Wasabi. It ships zero runtime dependencies; everything it needs is a peer dependency the
+consuming application owns.
+
+Start with `CLAUDE.md`, which is the full contract for working in this repository: the nine critical
+rules, the subpath export map, the quality gates and the commit conventions. This file does not
+restate it. What follows is the review layer, and then the architecture deep-dive `CLAUDE.md` points
+at.
+
+## Code Review Rules
+
+<!-- shared:begin -->
+<!--
+  CANONICAL COPY: bymaxone/.github → agents/code-review-rules.md
+  Do not edit this block in a consuming repository. It is replaced wholesale by
+  the `agents-sync` reusable workflow, so a local edit is reverted on the next
+  run. Change it here, cut a release, and every repository is offered the update.
+
+  Repository-specific rules go OUTSIDE this block, below the closing marker.
+-->
+
+These rules hold in every Bymax repository. What is specific to this one is written after this
+block, and the two are read together.
+
+The pipeline already enforces formatting, linting, dependency policy, coverage and — where the
+repository has one — the mutation gate. Do not spend a review on a **violation** of one of those: it
+is a red check, not a comment. What follows is what CI cannot see.
+
+**A change to the enforcing configuration is the opposite case, and it is in scope.** Every gate runs
+the configuration from the branch under review — that branch's lint config, its coverage thresholds,
+its mutation thresholds. So a pull request that deletes a rule, lowers a threshold or widens an
+ignore glob turns the check **green**, because a gate reports on the rules it was handed. For those
+diffs the review is the only independent check there is, and a weakened gate needs the same
+justification a suppression does.
+
+### A finding names what it read
+
+Every factual claim in a review — about a library's API, about this repository's history, about what
+a file contains — has to come from something read in the tree under review, and the finding should
+say which. A claim assembled from recollection is likely to describe a previous version of whatever
+it is about.
+
+**Safe path**, by the kind of claim:
+
+| Claim about                         | Read this                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------ |
+| A library's API **shape**           | `node_modules/<pkg>/dist/**/*.d.ts` in this tree                               |
+| A library's **runtime behaviour**   | that version's changelog entry, its documentation, or a test that exercises it |
+| Commit authorship, dates or history | `git log --format='%an <%ae> / %cn <%ce>' <sha>`                               |
+| What a file contains                | the file at the revision under review, not an earlier one                      |
+
+The first two rows are separate on purpose, and the rule below says why: a field can stay optional
+in the published type while becoming mandatory in behaviour. A `.d.ts` settles what a signature
+accepts and nothing about what the implementation does with it, so a behavioural claim resting on
+one is unfounded.
+
+Weight the checking by what acting on the finding would cost. A comment that asks for a reworded
+sentence is cheap to be wrong about; one that asks for history to be rewritten, a merge reverted, or
+a release pulled is not — verify that class before raising it, and raise it at the severity the
+evidence supports rather than the severity the consequence would deserve if true.
+
+### A dependency upgrade migrates every call site, not only the ones that fail to compile
+
+When an upgrade tightens a contract, the compiler catches only the call sites whose **shape**
+changed. A field that stays optional in the published type while becoming mandatory in behaviour
+compiles, passes the unit suite, and fails in production.
+
+A `@bymax-one/*` version number carries **no compatibility information** while the libraries are
+pre-stable: breaking changes ship in minor and patch releases by explicit policy, so `^` and `~`
+protect against nothing. The migration note under **Apply to a derived backend** in the library's own
+changelog is the compatibility contract.
+
+**Safe path:** read **every** changelog entry from the version being replaced up to the proposed
+one, not only the proposed one's, and check every call site they name — not only the ones the
+compiler rejected. Upgrades routinely skip releases, and the entry that matters is often not the
+last one: adopting `@bymax-one/nest-cache` 1.1.0 → 1.2.1 skipped 1.2.0, where a namespace-validation
+security fix lives; 1.2.1's own entry is a field rename. Diff the `.d.ts` of the **previously adopted** version against
+the **proposed** one — `npm pack` both, and name the two versions. Reaching for "the installed
+declarations" is the trap: in a checkout of the branch under review the installed tree is already
+the new version, so that diff compares a release with itself and shows nothing.
+
+### Settled decisions are not review findings
+
+Both are settled deliberately, and reopening either costs a round trip and changes nothing:
+
+- **Do not propose a major version bump** for a breaking change in a `@bymax-one/*` library, and do
+  not assert that this ecosystem follows strict SemVer. Until an API is declared stable, breaking
+  changes ship in minor and patch releases; the migration note carries the compatibility information
+  the number does not. If a document claims strict SemVer, the finding is that the claim is wrong —
+  not that the version should be raised.
+- **Do not propose pinning `bymaxone/.github` reusable workflows to a commit SHA.** They are
+  referenced by the `@v1` alias on purpose: a fix has to land once and reach every repository, the
+  tag is immutable and the alias moves only on a release, and pinning was measured to cost ~58
+  dependency pull requests to propagate one change. Third-party actions are the opposite case and
+  **are** pinned by SHA.
+
+**Safe path:** if you believe a settled decision is now wrong, say so as a question in the pull
+request rather than as a finding.
 
-For a concise agent quick reference, see `CLAUDE.md`. This document explains the internal design decisions in sufficient depth for an AI agent (or human contributor) to make correct changes without misunderstanding the system.
+### Suppressions are refusals, not exceptions
 
----
+`@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `eslint-disable` in any form,
+`as unknown as` laundering a real type error, `istanbul ignore`, and in Rust `#[allow(...)]` over a
+lint gate or `unsafe` without a `// SAFETY:` comment are blocking findings.
 
-## 1. Package Design
+Anything a configured gate already reports belongs to the gate, not to a review: where a repository
+lints `no-explicit-any` as an error — most do — an `as any` is a red check, and raising it here only
+duplicates it. Check the repository's lint configuration before reporting a suppression rather than
+assuming the list is exhaustive in either direction.
+
+A failing gate means the code is wrong, the type is wrong, or the rule is wrong. **Safe path:** fix
+whichever it is. Changing a rule's configuration with a stated reason is legitimate; scattering
+per-call-site silencers is not.
 
-### 1.1 Single-engine, provider-agnostic
+### Comments state constraints, never history
 
-The entire library wraps a single `@aws-sdk/client-s3` `S3Client`. There is no provider-specific branching in the core services — the differences between AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, MinIO, and Wasabi are expressed as `BymaxStorageModuleOptions` (configuration), not as code branches. Provider-specific config is produced by the `providerRecipes` helpers.
+A comment must read as true for whoever opens the file next. Flag any comment that narrates what a
+previous version did, names a phase, task, ticket or review round, or explains a change rather than
+the code. **Safe path:** state the constraint that still holds, and let `git log` carry the history.
+
+### Size and layering
+
+Functions over **50 lines** and nesting deeper than four levels are findings in the repository's own
+source and test directories. Every non-trivial source file opens with a header stating its purpose
+and its layer, and every exported symbol carries a doc comment.
+
+**The 800-line file limit applies to what a change introduces, not to what it inherits.** A
+repository that already carries a file past the line — a generator, a long end-to-end suite — would
+otherwise produce a finding on every pull request touching three lines of it, which the author
+cannot act on and did not cause. Raise it for a **new** file over the limit, or when a change pushes
+a file past it or materially grows one already over.
 
-### 1.2 Zero runtime dependencies
+Markdown, generated output and lockfiles are **out of scope**: a changelog is an append-only log that
+only grows, a lockfile is generated, and neither has layers. Reporting their length is a false
+positive on every dependency bump and every release note.
+
+**Safe path:** extract by responsibility rather than by line count — the limit is a symptom, and one
+file doing two jobs is the defect.
+
+### No placeholders for empty directories
 
-`package.json` ships `"dependencies": {}`. Every runtime dependency is a `peerDependency` — the consumer application controls the versions. This minimises the library's supply-chain footprint.
+`.gitkeep`, `.keep` and pre-created empty directory skeletons do not belong in the tree. A directory
+exists when there is a real file to put in it. **Safe path:** document the intended structure in a
+plan or README, and let the first real file create the path.
 
-### 1.3 Two subpath exports
+### Language and attribution
+
+Everything published is English — source, comments, tests, commit messages, pull request titles and
+bodies, `README.md`, `CHANGELOG.md` and everything under `.github/`. Bymax projects keep `docs/` in
+**Portuguese** by explicit decision; do not report Portuguese there as a finding.
 
-| Subpath | Purpose |
-|---|---|
-| `.` (server) | NestJS module, services, provider recipes, DI tokens, interfaces, errors |
-| `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`) + `STORAGE_ERROR_CODES` |
+No commit, pull request, comment or code may attribute authorship to an AI assistant or coding tool,
+in any form. **This governs text a change introduces** — a trailer, a "generated with" line, a
+signature in a comment or a description.
+
+Git's own author and committer fields are set by the contributor's git configuration rather than by
+anything in the diff. Before reporting one as a violation, read it:
+`git log -1 --format='%an <%ae> / %cn <%ce>' <sha>`. The claim is trivially checkable and expensive
+to act on — it asks for history to be rewritten.
 
-The shared subpath has zero `@nestjs/*` imports — it can be used safely in edge workers, browser code, or other non-NestJS contexts.
+<!-- shared:end -->
 
----
+## Where this repository narrows a shared rule
 
-## 2. Dynamic Module (`forRoot` / `forRootAsync`)
+The block above holds across every Bymax repository. Three of its rules have a sharper form here,
+and this is that form — not a disagreement with the shared text.
 
-`BymaxStorageModule` is a `@Global()` dynamic NestJS module. It exposes two static methods:
+- **Size and layering applies to `src/` and `test/`.** No file is over the 800-line limit today;
+  `src/server/services/storage.service.ts` (747) and its spec (751) are the two closest to it. The
+  shared rule is about what a change introduces, and here that means a change that pushes either of
+  those past the line.
+- **`// Stryker disable next-line <Mutator>: <reason>` is the one accepted annotation**, and only
+  over a documented equivalent mutant with the reason stated inline. It suppresses nothing the
+  compiler or the linter would have caught — it tells the mutation gate that a surviving mutant is
+  behaviourally identical, which no gate can decide on its own. It is not on the shared suppression
+  list and is not a finding here. Every other form on that list still is.
+- **A commit-authorship finding must quote a SHA that `git cat-file -t` resolves.** The shared rule
+  already says to read the identity before reporting it; here the evidence has to be a real object,
+  quoted from a command actually run against the tree under review. The failure mode is specific and
+  it recurs: the first Codex review on this repository reported an AI author for an object id that
+  exists nowhere in it, and `bymax-one` saw the same shape four times on one pull request — one of
+  those named a real commit, which carried a human author. Every identity in this repository's
+  history is the maintainer, `GitHub <noreply@github.com>` from a squash merge, or `dependabot[bot]`.
+  A genuine violation is still a finding, and git's author and committer fields remain out of scope
+  for the attribution rule, which governs text a change introduces.
 
-### 2.1 `forRoot(options: BymaxStorageModuleOptions)`
+## Rules specific to this repository
 
-Synchronous configuration. Calls `validateOptions(options)` (throws `STORAGE_INVALID_CONFIG` on failure) and `applyDefaults(options)` to produce a `ResolvedStorageOptions` object. Returns a `DynamicModule` that registers all internal providers and exports the public ones.
+Each of these has a shape a reviewer would otherwise get wrong, and each names where to read it.
 
-### 2.2 `forRootAsync(options: BymaxStorageModuleAsyncOptions)`
+### A presigned URL is a bearer credential
 
-Asynchronous configuration — supports `useFactory`, `useClass`, and `useExisting` patterns. The factory is resolved by the NestJS DI container at module init time. Internally, the async options are normalised into a provider that produces the same `ResolvedStorageOptions` as `forRoot`.
+Anyone holding the URL has the access it encodes, for as long as it lives. It is never logged, never
+a span attribute, never `StorageException.details`, never a field an error reporter would capture,
+and never returned in a response that is itself logged. Treat a diff that puts one anywhere
+observable the way you would treat a diff that logs an access key.
 
-### 2.3 `@Global()` scope
+### The `credentials` accessor is deliberately invisible to a spread
 
-The module is global so that `StorageService` and `SignedUrlService` can be injected into any module without re-importing `BymaxStorageModule`. This matches the `@nestjs/config` and `@nestjs/cache-manager` conventions.
+`applyDefaults` attaches `credentials` to the resolved options as a **non-enumerable accessor**
+(`src/server/config/apply-defaults.ts`), not as a plain field. That object is injected into every
+service, so an enumerable field is emitted by anything that serialises one incidentally — a
+structured logger rendering its arguments, an error reporter capturing the scope of a throw, an
+object spread. The accessor also keeps it out of `util.inspect({ showHidden: true })`, which a
+diagnostic dump uses and which still prints a hidden **data** property.
 
-### 2.4 DI tokens (`Symbol`)
+A reviewer who sees `credentials` "missing" after a spread, or absent from `JSON.stringify` output,
+is looking at the fix working. Do not propose restoring it as a plain field, spreading the resolved
+options into a new object literal, or `Object.assign`-ing them somewhere — each of those undoes it
+silently. Reads are unaffected: `options.credentials.accessKeyId` resolves exactly as before.
 
-All internal providers are registered behind `Symbol()` tokens defined in `bymax-storage.constants.ts`:
+### `SignedPutUrlOptions.maxSizeBytes` is advisory, and says so
 
-| Token | Provides |
-|---|---|
-| `BYMAX_STORAGE_OPTIONS` | `ResolvedStorageOptions` |
-| `BYMAX_STORAGE_S3_CLIENT` | `S3Client` instance (raw — for advanced ops) |
-| `BYMAX_STORAGE_UPLOAD_VALIDATORS` | `IUploadValidator[]` |
-| `BYMAX_STORAGE_FILE_SCANNER` | `IFileScanner` (or `NoOpFileScanner`) |
-| `BYMAX_STORAGE_LOGGER` | `Logger` instance |
-| `BYMAX_STORAGE_IDEMPOTENCY_CACHE` | `IdempotencyCache` |
+SigV4 can pin an **exact** `Content-Length` into a PUT signature, never a maximum, so the library
+does not bind it (`src/server/interfaces/signed-url-options.interface.ts`). The field records the
+caller's intent for a post-upload HEAD/size check and the scanner path; it enforces nothing at
+presign time. Reading it as enforcement produces two opposite errors, and both are wrong: signing
+off on an upload path as size-limited when it is not, and reporting the unbound signature as a bug
+to fix in the presigner.
 
-`BYMAX_STORAGE_S3_CLIENT` is **exported** (public surface) so consumers can inject the raw client for provider-specific operations not covered by `StorageService`.
+### `defaultPublicRead` is not a candidate for an environment flag
 
----
+`publicRead` emits `ACL: public-read`. Modern AWS S3 buckets reject that with HTTP 400
+`AccessControlListNotSupported`, and R2 ignores ACLs entirely, so on the two most common targets the
+option is a hard failure or a silent no-op. It exists for the providers where it still works — the
+DigitalOcean Spaces recipe sets it — and public access is otherwise a bucket policy, a CDN, or a
+signed URL. Do not propose promoting it to a configurable default, and do not read a `publicRead`
+path as the way to serve public objects.
 
-## 3. `S3ClientProvider` — Lifecycle
+### `STORAGE_ERROR_CODES` is a frozen contract, not a stringly-typed smell
 
-`S3ClientProvider` is an internal `@Injectable()` class that owns the `S3Client` lifecycle.
+The codes in `src/shared/constants/error-codes.constants.ts` do not change between minor versions —
+host applications and clients pattern-match on them, which is the point of shipping them from the
+`./shared` subpath with `as const`. Adding a code is additive and fine; renaming, removing or
+repurposing one is a breaking change to every consumer. The `StorageErrorCode` union is derived from
+the object, so the two cannot drift.
 
-### 3.1 `onModuleInit`
+`STORAGE_ERROR_MESSAGES` and `STORAGE_ERROR_STATUS` are the opposite case: internal, never exported,
+and free to change.
 
-The `S3Client` is created lazily in `onModuleInit`, not in the constructor. This allows the module to register successfully even when credentials are absent (missing credentials at init time produce a warning log; the first operation will fail with `STORAGE_NOT_CONFIGURED` rather than crashing the application at startup — the "silent failure on init" principle from the original `SpacesService`).
+### `BYMAX_STORAGE_LOGGER` is exported but never provided
 
-The S3Client config is built from `ResolvedStorageOptions`, including:
-- `endpoint`, `region`, `forcePathStyle`, `credentials`, `maxAttempts`
-- `requestChecksumCalculation`, `responseChecksumValidation` (the non-AWS checksum opt-out fields; see §7)
+The token is declared in `src/server/bymax-storage.constants.ts` and re-exported from
+`src/server/index.ts`, and no `provide:` in `src/server/bymax-storage.module.ts` registers it —
+injecting it fails at resolution time. It is a dangling export awaiting either a provider or its
+removal. Until that is settled, do not recommend it as the way to log, and do not read code that
+uses `Logger` directly as having missed it.
 
-### 3.2 `onApplicationShutdown`
+### The `S3Client` is one instance for the process lifetime
 
-`s3Client.destroy()` is called in `onApplicationShutdown` to release the HTTP connection pool. This prevents file-descriptor leaks during graceful shutdown.
+`S3ClientProvider` creates it in `onModuleInit` and calls `destroy()` in `onApplicationShutdown`.
+A change that constructs an `S3Client` per request or per operation leaks connection pools, and a
+`destroy()` anywhere but shutdown breaks every later call. Credentials absent at init is not a
+startup crash by design — the first operation fails with `STORAGE_NOT_CONFIGURED` (503) instead.
 
-### 3.3 `getClient()` — fail-closed
+### AWS SDK v3 option names only
 
-`getClient()` throws `STORAGE_NOT_CONFIGURED` (HTTP 503) if the client was not initialised (credentials absent at startup). It never returns `undefined`.
+The retry knob is `maxAttempts`. `maxRetries` and `signatureVersion` are SDK v2 names that do not
+exist in v3, which is SigV4-only; neither should appear in a diff or in a suggested fix.
 
-### 3.4 Retries
+### Every non-AWS provider recipe opts out of integrity checksums
 
-Retry behaviour is controlled by `maxAttempts` (default `3`). This is the AWS SDK v3 knob; the v2 `maxRetries` option does not exist in v3 and is never used.
+`@aws-sdk/client-s3` ≥ 3.729.0 sends `x-amz-checksum-crc32` headers by default, and R2, B2, MinIO,
+DigitalOcean Spaces and Wasabi reject them. Each non-AWS recipe in
+`src/server/config/provider-recipes.ts` spreads `requestChecksumCalculation` and
+`responseChecksumValidation` set to `'WHEN_REQUIRED'`. A new S3-compatible recipe without that
+opt-out is a blocking finding; removing it from an existing one is the same finding.
 
----
+### The path-traversal guard runs before the SDK, always
 
-## 4. `KeyResolverService` — Path-Traversal Guard
+`KeyResolverService` is the boundary between a caller-supplied key and the AWS SDK: it rejects `..`
+segments, a leading `/`, and a key that is empty after normalisation, and it applies `keyPrefix`.
+Any path that reaches an SDK command with a key that did not go through it is a blocking finding,
+however the key was obtained.
 
-`KeyResolverService` is the security boundary between user-supplied key strings and the AWS SDK. It must be called for every key before that key reaches any SDK command.
+### Two documented limitations are not bugs to report
 
-### 4.1 Normalisation
+Both are stated in the deep-dive below and in the published docs; raising either as a defect costs a
+round trip and changes nothing.
 
-1. Trim whitespace.
-2. Collapse multiple consecutive `/` separators to a single `/`.
-3. Resolve `./` prefixes (these are safe but normalised away for consistency).
+- **The idempotency cache is in-memory and per process instance.** Two replicas can each accept the
+  same `idempotencyKey`. A cross-instance `IIdempotencyStore` is the planned replacement.
+- **The signed-URL TTL clamp is deliberately asymmetric.** A `ttlSeconds` of zero or less throws;
+  one above the configured maximum is silently clamped. Rejecting the degenerate value prevents an
+  already-expired URL; clamping the high one keeps a ceiling an operational constraint rather than a
+  per-request contract.
 
-### 4.2 Guards (fail-closed)
+### The zero-dependency claim is part of the package
 
-After normalisation:
+`package.json` ships `"dependencies": {}`, and everything the library needs is a peer dependency the
+consuming application resolves. A diff that adds a runtime dependency changes the package's
+supply-chain footprint for every consumer and needs to be argued as such, not slipped in as a
+convenience — including a small utility that could be written inline.
 
-- Reject if the key is empty.
-- Reject if any path segment is `..` (path traversal).
-- Reject if the normalised key starts with `/`.
+### Internal services stay internal
 
-All rejections throw `STORAGE_KEY_INVALID` (HTTP 400) with a `details.reason` describing the specific guard that fired.
+`KeyResolverService`, `ValidationService`, `FileScannerService` and `S3ClientProvider` are not in the
+barrel. The public surface is `StorageService`, `SignedUrlService`, `providerRecipes`, the DI tokens,
+the public types, `StorageException`, `NoOpUploadValidator` and `NoOpFileScanner`. Adding an internal
+service to `src/server/index.ts` widens the API this library has to keep working.
 
-### 4.3 `keyPrefix` application
-
-If `keyPrefix` is set in `ResolvedStorageOptions`, it is prepended to the normalised key. The result is the final resolved key. `keyPrefix` itself is validated at module init time (the same guards apply — it must not traverse up).
-
----
-
-## 5. Validation Pipeline
-
-The validation pipeline runs inside `StorageService.upload()` before any bytes are sent to the provider. It is composed of three sequential stages:
-
-```
-checkMime(contentType, mimeWhitelist)
-  → checkSize(size, maxSizeBytes)
-  → runCustomValidators(body, validators, readBytes)
-  → runPreUploadScanner(body, scanner)
-```
-
-### 5.1 `checkMime`
-
-Validates `contentType` against `mimeWhitelist` using `mime-match.ts`. Wildcards are supported (`'image/*'` matches `'image/jpeg'`, `'image/png'`, etc.). Throws `STORAGE_MIME_NOT_ALLOWED` (HTTP 415) on mismatch.
-
-### 5.2 `checkSize`
-
-Validates `size` (if provided) against `maxSizeBytes`. Throws `STORAGE_SIZE_EXCEEDED` (HTTP 413) when `size > maxSizeBytes`. Note: `size` is optional in `UploadOptions` — when absent, this check is skipped (the provider may still reject oversized objects).
-
-### 5.3 Custom `IUploadValidator`
-
-Each registered `IUploadValidator.validate(input)` is called with `{ body, readBytes }`. The `readBytes(n)` helper peeks at the first `n` bytes of the body stream without consuming it (uses a `PassThrough` tee). On failure, the validator returns `{ valid: false, reason: string }`; the pipeline throws `STORAGE_VALIDATION_FAILED` (HTTP 400).
-
-### 5.4 `IFileScanner` (pre-upload)
-
-If `scanner.mode` is `'pre-upload'` or `'both'`, the scanner runs before the upload. `'infected'` → `STORAGE_SCAN_INFECTED` (HTTP 422). `'unknown'` → `STORAGE_SCAN_INCONCLUSIVE` (HTTP 422) when `rejectOnUnknown: true`; otherwise logged and allowed through.
-
-### 5.5 Post-upload scanner
-
-If `scanner.mode` is `'post-upload'` or `'both'`, the scanner runs after a successful upload. On `'infected'`, the uploaded object is deleted and `STORAGE_SCAN_INFECTED` is thrown. On delete failure, the error is logged but the scan rejection is still surfaced.
-
----
-
-## 6. Signed-URL TTL Clamp (`ttl-clamp.ts`)
-
-The SigV4 specification hard-limits presigned URL validity to 604 800 seconds (7 days). The clamp logic:
-
-1. At module init: `signedUrls.maxTtlSeconds` is clamped to `min(maxTtlSeconds, 604800)`. Values above 7 days are silently reduced.
-2. Per-request: if `ttlSeconds` is ≤ 0, throw `STORAGE_SIGNED_URL_TTL_INVALID` (HTTP 400).
-3. Per-request: if `ttlSeconds` > `maxTtlSeconds`, silently clamp to `maxTtlSeconds`. The caller receives a URL with a shorter TTL than requested without an error — the ceiling is an operational constraint, not a per-request contract.
-
-This asymmetry is intentional: rejecting TTL ≤ 0 prevents a degenerate (immediately-expired) URL; silently clamping high TTLs avoids breaking callers that request a long TTL on a system configured for a shorter maximum.
-
----
-
-## 7. LRU Idempotency Cache (`idempotency-cache.ts`)
-
-The idempotency cache stores `UploadResult` objects keyed by `idempotencyKey`. It prevents duplicate uploads when the same logical object is submitted more than once (e.g. retry after a network timeout on the client side).
-
-| Property | Default | Notes |
-|---|---|---|
-| Max entries | 1 000 | LRU eviction when full |
-| TTL per entry | 24 h | Entries expire after 24 hours regardless of LRU position |
-| Scope | Per process instance | Not shared across replicas |
-
-**Multi-replica caveat:** two pods can each receive the same `idempotencyKey` simultaneously and both upload the object. A distributed `IIdempotencyStore` (backed by Redis or a DB) is planned for v0.2.
-
----
-
-## 8. Provider Recipes
-
-`providerRecipes` is a plain object (`as const`) with one factory per provider. Each factory accepts a provider-specific input shape and returns a `BymaxStorageModuleOptions` ready to spread into `forRoot`/`forRootAsync`.
-
-### 8.1 The non-AWS checksum opt-out (the #1 provider-compat trap)
-
-`@aws-sdk/client-s3` ≥ 3.729.0 defaults `requestChecksumCalculation` to `'WHEN_SUPPORTED'`, adding CRC32 `x-amz-checksum-*` integrity headers on every `PutObject` and `UploadPart`. R2, B2, MinIO, DigitalOcean Spaces, and Wasabi **reject** these headers.
-
-The shared constant:
-
-```typescript
-const NON_AWS_CHECKSUM = {
-  requestChecksumCalculation: 'WHEN_REQUIRED',
-  responseChecksumValidation: 'WHEN_REQUIRED',
-} as const
-```
-
-is spread into every non-AWS recipe. If you add a new provider recipe for an S3-compatible (non-AWS) provider, you must include this opt-out.
-
-### 8.2 Provider-specific notes
-
-| Recipe | Key specifics |
-|---|---|
-| `awsS3` | Keeps SDK default checksums; sets `serverSideEncryption: 'AES256'` by default; `publicBaseUrl` is the virtual-hosted bucket URL |
-| `cloudflareR2` | `region: 'auto'`; `publicBaseUrl` = `customDomain` (REQUIRED — the S3 API endpoint does not serve public reads); NON_AWS_CHECKSUM |
-| `backblazeB2` | `forcePathStyle: false` (B2 supports both styles but virtual-hosted is preferred); NON_AWS_CHECKSUM |
-| `digitalOceanSpaces` | Sets `cdnBaseUrl` to the `.cdn.digitaloceanspaces.com` host; `defaultPublicRead: true`; NON_AWS_CHECKSUM |
-| `minio` | `forcePathStyle: true` (path-style is required for MinIO); `region` defaults to `'us-east-1'`; NON_AWS_CHECKSUM |
-| `wasabi` | Virtual-hosted; NON_AWS_CHECKSUM |
-
----
-
-## 9. Error Catalog
-
-`StorageException extends HttpException`. All thrown errors carry:
-
-```json
-{ "error": { "code": "STORAGE_KEY_INVALID", "message": "...", "details": { ... } } }
-```
-
-`STORAGE_ERROR_CODES` (the constant object keyed by code name) is exported from `./shared`. `STORAGE_ERROR_MESSAGES` and `STORAGE_ERROR_STATUS` (the code → message and code → HttpStatus maps) are **internal** implementation details never exported.
-
-The full 17-code catalog is in `README.md` → Error Codes and `docs/technical_specification.md` §12.
-
----
-
-## 10. Source Structure
-
-```
-src/
-├── server/
-│   ├── bymax-storage.module.ts        # Dynamic module (forRoot / forRootAsync)
-│   ├── bymax-storage.constants.ts     # Symbol DI tokens
-│   ├── config/
-│   │   ├── resolved-options.ts        # ResolvedStorageOptions type + applyDefaults
-│   │   ├── validate-options.ts        # validateOptions() — throws STORAGE_INVALID_CONFIG
-│   │   └── provider-recipes.ts        # providerRecipes (6 factories)
-│   ├── constants/
-│   │   ├── default-options.constants.ts
-│   │   └── default-mime-whitelist.constants.ts
-│   ├── errors/
-│   │   ├── storage-exception.ts       # StorageException
-│   │   ├── storage-error-messages.ts  # internal
-│   │   └── storage-error-status.ts    # internal
-│   ├── interfaces/                    # TypeScript interfaces (public types)
-│   ├── providers/
-│   │   ├── s3-client.provider.ts      # S3ClientProvider (lifecycle — internal)
-│   │   ├── no-op-validator.ts         # NoOpUploadValidator (exported)
-│   │   └── no-op-scanner.ts           # NoOpFileScanner (exported)
-│   ├── services/
-│   │   ├── key-resolver.service.ts    # path-traversal guard (internal)
-│   │   ├── storage.service.ts         # StorageService (exported)
-│   │   ├── signed-url.service.ts      # SignedUrlService (exported)
-│   │   ├── validation.service.ts      # ValidationService (internal)
-│   │   └── file-scanner.service.ts    # FileScannerService (internal)
-│   └── utils/
-│       ├── idempotency-cache.ts       # LRU cache
-│       ├── mime-match.ts              # wildcard MIME matching
-│       ├── ttl-clamp.ts               # TTL clamp + SigV4 ceiling
-│       ├── stream-utils.ts            # tee / peekFirstBytes
-│       ├── header-utils.ts            # Content-Type helpers
-│       └── upload-strategy.ts         # single-shot vs multipart decision
-└── shared/
-    ├── index.ts                        # shared barrel
-    └── constants/
-        ├── error-codes.constants.ts    # STORAGE_ERROR_CODES
-        ├── mime-types.constants.ts
-        └── default-ttls.constants.ts
-```
-
----
-
-## 11. Testing Strategy
-
-### 11.1 Unit tests
-
-- Located alongside source files (`*.spec.ts`).
-- All use Jest + ts-jest; S3Client is mocked via `jest.fn()` / `jest.spyOn()` — no real network calls.
-- Coverage gate: **100% line/branch on every implemented file** (enforced by `jest.config.ts` global threshold).
-- Every `it()` / `test()` block carries an English block comment explaining the scenario and the rule it protects.
-
-### 11.2 E2E tests
-
-- Located in `test/e2e/`.
-- Spin a real MinIO instance via `@testcontainers/minio`; tests run against the real S3 API.
-- One container per run; `jest.e2e.config.ts` sets `testTimeout: 60000`.
-- Run with `pnpm test:e2e`; requires Docker.
-
-### 11.3 Mutation testing
-
-- Stryker with thresholds `high: 100 / low: 95 / break: 95`.
-- Runs automatically post-merge on `main` via the shared reusable CI (`bymaxone/.github` → node-lib-ci), never per-PR; also runnable on demand with `pnpm mutation` (takes 10–20 min).
-- Equivalent mutants are annotated inline with `// Stryker disable next-line <Mutator>: <reason>`.
-- Results documented in `docs/mutation_testing_results.md`.
+The architecture deep-dive that explains these rules — module wiring, the `S3Client`
+lifecycle, the validation pipeline, the TTL clamp and the provider recipes — is in
+`docs/architecture.md`. It is kept out of this file so the review rules stay within the
+budget a reviewer actually reads.

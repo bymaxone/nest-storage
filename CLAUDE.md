@@ -1,6 +1,6 @@
 # @bymax-one/nest-storage — Agent Quick Reference
 
-This file gives AI coding assistants a concise orientation to the repository. For a full architecture deep-dive, read `AGENTS.md`.
+This file gives AI coding assistants a concise orientation to the repository. `AGENTS.md` carries the code-review rules — the shared Bymax block plus the ones specific to this library. For a full architecture deep-dive, read `docs/architecture.md`.
 
 ---
 
@@ -99,7 +99,7 @@ BymaxStorageModule (forRoot / forRootAsync)
 └── SignedUrlService          (public — presigned GET / PUT / multipart)
 ```
 
-Full diagram and component descriptions: `AGENTS.md`.
+Full diagram and component descriptions: `docs/architecture.md`.
 
 ---
 
