@@ -31,13 +31,14 @@ jobs:
       # Named rather than `inherit`, so the called workflow receives this one
       # secret and not every secret this repository holds.
       #
-      # The mapping is present even while the secret is not, because a reusable
-      # workflow receives no secret it is not passed: adding AGENTS_SYNC_TOKEN
-      # later would otherwise change nothing, and the run would keep using the
-      # default token while looking configured. An unset secret evaluates to the
-      # empty string, which the called workflow already falls back from.
+      # The mapping is explicit so that whenever AGENTS_SYNC_TOKEN is configured
+      # the called workflow actually receives it: a reusable workflow receives no
+      # secret it is not passed, so without this line the run would keep using
+      # the default token while looking configured. An unset secret evaluates to
+      # the empty string, which the called workflow already falls back from, so
+      # the mapping is correct whether or not the secret exists.
       #
-      # Why it is worth setting: a pull request opened with the default
+      # Why it is worth configuring: a pull request opened with the default
       # GITHUB_TOKEN starts no workflow runs, and the nest-storage-pr-and-ci-gates
       # ruleset requires status checks on the default branch — so without a token
       # of its own an unattended sync pull request stays unmergeable until
