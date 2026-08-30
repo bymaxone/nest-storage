@@ -166,8 +166,8 @@ to act on — it asks for history to be rewritten.
 
 ## Where this repository narrows a shared rule
 
-The block above holds across every Bymax repository. Two of its rules have a sharper form here, and
-this is that form — not a disagreement with the shared text.
+The block above holds across every Bymax repository. Three of its rules have a sharper form here,
+and this is that form — not a disagreement with the shared text.
 
 - **Size and layering applies to `src/` and `test/`.** No file is over the 800-line limit today;
   `src/server/services/storage.service.ts` (747) and its spec (751) are the two closest to it. The
@@ -178,6 +178,15 @@ this is that form — not a disagreement with the shared text.
   compiler or the linter would have caught — it tells the mutation gate that a surviving mutant is
   behaviourally identical, which no gate can decide on its own. It is not on the shared suppression
   list and is not a finding here. Every other form on that list still is.
+- **A commit-authorship finding must quote a SHA that `git cat-file -t` resolves.** The shared rule
+  already says to read the identity before reporting it; here the evidence has to be a real object,
+  quoted from a command actually run against the tree under review. The failure mode is specific and
+  it recurs: the first Codex review on this repository reported an AI author for an object id that
+  exists nowhere in it, and `bymax-one` saw the same shape four times on one pull request — one of
+  those named a real commit, which carried a human author. Every identity in this repository's
+  history is the maintainer, `GitHub <noreply@github.com>` from a squash merge, or `dependabot[bot]`.
+  A genuine violation is still a finding, and git's author and committer fields remain out of scope
+  for the attribution rule, which governs text a change introduces.
 
 ## Rules specific to this repository
 
