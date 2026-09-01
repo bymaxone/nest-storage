@@ -36,6 +36,21 @@ updates:
           - minor
           - patch
 
+      # `eslint` and `@eslint/js` are released on separate version lines, and
+      # `@eslint/js` declares a peer range on `eslint`. Ungrouped, the catch-all
+      # below excludes majors, so a lone `@eslint/js` major would install a
+      # package whose peer range excludes the installed `eslint` — the same
+      # mismatched pair the commitlint group above exists to prevent. Grouping
+      # all update types keeps them in one reviewable change.
+      eslint:
+        patterns:
+          - 'eslint'
+          - '@eslint/js'
+        update-types:
+          - major
+          - minor
+          - patch
+
       # Batch low-risk dev tooling bumps into a single PR to cut review noise.
       # Majors stay out: each one needs its own verification and its own revert.
       dev-dependencies:
@@ -56,11 +71,13 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: reflect-metadata
         update-types: [version-update:semver-major]
-      # TypeScript 6 and ESLint 10 are known to break the lint/typecheck gate and
-      # are intentionally held back until revisited.
+      # TypeScript majors break the typecheck gate and are intentionally held back
+      # until revisited. ESLint is deliberately NOT held, and the asymmetry is the
+      # point: a hold is silent, so a held dependency whose current line reaches
+      # end of life produces no pull request and no signal that it needs moving.
+      # A major that does break a gate announces itself as a red check on its own
+      # pull request, which is a better failure than silence.
       - dependency-name: typescript
-        update-types: [version-update:semver-major]
-      - dependency-name: eslint
         update-types: [version-update:semver-major]
       # `@types/node` majors track the Node release line. `engines` declares
       # `>=24`, so typechecking against a newer major would let code compile

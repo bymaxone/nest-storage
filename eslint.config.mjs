@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint'
 import prettier from 'eslint-config-prettier'
 
 /**
- * Flat ESLint configuration (v9). Type-aware linting on the source tree with the
+ * Flat ESLint configuration. Type-aware linting on the source tree with the
  * strict + stylistic typescript-eslint presets. Prettier is applied last to
  * disable formatting rules that would conflict with the formatter.
  */
