@@ -242,13 +242,30 @@ the object, so the two cannot drift.
 `STORAGE_ERROR_MESSAGES` and `STORAGE_ERROR_STATUS` are the opposite case: internal, never exported,
 and free to change.
 
-### `BYMAX_STORAGE_LOGGER` is exported but never provided
+### A token in the barrel must also be in the module's `exports`
 
-The token is declared in `src/server/bymax-storage.constants.ts` and re-exported from
-`src/server/index.ts`, and no `provide:` in `src/server/bymax-storage.module.ts` registers it —
-injecting it fails at resolution time. It is a dangling export awaiting either a provider or its
-removal. Until that is settled, do not recommend it as the way to log, and do not read code that
-uses `Logger` directly as having missed it.
+`src/server/index.ts` and `BymaxStorageModule.buildExports()` are two separate lists, and a
+token in the first but not the second is a public name a consumer cannot inject: `@Global()`
+auto-imports the module, it does not publish a provider the module withheld. Injecting such a
+token raises `UnknownDependenciesException` and the application fails to boot.
+
+`bymax-storage.module.spec.ts` asserts the pairing over every symbol the barrel exports, so a
+token added to one list and not the other fails the suite by name. Nothing else covers it —
+neither typecheck, lint, coverage nor the published-surface script exercises injection through
+the barrel — so that test is the whole guard, and it is the reason this is a rule worth
+knowing rather than one worth re-deriving.
+
+A token in the barrel needs a provider, a consumer and an entry in `exports`, in the same
+change. An *internal* token needs the opposite and is equally deliberate:
+`BYMAX_STORAGE_IDEMPOTENCY_CACHE` has a provider and a consumer and is withheld from both
+lists, because exporting it would freeze an implementation detail as public API. The pairing
+to enforce is barrel ↔ `exports`, not provider ↔ `exports`.
+
+Logging is the specific case that keeps coming up: `S3ClientProvider`, `FileScannerService`
+and `StorageService` each construct `new Logger(ClassName)` from `@nestjs/common`, which is
+the NestJS convention and the whole of the logging story here. Do not read a service that
+constructs its own `Logger` as having missed an injectable one, and do not propose a logger
+token — `app.useLogger(...)` already redirects every one of them.
 
 ### The `S3Client` is one instance for the process lifetime
 

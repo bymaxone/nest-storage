@@ -53,7 +53,6 @@ All internal providers are registered behind `Symbol()` tokens defined in `bymax
 | `BYMAX_STORAGE_S3_CLIENT` | `S3Client` instance (raw — for advanced ops) |
 | `BYMAX_STORAGE_UPLOAD_VALIDATORS` | `IUploadValidator[]` |
 | `BYMAX_STORAGE_FILE_SCANNER` | `IFileScanner` (or `NoOpFileScanner`) |
-| `BYMAX_STORAGE_LOGGER` | `Logger` instance |
 | `BYMAX_STORAGE_IDEMPOTENCY_CACHE` | `IdempotencyCache` |
 
 `BYMAX_STORAGE_S3_CLIENT` is **exported** (public surface) so consumers can inject the raw client for provider-specific operations not covered by `StorageService`.

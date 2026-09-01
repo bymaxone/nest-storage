@@ -206,7 +206,7 @@ Three options were evaluated: (A) a separate SDK per provider — multiplies pee
 **Server (`@bymax-one/nest-storage`):**
 
 - Module: `BymaxStorageModule`
-- Tokens: `BYMAX_STORAGE_OPTIONS`, `BYMAX_STORAGE_S3_CLIENT`, `BYMAX_STORAGE_UPLOAD_VALIDATORS`, `BYMAX_STORAGE_FILE_SCANNER`, `BYMAX_STORAGE_LOGGER`
+- Tokens: `BYMAX_STORAGE_OPTIONS`, `BYMAX_STORAGE_S3_CLIENT`, `BYMAX_STORAGE_UPLOAD_VALIDATORS`, `BYMAX_STORAGE_FILE_SCANNER`
 - Types: `BymaxStorageModuleOptions`, `UploadOptions`, `UploadResult`, `DownloadOptions`, `ListOptions`, `ListResult`, `SignedGetUrlOptions`, `SignedPutUrlOptions`, `SignedUrlResult`, `ObjectMetadata`, `StorageErrorResponse`, `IUploadValidator`, `IFileScanner`, `FileScanResult`, `ProviderRecipe`
 - Public services: `StorageService`, `SignedUrlService`
 - Errors: `StorageException`, `STORAGE_ERROR_CODES`
@@ -476,7 +476,7 @@ BymaxStorageModule.forRootAsync({
 
 All defined via `Symbol()` in `bymax-storage.constants.ts`:
 
-`BYMAX_STORAGE_OPTIONS` (resolved options), `BYMAX_STORAGE_S3_CLIENT` (singleton instance), `BYMAX_STORAGE_UPLOAD_VALIDATORS` (array of `IUploadValidator`), `BYMAX_STORAGE_FILE_SCANNER` (`IFileScanner` or no-op), `BYMAX_STORAGE_LOGGER` (NestJS logger).
+`BYMAX_STORAGE_OPTIONS` (resolved options), `BYMAX_STORAGE_S3_CLIENT` (singleton instance), `BYMAX_STORAGE_UPLOAD_VALIDATORS` (array of `IUploadValidator`), `BYMAX_STORAGE_FILE_SCANNER` (`IFileScanner` or no-op).
 
 ---
 

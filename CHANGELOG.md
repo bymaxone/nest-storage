@@ -2,11 +2,41 @@
 
 All notable changes to `@bymax-one/nest-storage` are documented in this file.
 
-The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
+
+Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while this API is
+pre-stable: breaking changes ship in minor and patch releases by explicit `@bymax-one` policy,
+so a version number carries no compatibility information. The **Apply to a derived backend**
+note on each entry is the compatibility contract — read it, not the number.
 
 ---
 
 ## [Unreleased]
+
+### Removed
+
+- **`BYMAX_STORAGE_LOGGER` and `BYMAX_STORAGE_IDEMPOTENCY_CACHE` are no longer exported.**
+  Both were re-exported from the package barrel while being absent from the module's
+  `exports`: no provider ever registered `BYMAX_STORAGE_LOGGER`, and the idempotency cache is
+  registered but deliberately not exported. Injecting either raised
+  `UnknownDependenciesException` and the application failed to boot, so neither has ever been
+  usable as an injectable token from this library.
+
+  **Apply to a derived backend:** delete every *import* of these two names, not only the
+  injections. The reliable signal is the TypeScript error `TS2305: Module … has no exported
+  member '…'`, which fires in both module systems. At runtime the two differ, and only one is
+  loud: an ESM consumer fails at module-link time with `SyntaxError: The requested module does
+  not provide an export named '…'` before Nest bootstraps, while a CommonJS consumer — the
+  common case for a compiled NestJS application — silently receives `undefined` and fails later
+  with a confusing resolution error. Do not wait for a crash to find these; grep for the names.
+
+  One shape did work and is the one to migrate deliberately: registering the exported symbol as
+  **your own** provider (`{ provide: BYMAX_STORAGE_LOGGER, useValue: myLogger }`) and injecting
+  it in your own service. That never involved this library's DI container. Replace the symbol
+  with a token you own — `Symbol('MY_STORAGE_LOGGER')` — and nothing else changes.
+
+  For logging specifically: services here use `new Logger(ClassName)` from `@nestjs/common`, so
+  `app.useLogger(...)` redirects them all, which is what this token pretended to offer.
 
 ## [1.1.0] - 2026-08-11
 
