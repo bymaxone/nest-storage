@@ -12,6 +12,15 @@ allowBuilds:
   cpu-features: false
   protobufjs: false
   ssh2: false
+  # `jest-haste-map` takes `@parcel/watcher` as a plain dependency from 30.5.0 on, and it
+  # ships an `install` script (`node scripts/build-from-source.js`). pnpm 11 refuses to
+  # install at all until an unlisted build script is decided either way, so this entry is
+  # what lets the install succeed.
+  #
+  # Denied because nothing here needs the native watcher: CI runs `pnpm test:cov:all` and
+  # `pnpm test:e2e`, neither of which watches. `test:watch` is a local convenience, and a
+  # denied build costs it the native backend, never correctness.
+  '@parcel/watcher': false
 
 # Forced versions for vulnerable transitive dev dependencies. These live here and
 # NOT in package.json: pnpm 11 no longer reads the `pnpm` field of package.json, so
