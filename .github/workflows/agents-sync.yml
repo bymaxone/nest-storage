@@ -28,19 +28,25 @@ jobs:
       contents: write
       pull-requests: write
     secrets:
-      # Named rather than `inherit`, so the called workflow receives this one
-      # secret and not every secret this repository holds.
+      # Named rather than `inherit`, so the called workflow receives these two
+      # secrets and not every secret this repository holds.
       #
-      # The mapping is explicit so that whenever AGENTS_SYNC_TOKEN is configured
-      # the called workflow actually receives it: a reusable workflow receives no
-      # secret it is not passed, so without this line the run would keep using
-      # the default token while looking configured. An unset secret evaluates to
-      # the empty string, which the called workflow already falls back from, so
-      # the mapping is correct whether or not the secret exists.
+      # Why a credential of its own is required rather than optional here: a pull
+      # request opened with the default GITHUB_TOKEN starts no workflow runs —
+      # GitHub's anti-recursion guard, not a misconfiguration — so it arrives
+      # carrying no checks at all rather than failing ones, and the
+      # nest-storage-pr-and-ci-gates ruleset requires eight. Such a pull request
+      # can never merge while reading on screen as merely awaiting review.
       #
-      # Why it is worth configuring: a pull request opened with the default
-      # GITHUB_TOKEN starts no workflow runs, and the nest-storage-pr-and-ci-gates
-      # ruleset requires status checks on the default branch — so without a token
-      # of its own an unattended sync pull request stays unmergeable until
-      # somebody pushes to it.
-      sync-token: ${{ secrets.AGENTS_SYNC_TOKEN }}
+      # A GitHub App rather than a long-lived token: the credential is minted per
+      # run and expires within the hour, so there is nothing to rotate and
+      # nothing that expires unnoticed. The pair is read together and the called
+      # workflow fails loudly when only one is set.
+      #
+      # `sync-token` is deliberately left unmapped. Mapping a secret that does
+      # not exist resolves to the empty string, which the called workflow accepts
+      # as "no token supplied" and silently falls back from — reintroducing
+      # exactly the unmergeable pull request above, from a file that reads as
+      # configured.
+      app-id: ${{ secrets.AGENTS_SYNC_APP_ID }}
+      app-private-key: ${{ secrets.AGENTS_SYNC_PRIVATE_KEY }}
