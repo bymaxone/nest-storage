@@ -67,6 +67,25 @@ describe('BymaxStorageModule', () => {
     )
   })
 
+  it('should export every symbol token the package barrel re-exports', async () => {
+    // The barrel and `buildExports()` are separate lists, and a symbol in the first but
+    // absent from the second is a public name whose injection raises
+    // `UnknownDependenciesException` at bootstrap: `@Global()` auto-imports the module, it
+    // does not publish a provider the module withheld. No other check covers this, because
+    // nothing internal injects through the barrel — a token can be missing from `exports`
+    // while typecheck, lint, coverage and the published-surface script all pass.
+    const barrel: Record<string, unknown> = await import('./index')
+    const exported = new Set(BymaxStorageModule.forRoot(base).exports ?? [])
+    const symbolTokens = Object.entries(barrel).filter(
+      (entry): entry is [string, symbol] => typeof entry[1] === 'symbol',
+    )
+
+    expect(symbolTokens.length).toBeGreaterThan(0)
+    expect(symbolTokens.filter(([, token]) => !exported.has(token)).map(([name]) => name)).toEqual(
+      [],
+    )
+  })
+
   it('should resolve the raw-client token to null when credentials are missing', async () => {
     // Unconfigured module — getClientOrNull null branch.
     const moduleRef = await Test.createTestingModule({

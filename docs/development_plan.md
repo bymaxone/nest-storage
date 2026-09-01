@@ -1,5 +1,9 @@
 # Development Plan — @bymax-one/nest-storage
 
+> **Archival.** This records what was planned and accepted at the time it was written.
+> It is not maintained against the current code — read `README.md`, `AGENTS.md` and
+> `docs/architecture.md` for what the package exports today.
+
 > **Version:** 1.0.0
 > **Last updated:** 2026-06-24
 > **Status:** Draft for execution

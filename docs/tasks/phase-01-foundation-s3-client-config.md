@@ -1,5 +1,9 @@
 # Phase 1 — Foundation + S3 Client + Config
 
+> **Archival.** This records what was planned and accepted at the time it was written.
+> It is not maintained against the current code — read `README.md`, `AGENTS.md` and
+> `docs/architecture.md` for what the package exports today.
+
 > **Status**: ✅ Done · **Progress**: 17 / 17 tasks · **Last updated**: 2026-06-30
 > **Source roadmap**: [`../development_plan.md`](../development_plan.md) §2
 > **Source spec**: [`../technical_specification.md`](../technical_specification.md) §2–§4, §12

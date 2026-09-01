@@ -669,8 +669,11 @@ supply through it first: the guard below, then `keyPrefix`. The key you read bac
 ### DI tokens
 
 `BYMAX_STORAGE_OPTIONS` · `BYMAX_STORAGE_S3_CLIENT` · `BYMAX_STORAGE_FILE_SCANNER` ·
-`BYMAX_STORAGE_UPLOAD_VALIDATORS` · `BYMAX_STORAGE_IDEMPOTENCY_CACHE` ·
-`BYMAX_STORAGE_LOGGER` — all `Symbol()`, so no string token can collide with them.
+`BYMAX_STORAGE_UPLOAD_VALIDATORS` — all `Symbol()`, so no string token can collide with
+them, and all four are in the module's `exports`, so injection resolves rather than raising
+`UnknownDependenciesException`. Two of them are nullable by design: `BYMAX_STORAGE_S3_CLIENT`
+is `null` until credentials are configured, and `BYMAX_STORAGE_FILE_SCANNER` is `null` when no
+scanner is set, which is the default. Type them as `S3Client | null` and `IFileScanner | null`.
 
 ---
 
