@@ -64,4 +64,58 @@ describe('mapAwsError', () => {
     const e = mapAwsError(null)
     expect(e.code).toBe('STORAGE_PROVIDER_ERROR')
   })
+
+  it.each([
+    ['not-found', { name: 'NotFound' }, 'STORAGE_OBJECT_NOT_FOUND'],
+    ['timeout', { name: 'TimeoutError' }, 'STORAGE_TIMEOUT'],
+    ['provider-error', { name: 'AccessDenied' }, 'STORAGE_PROVIDER_ERROR'],
+  ])(
+    'should never attach the caught error on the %s branch',
+    (_label, shape, expectedCode) => {
+      // `details` is serialized into the HTTP error envelope this library returns to API
+      // clients, so anything reachable from the returned exception is a published surface.
+      // A `cause` chain drags the whole SDK error with it — `$metadata`, `$fault`, an
+      // possibly-unconsumed `$response.body` stream and any vendor fields — so the mapper
+      // projects named fields instead of attaching the error.
+      //
+      // Driven across all three return paths on purpose: each constructs its own
+      // exception, so a guard on one says nothing about the others, and the not-found
+      // branch is the one `head` and `download` misses travel through.
+      const caught = { ...shape, message: 'denied', leaked: 'FIXTURE-must-not-leak' }
+
+      const mapped = mapAwsError(caught, { key: 'k', bucket: 'b', op: 'head' })
+
+      expect(mapped.code).toBe(expectedCode)
+      expect(mapped.cause).toBeUndefined()
+      expect(JSON.stringify(mapped.getResponse())).not.toContain('FIXTURE-must-not-leak')
+    },
+  )
+
+  it('should project only the four named fields beside the caller context', () => {
+    // Guards the projection itself, so the `cause` assertions above cannot pass by the
+    // mapper having quietly stopped copying anything. `context` is spread verbatim and is
+    // the caller's responsibility, not the mapper's — see the AGENTS.md rule.
+    const mapped = mapAwsError(
+      {
+        name: 'AccessDenied',
+        message: 'denied',
+        Code: 'AccessDenied',
+        $metadata: { httpStatusCode: 403, requestId: 'req-1' },
+        $fault: 'client',
+        leaked: 'FIXTURE-must-not-leak',
+      },
+      { key: 'k', bucket: 'b', op: 'head' },
+    )
+
+    const details = (mapped.getResponse() as { error: { details: MappedDetails } }).error.details
+    expect(details).toEqual({
+      key: 'k',
+      bucket: 'b',
+      op: 'head',
+      awsCode: 'AccessDenied',
+      httpStatus: 403,
+      requestId: 'req-1',
+      awsMessage: 'denied',
+    })
+  })
 })

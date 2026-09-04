@@ -232,6 +232,34 @@ a span attribute, never `StorageException.details`, never a field an error repor
 and never returned in a response that is itself logged. Treat a diff that puts one anywhere
 observable the way you would treat a diff that logs an access key.
 
+### `mapAwsError` projects named fields and never attaches the caught error
+
+`StorageException.details` is serialized into the HTTP error envelope this library returns to
+API clients, so anything reachable from a returned exception is a published surface. The mapper
+copies `awsCode`, `httpStatus`, `requestId` and `awsMessage` out of the provider error, and
+attaches nothing else from it. Attaching the caught error as `cause` would publish the whole SDK
+error at once — `$metadata`, `$fault`, a `$response` whose body may be an unconsumed stream, and
+any vendor fields the service adds.
+
+Do not propose adding `cause` here for diagnostics, and do not read its absence as an oversight.
+`aws-error-mapper.spec.ts` drives all three return paths — not-found, timeout and provider-error
+— asserting on each that `cause` is undefined and that no other field of the caught error reaches
+the envelope. Each path constructs its own exception, so a guard on one says nothing about the
+others.
+
+**`details` has a second channel, and it is not guarded.** The caller's `context` argument is
+spread into `details` verbatim, so `mapAwsError(err, { … })` publishes whatever it is handed.
+Critical Rule 2 forbids a presigned URL reaching `details`; nothing in the mapper enforces that,
+and the call sites in `signed-url.service.ts` are where it would be violated. Read what each call
+passes, not only what the mapper adds.
+
+**Do not extend `preserve-caught-error` to this function.** The rule is active as an error, and
+it is silent here because `mapAwsError` is neither a global error constructor nor listed in the
+rule's `errorClassNames` option — not because the throw is a call, which the rule accepts as
+readily as a construction. Adding `errorClassNames: ['mapAwsError']` to `eslint.config.mjs` would
+turn it on across every `throw mapAwsError(…)` site and have lint demand exactly the `cause` this
+rule forbids. If that option is ever wanted for other factories, this function has to be excluded.
+
 ### The `credentials` accessor is deliberately invisible to a spread
 
 `applyDefaults` attaches `credentials` to the resolved options as a **non-enumerable accessor**
