@@ -37,7 +37,17 @@ overrides:
   # rather than excluded from the scan, which would stay blind after the advisory is gone.
   'browserslist': '^4.28.7'
   'esbuild': '0.28.1'
-  'fast-uri': '^3.1.4'
+  # GHSA-5jgf-p345-68v8, GHSA-f65p-4m7j-42xc, GHSA-fph4-wmhf-6fwf and
+  # GHSA-jqff-g426-hqxp (CVSS 7.5 each) — two host confusion, two SSRF. Arrives through
+  # `@babel/core` and `ajv` under the test tooling; `dependencies` is empty and the
+  # published tarball carries only `dist/`, so nothing here ships it.
+  #
+  # A caret range whose lower bound is the first release that clears all four. The
+  # advisories begin at different versions (3.0.0, 3.0.0, 3.1.2, 3.1.3), so a bound taken
+  # from any one of them leaves another open; 3.1.6 is the first that satisfies every
+  # one. Each defect also reaches the 2.x and 4.x lines, so this entry is not a statement
+  # that only 3.x was affected.
+  'fast-uri': '^3.1.6'
   # GHSA-5p4m-2wfm-xmqj (CVSS 7.5). Arrives transitively through the test and lint
   # tooling — more than one path reaches it, so removing any single one would not remove
   # the exposure — and `dependencies` is empty, so nothing here ships it. Both majors are
@@ -48,6 +58,10 @@ overrides:
   'js-yaml@4': '^4.3.1'
   'multer': '2.2.0'
   'protobufjs': '^7.6.5'
-  'qs': '6.15.2'
+  # GHSA-4mjr-xmp4-gh2g (CVSS 5.3, denial of service through an attacker-controlled
+  # `isBuffer`) and GHSA-x5fp-wj9c-mxmx (CVSS 3.7, array-limit bypass through comma
+  # parsing of bracket keys). A caret rather than an exact version: a security override
+  # states a floor, and an exact pin is a ceiling — it refuses the next patch release, so
+  # a re-resolve cannot carry the tree forward past the advisory it was written for.
+  'qs': '^6.16.0'
   'undici': '^8.9.0'
-  'uuid': '11.1.1'
