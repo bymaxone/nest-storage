@@ -156,18 +156,21 @@ Three options were evaluated: (A) a separate SDK per provider — multiplies pee
 │   │   ├── bymax-storage.module.ts          # Root dynamic module
 │   │   ├── bymax-storage.constants.ts       # Injection tokens (Symbol)
 │   │   ├── interfaces/                      # storage-module-options, upload-options,
-│   │   │                                    # download-options, list-options,
-│   │   │                                    # signed-url-options, upload-validator,
-│   │   │                                    # file-scanner, upload-result,
-│   │   │                                    # object-metadata, provider-recipe
-│   │   ├── config/                          # default-options, resolved-options,
+│   │   │                                    # download-options, list-options, copy-options,
+│   │   │                                    # delete-many-options, signed-url-options,
+│   │   │                                    # upload-validator, file-scanner, provider-recipe
+│   │   ├── config/                          # apply-defaults, validate-options,
+│   │   │                                    # resolved-options,
 │   │   │                                    # provider-recipes (AWS, DO, R2, B2, MinIO…)
 │   │   ├── services/                        # storage, signed-url, key-resolver,
 │   │   │                                    # validation, file-scanner
 │   │   ├── providers/                       # s3-client, no-op-validator, no-op-scanner
-│   │   ├── constants/                       # default-mime-whitelist, error-codes
-│   │   ├── errors/                          # storage-error-codes, storage-exception
-│   │   └── utils/                           # content-disposition, stream-utils
+│   │   ├── constants/                       # default-mime-whitelist, default-options
+│   │   ├── errors/                          # aws-error-mapper, storage-error-messages,
+│   │   │                                    # storage-error-status, storage-exception
+│   │   └── utils/                           # header-utils, idempotency-cache, mime-match,
+│   │                                        # stream-utils, trim-trailing-slashes,
+│   │                                        # ttl-clamp, upload-strategy
 │   └── shared/                              # zero deps
 │       ├── index.ts
 │       ├── types/                           # storage-types, signed-url-types, error-types
@@ -207,19 +210,19 @@ Three options were evaluated: (A) a separate SDK per provider — multiplies pee
 
 - Module: `BymaxStorageModule`
 - Tokens: `BYMAX_STORAGE_OPTIONS`, `BYMAX_STORAGE_S3_CLIENT`, `BYMAX_STORAGE_UPLOAD_VALIDATORS`, `BYMAX_STORAGE_FILE_SCANNER`
-- Types: `BymaxStorageModuleOptions`, `UploadOptions`, `UploadResult`, `DownloadOptions`, `ListOptions`, `ListResult`, `SignedGetUrlOptions`, `SignedPutUrlOptions`, `SignedUrlResult`, `ObjectMetadata`, `StorageErrorResponse`, `IUploadValidator`, `IFileScanner`, `FileScanResult`, `ProviderRecipe`
+- Types: `BymaxStorageModuleOptions`, `BymaxStorageModuleAsyncOptions`, `BymaxStorageModuleOptionsFactory`, `UploadOptions`, `UploadResult`, `DownloadOptions`, `ListOptions`, `ListResult`, `ListedObject`, `CopyOptions`, `DeleteManyOptions`, `DeleteManyResult`, `FailedDeletion`, `SignedGetUrlOptions`, `SignedPutUrlOptions`, `MultipartUploadUrlsOptions`, `MultipartUploadUrlsResult`, `SignedUrlResult`, `ObjectMetadata`, `IUploadValidator`, `IFileScanner`, `FileScanResult`, `ProviderRecipe`, `StorageErrorCode`
 - Public services: `StorageService`, `SignedUrlService`
 - Errors: `StorageException`, `STORAGE_ERROR_CODES`
 - Helpers: `providerRecipes`, `NoOpUploadValidator`, `NoOpFileScanner`
 
 **Shared (`@bymax-one/nest-storage/shared`):**
 
-- Types: `UploadResult`, `ObjectMetadata`, `StorageErrorResponse`, `SignedUrlResult`
-- Constants: `STORAGE_ERROR_CODES`, `DEFAULT_IMAGE_MIME_WHITELIST`, `DEFAULT_VIDEO_MIME_WHITELIST`, `DEFAULT_DOC_MIME_WHITELIST`, `DEFAULT_SIGNED_URL_TTL_SECONDS`, `DEFAULT_MULTIPART_THRESHOLD_BYTES`
+- Types: `UploadResult`, `ObjectMetadata`, `ListedObject`, `StorageErrorResponse`, `SignedUrlResult`, `StorageErrorCode`
+- Constants: `STORAGE_ERROR_CODES`, `DEFAULT_IMAGE_MIME_WHITELIST`, `DEFAULT_VIDEO_MIME_WHITELIST`, `DEFAULT_DOC_MIME_WHITELIST`, `DEFAULT_SIGNED_URL_TTL_SECONDS`, `MAX_SIGNED_URL_TTL_SECONDS`, `DEFAULT_MULTIPART_THRESHOLD_BYTES`, `DEFAULT_MULTIPART_PART_SIZE_BYTES`, `DEFAULT_MULTIPART_QUEUE_SIZE`
 
 > **Public vs internal:** only `StorageService` and `SignedUrlService` are exported for direct use. `KeyResolverService`, `ValidationService`, and `FileScannerService` are implementation details.
 
-> **Shared re-exports:** the server entry (`.`) re-exports every `./shared` type (`UploadResult`, `ObjectMetadata`, `SignedUrlResult`, `StorageErrorResponse`), so server consumers import them from `@bymax-one/nest-storage` directly; `./shared` exists for frontends/workers that need only the zero-dependency types and constants.
+> **Shared re-exports:** the server entry (`.`) re-exports the `./shared` types `UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult` and `StorageErrorCode`, plus `STORAGE_ERROR_CODES`, so server consumers import them from `@bymax-one/nest-storage` directly; `StorageErrorResponse` and the other constants are available only from `./shared`, which exists for frontends/workers that need only the zero-dependency types and constants.
 
 ---
 
@@ -476,7 +479,7 @@ BymaxStorageModule.forRootAsync({
 
 All defined via `Symbol()` in `bymax-storage.constants.ts`:
 
-`BYMAX_STORAGE_OPTIONS` (resolved options), `BYMAX_STORAGE_S3_CLIENT` (singleton instance), `BYMAX_STORAGE_UPLOAD_VALIDATORS` (array of `IUploadValidator`), `BYMAX_STORAGE_FILE_SCANNER` (`IFileScanner` or no-op).
+`BYMAX_STORAGE_OPTIONS` (resolved options), `BYMAX_STORAGE_S3_CLIENT` (singleton instance), `BYMAX_STORAGE_UPLOAD_VALIDATORS` (array of `IUploadValidator`; empty when none is configured), `BYMAX_STORAGE_FILE_SCANNER` (the configured `IFileScanner`, or `null` when no `scanner` is configured).
 
 ---
 
@@ -494,8 +497,8 @@ export class StorageService {
 
   /** Download stream. Caller MUST consume the stream. @throws STORAGE_OBJECT_NOT_FOUND. */
   download(options: DownloadOptions): Promise<{
-    /** The v3 GetObject `Body` — a Node `Readable` carrying the sdk-stream-mixin (`transformToByteArray` / `transformToString` / `transformToWebStream`). */
-    stream: Readable
+    /** The v3 GetObject `Body` — at runtime a Node `Readable` carrying the sdk-stream-mixin; typed publicly as `NodeJS.ReadableStream`. */
+    stream: NodeJS.ReadableStream
     metadata: ObjectMetadata
   }>
 
@@ -565,14 +568,16 @@ export interface UploadOptions {
 export interface DownloadOptions {
   key: string
   bucket?: string
-  /** Specific object version (versioned buckets). */
-  versionId?: string
   /** Byte range, e.g. `'bytes=0-1023'` — maps to the GetObject `Range` header. */
   range?: string
+  /** Conditional GET — maps to the GetObject `IfNoneMatch` header. */
+  ifNoneMatch?: string
+  /** Conditional GET — maps to the GetObject `IfMatch` header. */
+  ifMatch?: string
 }
 ```
 
-> `Readable` is imported from `node:stream`; `DownloadOptions` is exported from the server entry (§3.3).
+> `DownloadOptions` is exported from the server entry (§3.3).
 
 ### 5.3 `UploadResult` and `ObjectMetadata`
 
@@ -644,7 +649,7 @@ When `size` is unknown (transformation stream), the package uses multipart with 
 
 ### 6.4 Idempotency
 
-When the caller provides `idempotencyKey`, the lib computes `sha256(idempotencyKey + ':' + finalKey)`, then looks up an in-memory LRU cache (default 1000 entries, TTL 24h). Cache hit: returns the previous `UploadResult` with `fromIdempotencyCache: true`. Cache miss: runs the upload and stores the result.
+When the caller provides `idempotencyKey`, the lib computes `sha256(JSON.stringify([idempotencyKey, finalKey]))` (a structured encoding, so the boundary between the two parts is unambiguous), then looks up an in-memory LRU cache (default 1000 entries, TTL 24h). Cache hit: returns the previous `UploadResult` with `fromIdempotencyCache: true`. Cache miss: runs the upload and stores the result.
 
 > **Trade-off:** in-memory cache per instance. In multi-replica, two pods can accept the same key simultaneously. Cross-instance: future `IIdempotencyStore` (v0.2).
 
@@ -799,7 +804,7 @@ class PdfMagicByteValidator implements IUploadValidator {
 }
 ```
 
-> **`NoOpUploadValidator`** (exported helper) — an `IUploadValidator` whose `validate()` always returns `{ ok: true }`. It is the default registered for `BYMAX_STORAGE_UPLOAD_VALIDATORS` when no `validation.customValidators` are configured.
+> **`NoOpUploadValidator`** (exported helper) — an `IUploadValidator` whose `validate()` always returns `{ ok: true }`, available for apps that want an explicit pass-through validator. The module itself registers an empty array for `BYMAX_STORAGE_UPLOAD_VALIDATORS` when no `validation.customValidators` are configured.
 
 ---
 
@@ -843,7 +848,7 @@ export interface FileScanResult {
 
 > Out-of-scope: the package does not provide a concrete implementation. The app injects one. Common adapters: `clamav.js`, AWS Macie SDK, Cloudmersive, VirusTotal, MetaDefender.
 
-> **`NoOpFileScanner`** (exported helper) — an `IFileScanner` whose `scan()` always returns `{ status: 'clean', engine: 'noop' }`. It is the default bound to `BYMAX_STORAGE_FILE_SCANNER` when no `scanner` is configured, so the scan step is a zero-cost pass-through.
+> **`NoOpFileScanner`** (exported helper) — an `IFileScanner` whose `scan()` always returns `{ status: 'clean', engine: 'noop' }`, available for apps that want an explicit pass-through scanner. The module itself binds `BYMAX_STORAGE_FILE_SCANNER` to `null` when no `scanner` is configured, and `FileScannerService` skips the scan step.
 
 ---
 
@@ -969,6 +974,7 @@ export class StorageException extends HttpException {
 | `STORAGE_PROVIDER_ERROR`          | 502  | AWS SDK error (network, 5xx, throttling); `details.awsCode`, `httpStatus`, `requestId`     |
 | `STORAGE_SIGNED_URL_TTL_INVALID`  | 400  | Per-request `ttlSeconds` ≤ 0. (A `ttlSeconds` above `maxTtlSeconds` is silently clamped, not rejected; the configured `maxTtlSeconds` is itself clamped to the 604800s SigV4 cap at init.) |
 | `STORAGE_PART_TOO_SMALL`          | 400  | Multipart with part < 5 MB (S3 limit)                                                      |
+| `STORAGE_INVALID_PART_COUNT`      | 400  | `getMultipartUploadUrls()` called with `parts` ≤ 0                                         |
 | `STORAGE_BUCKET_UNDEFINED`        | 400  | Operation without a bucket and no default bucket in the config                                 |
 | `STORAGE_MULTIPART_ABORTED`       | 500  | Multipart upload failed and was aborted. With `@aws-sdk/lib-storage` (`leavePartsOnError: false`) the abort is automatic; on the raw presigned-multipart path the lib issues `AbortMultipartUpload` to avoid orphan parts being billed |
 | `STORAGE_INVALID_CONFIG`          | 500  | `BymaxStorageModuleOptions` validation failed at initialization                            |
@@ -1072,7 +1078,7 @@ Following `@bymax-one/nest-auth`: the target is `"dependencies": {}` in `package
 
 **Goal:** a building, CI-gated scaffold with the public contracts and a live `S3Client`.
 
-Deliverables: scaffold (`package.json`, `tsconfig.*`, `tsup.config.ts`, eslint/jest/stryker configs, structure from §3.1, barrel exports) **and the four CI workflows** (`ci`/`codeql`/`scorecard`/`release`, incremental-safe); shared types + constants (`src/shared`); server interfaces (`storage-module-options`, `upload-options`, `download-options`, `list-options`, `signed-url-options`, `upload-validator`, `file-scanner`, `upload-result`, `object-metadata`, `provider-recipe`); configuration (`bymax-storage.constants.ts` with `Symbol` tokens, `default-options.ts`, `resolved-options.ts` merge + validation); `S3ClientProvider` (`onModuleInit` / `onApplicationShutdown` lifecycle, `s3Client.destroy()`); `KeyResolverService` (normalization, path-traversal blocking, `keyPrefix`); error catalog (`storage-error-codes`, `storage-error-messages`, `storage-error-status`, `StorageException`, AWS SDK → `StorageException` mapping); synchronous `BymaxStorageModule.forRoot()`.
+Deliverables: scaffold (`package.json`, `tsconfig.*`, `tsup.config.ts`, eslint/jest/stryker configs, structure from §3.1, barrel exports) **and the four CI workflows** (`ci`/`codeql`/`scorecard`/`release`, incremental-safe); shared types + constants (`src/shared`); server interfaces (`storage-module-options`, `upload-options`, `download-options`, `list-options`, `copy-options`, `delete-many-options`, `signed-url-options`, `upload-validator`, `file-scanner`, `provider-recipe`; `UploadResult` and `ObjectMetadata` live in `src/shared`); configuration (`bymax-storage.constants.ts` with `Symbol` tokens, `constants/default-options.constants.ts`, `config/apply-defaults.ts`, `config/validate-options.ts`, `config/resolved-options.ts`); `S3ClientProvider` (`onModuleInit` / `onApplicationShutdown` lifecycle, `s3Client.destroy()`); `KeyResolverService` (normalization, path-traversal blocking, `keyPrefix`); error catalog (`STORAGE_ERROR_CODES` in `src/shared`, `storage-error-messages`, `storage-error-status`, `StorageException`, `aws-error-mapper` for the AWS SDK → `StorageException` mapping); synchronous `BymaxStorageModule.forRoot()`.
 
 ### 15.3 Phase 2 — Upload (single, multipart, stream) + Download
 

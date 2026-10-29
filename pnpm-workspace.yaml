@@ -48,11 +48,12 @@ overrides:
   # `@babel/core` and `ajv` under the test tooling; `dependencies` is empty and the
   # published tarball carries only `dist/`, so nothing here ships it.
   #
-  # A caret range whose lower bound is the first release that clears all four. The
-  # advisories begin at different versions (3.0.0, 3.0.0, 3.1.2, 3.1.3), so a bound taken
-  # from any one of them leaves another open; 3.1.6 is the first that satisfies every
-  # one. Each defect also reaches the 2.x and 4.x lines, so this entry is not a statement
-  # that only 3.x was affected.
+  # Further advisories on the same package raise the floor: GHSA-hrr3-gc8f-f4qj needs 3.1.8,
+  # and GHSA-333x-w4r6-6crp, GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr and GHSA-xhq7-xmqj-769h
+  # need 3.1.9. The four above were first fixed in 3.1.6, so a bound taken from any single
+  # advisory leaves another open; the floor is the highest of them. Each defect also reaches
+  # the 2.x and 4.x lines, so this entry is not a statement that only 3.x was affected.
+  # Remove once `ajv` and `@babel/core` resolve it at or above 3.1.9 without help.
   'fast-uri@3': '^3.1.9'
   # GHSA-5p4m-2wfm-xmqj (CVSS 7.5). Arrives transitively through the test and lint
   # tooling — more than one path reaches it, so removing any single one would not remove
@@ -79,8 +80,10 @@ overrides:
   # states a floor, and an exact pin is a ceiling — it refuses the next patch release, so
   # a re-resolve cannot carry the tree forward past the advisory it was written for.
   'qs@6': '^6.16.1'
-  # Eleven advisories (CVSS 3.7 – 7.5) in the 8.x line, all closed by 8.12.2: header and
-  # cache handling, TLS option propagation and retry-handler leaks. Arrives through
+  # Several advisories (CVSS 3.7 – 7.5) in the 8.x line, among them GHSA-qrxm-fqhp-jwvm and
+  # GHSA-xjj6-f33q-929c (7.5 each), GHSA-2m5v-pch6-74hx and GHSA-4w7w-5xrc-9h26 (7.4 each):
+  # header and cache handling, TLS option propagation and retry-handler leaks. 8.12.2 is the
+  # first release that clears them all. Arrives through
   # `testcontainers` and `@testcontainers/minio`, i.e. only the E2E suite; nothing here ships
   # it. A floor, so resolution stays free to move forward. Remove once `testcontainers`
   # resolves it at or above 8.12.2.
@@ -95,11 +98,16 @@ overrides:
   # `testcontainers`; nothing here ships it. Remove once `testcontainers` resolves 1.14.5+.
   '@grpc/grpc-js@1': '^1.14.5'
   # GHSA-27r3-jxmh-p828 (CVSS 7.5) — body-parser denial of service. Arrives through
-  # `express` under `@nestjs/platform-express`, which only the test suite uses.
+  # `express` under `@nestjs/platform-express`, which only the test suite uses; nothing here
+  # ships it. 2.4.0 is the first patched release. Remove once `express` resolves it at or
+  # above that.
   'body-parser@2': '^2.4.0'
   # GHSA-jqcg-44mw-7w3h (CVSS 9.1) — IP spoofing through an IPv4-mapped IPv6 trust subnet.
-  # Arrives through `express` under `@nestjs/platform-express`, test suite only.
+  # Arrives through `express` under `@nestjs/platform-express`, test suite only; nothing here
+  # ships it. 2.0.8 is the first patched release. Remove once `express` resolves it at or
+  # above that.
   'proxy-addr@2': '^2.0.8'
   # GHSA-mrhx-c7xc-m3w5 (CVSS 8.2). Arrives through `mutation-server-protocol` under
-  # `@stryker-mutator/core`, i.e. the manual mutation gate; nothing here ships it.
+  # `@stryker-mutator/core`, i.e. the manual mutation gate; nothing here ships it. 4.6.6 is the
+  # first patched release. Remove once `mutation-server-protocol` resolves it at or above that.
   'zod@4': '^4.6.6'
