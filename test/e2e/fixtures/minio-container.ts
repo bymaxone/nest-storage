@@ -6,8 +6,14 @@
  */
 import { GenericContainer, type StartedTestContainer } from 'testcontainers'
 
-/** A pinned MinIO release for reproducible runs (never `latest`). */
-const MINIO_IMAGE = 'minio/minio:RELEASE.2025-09-07T16-13-09Z'
+/**
+ * The S3 server the suite runs against, pinned by digest for reproducible runs (never
+ * `latest`). The image must answer to the `server /data` command and read its credentials
+ * from `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`, as started below. The CI workflow
+ * pre-pulls whatever this constant holds, so it is the only place to change.
+ */
+const MINIO_IMAGE =
+  'docker.io/pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7'
 const MINIO_PORT = 9000
 const MINIO_ROOT_USER = 'minioadmin'
 const MINIO_ROOT_PASSWORD = 'minioadmin'
