@@ -180,3 +180,23 @@ Where a `// Stryker disable next-line` directive was found not to apply — abov
 builder chain — it was replaced with the block `disable`/`restore` form, or, where that does not
 work either, with a plain comment at the line so the reasoning is visible rather than silently
 ineffective.
+
+---
+
+## Re-run — 2026-09-07
+
+Scheduled full run (`Mutation (full)` workflow) on the tree at `16e5048`.
+
+| Metric | Value |
+| --- | --- |
+| **Mutation score** | **100.00 %** |
+| Killed | 622 |
+| Timeout (detected) | 13 |
+| **Survived** | **0** |
+| No coverage | 0 |
+| Type-invalid mutants rejected by the TypeScript checker | 412 |
+| Break threshold (`break: 95`) | **held** |
+
+The weekly runs after this one, up to the most recent, measured nothing: the workflow skips when
+no file that can move the score changed since the last measured revision, and none did. The score
+above therefore stands for the current `src/` until a source change triggers a new measurement.

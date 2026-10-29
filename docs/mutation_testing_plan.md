@@ -81,12 +81,23 @@ These files target 100% mutation score. Survivors in these files block a release
 ```json
 // stryker.config.json (abbreviated)
 {
-  "mutate": ["src/server/**/*.ts", "!src/server/**/*.spec.ts"],
   "testRunner": "jest",
+  "checkers": ["typescript"],
   "coverageAnalysis": "perTest",
+  "mutate": [
+    "src/server/**/*.ts",
+    "!src/**/*.spec.ts",
+    "!src/**/index.ts",
+    "!src/server/interfaces/**",
+    "!src/server/constants/**",
+    "!src/server/bymax-storage.constants.ts",
+    "!src/server/errors/storage-error-messages.ts",
+    "!src/server/errors/storage-error-status.ts"
+  ],
   "thresholds": { "high": 100, "low": 95, "break": 95 },
-  "reporters": ["html", "progress", "summary"],
-  "htmlReporter": { "fileName": "reports/mutation/mutation.html" }
+  "reporters": ["clear-text", "progress", "json"],
+  "concurrency": 1,
+  "incremental": true
 }
 ```
 
