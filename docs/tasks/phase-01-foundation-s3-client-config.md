@@ -608,7 +608,9 @@ DELIVERABLES
            run: pnpm test:e2e
    ```
 
-3. `.github/workflows/codeql.yml`:
+3. `.github/workflows/codeql.yml` (the example below is the standalone shape this task specified; the live
+   file delegates to `bymaxone/.github/.github/workflows/codeql.yml@v1`, so read `.github/workflows/codeql.yml`
+   for what runs):
 
    ```yaml
    name: CodeQL
