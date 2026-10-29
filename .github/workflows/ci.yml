@@ -80,8 +80,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
-      - name: Pre-pull pinned MinIO image (cache for Testcontainers)
-        run: docker pull minio/minio:RELEASE.2024-01-16T16-07-38Z
+      - name: Pre-pull the pinned S3 image (cache for Testcontainers)
+        # Read from the fixture that starts the container, so the image pulled here and the
+        # image the suite runs cannot drift apart.
+        run: docker pull "$(grep -oP "^\s*'\Kdocker\.io/[^']+" test/e2e/fixtures/minio-container.ts)"
       - name: E2E tests
         run: pnpm test:e2e
 
