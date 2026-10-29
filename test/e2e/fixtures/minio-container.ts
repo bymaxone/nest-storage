@@ -6,8 +6,14 @@
  */
 import { GenericContainer, type StartedTestContainer } from 'testcontainers'
 
-/** A pinned MinIO release for reproducible runs (never `latest`). */
-const MINIO_IMAGE = 'minio/minio:RELEASE.2025-09-07T16-13-09Z'
+/**
+ * The S3 server the suite runs against, pinned by digest for reproducible runs (never
+ * `latest`). `minio/minio` is no longer published on Docker Hub, so this is the community
+ * fork that keeps its `server /data` entrypoint and `MINIO_ROOT_*` variables. The CI
+ * workflow pre-pulls whatever this constant holds, so it is the only place to change.
+ */
+const MINIO_IMAGE =
+  'docker.io/pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7'
 const MINIO_PORT = 9000
 const MINIO_ROOT_USER = 'minioadmin'
 const MINIO_ROOT_PASSWORD = 'minioadmin'
