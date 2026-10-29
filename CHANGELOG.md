@@ -13,6 +13,9 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+Apart from the removal below, nothing here changes the published bundle: the remaining entries are
+development, test and CI tooling.
+
 ### Removed
 
 - **`BYMAX_STORAGE_LOGGER` and `BYMAX_STORAGE_IDEMPOTENCY_CACHE` are no longer exported.**
@@ -37,6 +40,29 @@ note on each entry is the compatibility contract — read it, not the number.
 
   For logging specifically: services here use `new Logger(ClassName)` from `@nestjs/common`, so
   `app.useLogger(...)` redirects them all, which is what this token pretended to offer.
+
+### Security
+
+- Raised the floors of vulnerable transitive dev dependencies through `pnpm.overrides` in
+  `pnpm-workspace.yaml`: `browserslist`, `fast-uri`, `qs`, `undici`, `multer`, `brace-expansion`,
+  `handlebars`, `js-yaml`, `@grpc/grpc-js`, `body-parser`, `proxy-addr` and `zod`. Every one is
+  reached only through test, lint or mutation tooling; `dependencies` is empty, so none ships.
+- `osv-scanner.toml` ignores `GHSA-gcqx-w48m-w2h4` (`deepmerge`, reached only through
+  `jest-config`) until 2027-01-27, because no patched release exists.
+
+### Changed
+
+- Moved the development toolchain to ESLint 10 and bumped the `dev-dependencies` groups.
+- The E2E suite starts its S3 server from one image, pinned by digest, held in
+  `test/e2e/fixtures/minio-container.ts`; the CI workflow pre-pulls the reference it reads from
+  that file.
+- Bumped the pinned CI actions (`actions/setup-node`, `actions/upload-artifact`,
+  `step-security/harden-runner`, `pnpm/action-setup`, `github/codeql-action/upload-sarif`) and moved
+  the OSV scan and the shared review-rules sync to their shared workflows.
+
+### Tests
+
+- `mapAwsError` is now asserted never to attach the caught error, on every branch.
 
 ## [1.1.0] - 2026-08-11
 

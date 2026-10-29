@@ -12,7 +12,7 @@ This file gives AI coding assistants a concise orientation to the repository. `A
 | **npm** | `https://www.npmjs.com/package/@bymax-one/nest-storage` |
 | **Repo** | `https://github.com/bymaxone/nest-storage` |
 | **Runtime deps** | **zero** — `"dependencies": {}` |
-| **Peer deps** | `@nestjs/common ^11`, `@nestjs/core ^11`, `@aws-sdk/client-s3 ^3.700.0`, `@aws-sdk/lib-storage ^3.700.0`, `@aws-sdk/s3-request-presigner ^3.700.0`, `reflect-metadata ^0.2` |
+| **Peer deps** | `@nestjs/common ^11.0.16`, `@nestjs/core ^11.1.18`, `@aws-sdk/client-s3 ^3.700.0`, `@aws-sdk/lib-storage ^3.700.0`, `@aws-sdk/s3-request-presigner ^3.700.0`, `reflect-metadata ^0.2` |
 | **Stack** | TypeScript 5, NestJS 11, AWS SDK v3 |
 | **Node** | ≥ 24 |
 | **Test runner** | Jest 30 (ts-jest) |

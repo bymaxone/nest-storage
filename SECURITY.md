@@ -4,7 +4,7 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 1.0.x   | ✅        |
+| 1.1.x   | ✅        |
 
 Only the latest minor release receives security patches. Upgrade to the current version before reporting.
 
