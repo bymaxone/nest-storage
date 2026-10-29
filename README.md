@@ -709,11 +709,15 @@ scanner is set, which is the default. Type them as `S3Client | null` and `IFileS
                          │
     ┌────────────────────┼────────────────────┐
     │                    │                    │
-IUploadValidator[]   IFileScanner       IdempotencyCache
+ValidationService    IFileScanner       IdempotencyCache
 MIME + size, then    pre- and/or        LRU, in-process,
-yours                post-upload        collapses a retry
+IUploadValidator[]   post-upload        collapses a retry
    (yours)             (yours)          within one instance
 ```
+
+`SignedUrlService` stops at `KeyResolverService`: it signs a URL and never sees the body, so
+validation, scanning and the idempotency cache apply to `StorageService` only. See the signed-PUT
+caveat above.
 
 One engine, six recipes. `providerRecipes` differ only in endpoint, region and the
 handful of flags each provider needs (`forcePathStyle` for MinIO, `auto` region for
