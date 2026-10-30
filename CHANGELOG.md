@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-30
+
 Apart from the removal below, nothing here changes the published bundle: the remaining entries are
 development, test and CI tooling.
 
@@ -331,4 +333,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.0.5]: https://github.com/bymaxone/nest-storage/compare/v1.0.4...v1.0.5
 [1.0.6]: https://github.com/bymaxone/nest-storage/compare/v1.0.5...v1.0.6
 [1.1.0]: https://github.com/bymaxone/nest-storage/compare/v1.0.6...v1.1.0
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.0...HEAD
+[1.1.1]: https://github.com/bymaxone/nest-storage/compare/v1.1.0...v1.1.1
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.1...HEAD
