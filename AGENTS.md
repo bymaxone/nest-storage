@@ -205,7 +205,7 @@ rewrite published history.
 
 ## Where this repository narrows a shared rule
 
-The block above holds across every Bymax repository. Three of its rules have a sharper form here,
+The block above holds across every Bymax repository. Some of its rules have a sharper form here,
 and this is that form — not a disagreement with the shared text.
 
 - **Size and layering applies to `src/` and `test/`.** No file is over the 800-line limit today;
