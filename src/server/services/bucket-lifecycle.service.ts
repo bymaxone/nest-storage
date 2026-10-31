@@ -1,6 +1,6 @@
 /**
  * @fileoverview Bucket lifecycle configuration: read the rules, upsert or remove
- * one expiration rule by id, and leave every other rule exactly as the provider
+ * one expiration or multipart-abort rule by id, and leave every other rule exactly as the provider
  * returned it. S3 replaces the whole configuration on every write, so each
  * change is a read-modify-write.
  * @layer server/services
@@ -98,10 +98,10 @@ export class BucketLifecycleService {
   }
 
   /**
-   * Adds the expiration rule, or replaces the rule with the same id, and writes
+   * Adds the expiration or multipart-abort rule, or replaces the rule with the same id, and writes
    * the full set back. Rules with other ids are sent exactly as they were read.
    *
-   * @param rule - The rule id, key prefix and expiration in days.
+   * @param rule - The rule id, key prefix and either `expirationDays` or `abortIncompleteMultipartDays`.
    * @param options - Optional per-call bucket override.
    * @throws StorageException `STORAGE_LIFECYCLE_RULE_INVALID` for a bad id, prefix or day count, or an id
    *   that names a rule outside `keyPrefix`;
