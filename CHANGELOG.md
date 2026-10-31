@@ -48,8 +48,7 @@ note on each entry is the compatibility contract — read it, not the number.
 - **`signedUrls.maxTtlSeconds` above 604 800 is reduced at init.** The SigV4 signer rejects any
   expiry over 7 days, so a larger configured ceiling made every request above 7 days fail with a
   provider error while shorter requests worked. The ceiling is now capped at 604 800 s when the
-  module starts, with one warning naming both values, which is what `docs/architecture.md` always
-  described. A boot that worked before still boots.
+  module starts, with one warning naming both values. A boot that worked before still boots.
 - **`STORAGE_PART_TOO_SMALL` is documented as reserved.** Nothing throws it: a part size under the
   S3 minimum is rejected at init as `STORAGE_INVALID_CONFIG`. The code stays in the contract.
 - **The published-surface gate now fails on a wrong option, method or field in a README snippet.**

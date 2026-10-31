@@ -13,6 +13,22 @@
  *   fixture happened to use a workaround form.
  * - A pull request deleted a `## [x.y.z]` heading while adding the next one,
  *   which silently turns the release notes into the generic fallback.
+ * - README examples used option, method and field names the package does not have
+ *   (`validators`, `partCount`, a validator that returned `{ valid }`) and the snippet
+ *   check passed, because of three blind spots in how it compiled them:
+ *   1. The `tsc` command reports no semantic error once any file has a syntax error,
+ *      and a snippet that elides code with `...` is allowed one. The project is now
+ *      compiled through the TypeScript API, which returns both kinds together.
+ *   2. Only snippets that import the package were compiled, so a `forRoot({ ... })`
+ *      shown without its import was never checked. Every snippet is compiled now,
+ *      with the package's public names imported for those that do not import it.
+ *   3. Every undeclared name was ignored, so a call through `storage` or `signedUrls`
+ *      resolved to `any` and checked nothing. The names a snippet takes from the
+ *      surrounding prose are typed in `scripts/readme-prelude.d.ts`.
+ *
+ * Portable between packages: everything here is generic except `readme-prelude.d.ts`
+ * (the typed names and helper classes the README assumes) and the `SnippetContext` /
+ * `SnippetController` members that `prepareSnippet` builds from the service names.
  *
  * Run after `pnpm build` — the snippets compile against `dist/`.
  */
