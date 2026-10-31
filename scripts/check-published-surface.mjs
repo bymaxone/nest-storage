@@ -78,6 +78,9 @@ function publicImports() {
   return `import { ${parts.join(', ')} } from '${PKG.name}'`
 }
 
+/** An `import ... from '...'` statement, as it begins a line of a README snippet. */
+const IMPORT_STATEMENT = /^import\s[\s\S]*?from\s+['"][^'"]+['"]\s*;?\n/gm
+
 /**
  * Turns a README fragment into something a compiler can check without changing what
  * it claims: a snippet that does not import the package gets every public name
@@ -87,11 +90,10 @@ function publicImports() {
  * the wrapper, and a snippet that declares classes or types is left as written.
  */
 function prepareSnippet(code, importsPkg) {
-  const importPattern = /^import\s[\s\S]*?from\s+['"][^'"]+['"]\s*;?\n/gm
-  const imports = code.match(importPattern) ?? []
+  const imports = code.match(IMPORT_STATEMENT) ?? []
   // `{ ... }` is how a snippet says "the usual arguments". Left alone it is a parse
   // error, and a parse error in a call hides every semantic error around it.
-  const body = code.replace(importPattern, '').replaceAll('{ ... }', '{} as never')
+  const body = code.replace(IMPORT_STATEMENT, '').replaceAll('{ ... }', '{} as never')
   const header = `${importsPkg ? '' : `${publicImports()}\n`}${imports.join('')}`
   const declares = /^(export\s+)?(abstract\s+)?(class|interface|type|enum|function)\s/m.test(body)
   const decoratedMethod = /^@\w+\([^)]*\)\s*\n\s*(async\s+)?\w+\s*\(/m.test(body)
@@ -630,10 +632,20 @@ function checkSnippets() {
   const isAbbreviatedLocalType = (line, sources) => {
     const m = /Property '[^']+' does not exist on type '([^']+)'/.exec(line)
     if (!m) return false
+    // A union or an object type is not a declared name, and a name only an import
+    // brings in is the package's own type: neither may exempt the error.
+    if (!/^[\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*$/u.test(m[1])) return false
     const file = /^([^(]+)\(/.exec(line)?.[1]
-    // `tsc` emits backslashes on Windows, so the basename is taken on either.
-    const own = sources.get(file?.split(/[\\/]/).pop() ?? '') ?? ''
-    return new RegExp(`\\b(class|interface|type)\\s+${m[1]}\\b`).test(own)
+    // `tsc` emits backslashes on Windows, so the basename is taken on either. The
+    // search skips the snippet's imports, where `type Name` is not a declaration.
+    const own = (sources.get(file?.split(/[\\/]/).pop() ?? '') ?? '').replace(IMPORT_STATEMENT, '')
+    // `$` is an identifier character and a regexp metacharacter, so it is escaped; a
+    // lookahead over the identifier-continue characters, not `\b`, ends the name.
+    const name = m[1].replaceAll('$', '\\$')
+    return new RegExp(
+      `\\b(class|interface|type)\\s+${name}(?![\\p{ID_Continue}$\\u200c\\u200d])`,
+      'u',
+    ).test(own)
   }
   /** An import of some OTHER package the fixture does not install — a documented
    * optional integration. Reported as uncovered, not as a failure. */
