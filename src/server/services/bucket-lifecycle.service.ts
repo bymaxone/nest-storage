@@ -26,6 +26,17 @@ import { StorageException } from '../errors/storage-exception'
 import { isNoLifecycleConfiguration, mapLifecycleError } from '../errors/lifecycle-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
+/**
+ * The rule-level `Prefix` that AWS deprecated in favour of `Filter`, read by key so the
+ * deprecated declaration is not referenced. Rules written before `Filter` existed still carry it.
+ */
+const LEGACY_PREFIX_KEY = 'Prefix' as string
+
+function legacyPrefix(rule: BucketLifecycleRule): string | undefined {
+  const value: unknown = new Map(Object.entries(rule)).get(LEGACY_PREFIX_KEY)
+  return typeof value === 'string' ? value : undefined
+}
+
 /** The AWS limit on a lifecycle rule id (`LifecycleRule.ID`). */
 const MAX_RULE_ID_LENGTH = 255
 
@@ -142,7 +153,7 @@ export class BucketLifecycleService {
     if (keyPrefix === '') {
       return true
     }
-    const prefix = rule.Filter?.Prefix ?? rule.Filter?.And?.Prefix
+    const prefix = rule.Filter?.Prefix ?? rule.Filter?.And?.Prefix ?? legacyPrefix(rule)
     return prefix?.startsWith(keyPrefix) === true
   }
 
@@ -166,15 +177,16 @@ export class BucketLifecycleService {
 
   /**
    * Returns a copy of the rule with `keyPrefix` removed from each filter prefix that
-   * carries it (`Filter.Prefix` and `Filter.And.Prefix`). Prefixes outside the
-   * namespace are left alone, and so is the rule-level `Prefix` the AWS API has
-   * deprecated: this service never writes it. The stored rule is never touched.
+   * carries it (`Filter.Prefix`, `Filter.And.Prefix` and the deprecated rule-level
+   * `Prefix`). Prefixes outside the namespace are left alone. The stored rule is never touched.
    */
   private stripRulePrefixes(rule: BucketLifecycleRule): BucketLifecycleRule {
     const strip = (prefix: string): string => this.keyResolver.stripPrefix(prefix)
     const { Filter: filter, ...rest } = rule
+    const legacy = legacyPrefix(rule)
     return {
       ...rest,
+      ...(legacy !== undefined ? { [LEGACY_PREFIX_KEY]: strip(legacy) } : {}),
       ...(filter !== undefined
         ? {
             Filter: {

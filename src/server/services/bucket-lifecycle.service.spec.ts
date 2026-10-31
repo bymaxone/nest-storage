@@ -138,7 +138,8 @@ describe('BucketLifecycleService.get', () => {
         { ID: 'outside', Status: 'Enabled', Filter: { Prefix: 'tenant-b/x/' } },
         { ID: 'whole-bucket', Status: 'Enabled', Filter: { Prefix: '' } },
         { ID: 'tag-only', Status: 'Enabled', Filter: { Tag: { Key: 'k', Value: 'v' } } },
-        { ID: 'no-filter', Status: 'Enabled', Prefix: 'tenant-a/z/' },
+        { ID: 'legacy-inside', Status: 'Enabled', Prefix: 'tenant-a/z/' },
+        { ID: 'legacy-outside', Status: 'Enabled', Prefix: 'tenant-b/z/' },
       ],
     })
     await expect(service.get()).resolves.toEqual([
@@ -147,7 +148,20 @@ describe('BucketLifecycleService.get', () => {
       { ID: 'outside', Status: 'Enabled', Filter: { Prefix: 'tenant-b/x/' }, isOutsideKeyPrefix: true },
       { ID: 'whole-bucket', Status: 'Enabled', Filter: { Prefix: '' }, isOutsideKeyPrefix: true },
       { ID: 'tag-only', Status: 'Enabled', Filter: { Tag: { Key: 'k', Value: 'v' } }, isOutsideKeyPrefix: true },
-      { ID: 'no-filter', Status: 'Enabled', Prefix: 'tenant-a/z/', isOutsideKeyPrefix: true },
+      { ID: 'legacy-inside', Status: 'Enabled', Prefix: 'z/' },
+      { ID: 'legacy-outside', Status: 'Enabled', Prefix: 'tenant-b/z/', isOutsideKeyPrefix: true },
+    ])
+  })
+
+  it('lets upsert replace a legacy rule-level-prefix rule that sits inside keyPrefix', async () => {
+    // Rules written before Filter existed carry Prefix at the rule level; inside the namespace they are ours to replace.
+    const { service, send } = makeService({ keyPrefix: 'tenant-a' })
+    send
+      .mockResolvedValueOnce({ Rules: [{ ID: 'expire-tmp', Status: 'Enabled', Prefix: 'tenant-a/old/', Expiration: { Days: 1 } }] })
+      .mockResolvedValueOnce({})
+    await service.upsert({ id: 'expire-tmp', prefix: 'expiring/', expirationDays: 7 })
+    expect(putRules(send)).toEqual([
+      { ID: 'expire-tmp', Status: 'Enabled', Filter: { Prefix: 'tenant-a/expiring/' }, Expiration: { Days: 7 } },
     ])
   })
 

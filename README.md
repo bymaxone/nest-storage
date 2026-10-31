@@ -580,7 +580,8 @@ const removed = await lifecycle.remove('expire-tmp') // true; false when no rule
 - **`prefix` is relative to `keyPrefix`.** The rule's effective prefix is `keyPrefix` plus the one
   you pass, because that is where the objects live. `get()` returns filter prefixes the same
   relative way `list()` returns keys, so `upsert({ prefix: rule.Filter.Prefix, ... })` on a value
-  read from `get()` does not prefix twice. The deprecated rule-level `Prefix` is returned as stored.
+  read from `get()` does not prefix twice. The deprecated rule-level `Prefix` is treated the same
+  way as `Filter.Prefix`.
 - **Rules outside `keyPrefix` are read-only.** With a `keyPrefix` set, a rule whose filter prefix
   does not start with it — written by another application or by hand, tag-only, or covering the
   whole bucket — is returned exactly as stored with `isOutsideKeyPrefix: true`. `upsert` and
