@@ -68,12 +68,24 @@ export async function peekFirstBytes(
 
 /**
  * Destroys a stream when it can be destroyed. `NodeJS.ReadableStream` does not declare
- * `destroy()`, so a stream without it is left alone instead of throwing.
+ * `destroy()`, so a stream without it (a `Buffer`, for one) is left alone instead of throwing.
+ * Destroying with an error emits `'error'` on the stream, which crashes the process when
+ * nothing listens; a no-op listener is attached first, because the caller is already being
+ * rejected with that same error.
  *
  * @param stream - The stream to release.
+ * @param error - Why it is being released, when that is a failure.
  */
-export function destroyStream(stream: NodeJS.ReadableStream): void {
-  ;(stream as Partial<Readable>).destroy?.()
+export function destroyStream(stream: NodeJS.ReadableStream, error?: Error): void {
+  // Untyped callers can pass an absent body; there is nothing to release then.
+  const target = stream as Partial<Readable> | null | undefined
+  if (!target) {
+    return
+  }
+  if (error !== undefined) {
+    target.once?.('error', () => undefined)
+  }
+  target.destroy?.(error)
 }
 
 /**
