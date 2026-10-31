@@ -163,6 +163,7 @@ export class SignedUrlService {
    * @param options - The multipart URL options.
    * @returns `uploadId`, `partUrls`, and `completeUrl`.
    * @throws StorageException `STORAGE_NOT_CONFIGURED` when the client is absent.
+   * @throws StorageException `STORAGE_INVALID_PART_COUNT` when `parts` is not an integer from 1 to 10 000.
    * @throws StorageException `STORAGE_SIGNED_URL_TTL_INVALID` for non-positive TTL.
    * @throws StorageException `STORAGE_PROVIDER_ERROR` when no `UploadId` is returned.
    */
