@@ -61,6 +61,23 @@ jobs:
             exit 1
           fi
 
+      - name: Extract release notes from CHANGELOG
+        # Runs before the gate and the publish: a tag whose version has no changelog
+        # section must stop here, not after the package is already on the registry.
+        # The heading is matched literally (`## [X.Y.Z]`), so the dots in a version
+        # are not regex wildcards. The section runs to the next `## [` heading.
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          awk -v ver="$VERSION" '
+            index($0, "## [" ver "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "CHANGELOG.md has no non-empty section for [$VERSION]"
+            exit 1
+          fi
+
       - name: Release gate
         run: pnpm prepublishOnly # typecheck · lint · 100% coverage · build · size
 
@@ -102,4 +119,4 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
