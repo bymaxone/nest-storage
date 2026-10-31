@@ -6,6 +6,7 @@
 import { EventEmitter } from 'node:events'
 import { PassThrough, Readable } from 'node:stream'
 import {
+  destroyStream,
   readStreamUpTo,
   bufferToReadable,
   getBodySize,
@@ -235,6 +236,29 @@ describe('stream-utils', () => {
 
       expect(text).toBe('abcdefgh')
       expect(destroy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('destroyStream', () => {
+    it('attaches an error listener only when it destroys with an error', () => {
+      // The listener exists to keep an unheard 'error' from crashing; without an error there is nothing to hear.
+      const quiet = new Readable({ read() {} })
+      const failing = new Readable({ read() {} })
+
+      destroyStream(quiet)
+      destroyStream(failing, new Error('rejected'))
+
+      expect(quiet.destroyed).toBe(true)
+      expect(quiet.listenerCount('error')).toBe(0)
+      expect(failing.destroyed).toBe(true)
+      expect(failing.listenerCount('error')).toBe(1)
+    })
+
+    it('ignores an absent body and a body that cannot be destroyed', () => {
+      expect(() => {
+        destroyStream(undefined as unknown as NodeJS.ReadableStream, new Error('x'))
+        destroyStream(Buffer.from('abc') as unknown as NodeJS.ReadableStream, new Error('x'))
+      }).not.toThrow()
     })
   })
 
