@@ -13,18 +13,16 @@
  *   fixture happened to use a workaround form.
  * - A pull request deleted a `## [x.y.z]` heading while adding the next one,
  *   which silently turns the release notes into the generic fallback.
- * - README examples used option, method and field names the package does not have
- *   (`validators`, `partCount`, a validator that returned `{ valid }`) and the snippet
- *   check passed, because of blind spots in how it compiled them:
- *   1. The `tsc` command reports no semantic error once any file has a syntax error,
- *      and a snippet that elides code with `...` is allowed one. The project is now
- *      compiled through the TypeScript API, which returns both kinds together.
- *   2. Only snippets that import the package were compiled, so a `forRoot({ ... })`
- *      shown without its import was never checked. Every snippet is compiled now,
- *      with the package's public names imported for those that do not import it.
- *   3. Every undeclared name was ignored, so a call through `storage` or `signedUrls`
- *      resolved to `any` and checked nothing. The names a snippet takes from the
- *      surrounding prose are typed in `scripts/readme-prelude.d.ts`.
+ * - README examples are checked against the types a consumer sees, so the compile of
+ *   the snippets keeps three constraints:
+ *   1. Syntactic and semantic diagnostics are collected together. The `tsc` command
+ *      stops after syntax errors, and a snippet that elides code with `...` has one,
+ *      so the project is compiled through the TypeScript API.
+ *   2. Every snippet is compiled, with the package's public names imported for those
+ *      that do not import it.
+ *   3. The names a snippet takes from the surrounding prose are typed in
+ *      `scripts/readme-prelude.d.ts`; an undeclared name is an error, and a typed one
+ *      is checked instead of resolving to `any`.
  *
  * Portable between packages: everything here is generic except `readme-prelude.d.ts`
  * (the typed names, `SnippetContext` and the helper classes the README assumes) and the
@@ -592,11 +590,10 @@ function checkSnippets() {
     fail('snippets', 'no README snippet imports the package — the gate would be vacuous')
     return
   }
-  // Every snippet is compiled, not only the ones that import the package: a
-  // snippet that shows a `forRoot({ ... })` call without repeating the import is
-  // still making a claim about the options, and leaving it out is how a wrong
-  // option name reached the README. A snippet that does not import the package
-  // gets every public name imported for it, so it is checked against the real types.
+  // Every snippet is compiled, not only the ones that import the package: a snippet
+  // that shows a `forRoot({ ... })` call without repeating the import still makes a
+  // claim about the options. One that does not import the package gets every public
+  // name imported for it, so it is checked against the real types.
   const subjects = blocks.map((b) => ({
     ...b,
     raw: b.code,
