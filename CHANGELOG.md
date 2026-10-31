@@ -13,6 +13,26 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Added
+
+- **`BucketLifecycleService`: bucket lifecycle rules.** `get()` returns the rules (an empty array when
+  the bucket has no configuration), `upsert({ id, prefix, expirationDays })` adds or replaces one
+  expiration rule by id, and `remove(id)` deletes one. Both writes read the configuration, change
+  only the rule with that id and write the full set back, so every other rule (transitions, tag
+  filters, multipart aborts) is sent back as the provider returned it. Removing the last rule calls
+  `DeleteBucketLifecycle`, because S3 rejects a put with no rules. The read-modify-write is not
+  atomic: S3 has no conditional lifecycle write, so a concurrent writer can be overwritten.
+  The service is exported from the package and from the module.
+- **Three error codes:** `STORAGE_LIFECYCLE_RULE_INVALID` (400), `STORAGE_LIFECYCLE_UNSUPPORTED`
+  (501) and `STORAGE_LIFECYCLE_REJECTED` (422).
+- Types `BucketLifecycleRule`, `BucketLifecycleRuleView`, `LifecycleBucketOptions` and
+  `ExpirationRuleInput`.
+
+  **Apply to a derived backend:** additive; nothing existing changes. A consumer that applies
+  lifecycle rules through the raw `S3Client` can switch to this service. Rule prefixes are relative
+  to `keyPrefix`; with a `keyPrefix` set, rules outside it are returned flagged and are not changed.
+  Providers other than MinIO (tested) and Cloudflare R2 (documented) are unverified; see the README.
+
 ## [1.1.1] - 2026-10-30
 
 Apart from the removal below, nothing here changes the published bundle: the remaining entries are

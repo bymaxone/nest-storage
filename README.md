@@ -98,6 +98,8 @@ minimal.
 - ✅ **Server-side copy** — `copy` moves bytes inside the provider; they never reach this process
 - ✅ **Bulk delete with partial results** — `deleteMany` reports what failed instead of throwing
   away the successes
+- ✅ **Bucket lifecycle rules** — read the rules, add or replace an expiration rule by id, remove
+  one, and leave every other rule exactly as the provider returned it
 
 ### 🧩 Developer Experience
 
@@ -121,7 +123,7 @@ minimal.
 
 | Subpath    | Contents                                                                                                                                                                           |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.`        | Server runtime: `BymaxStorageModule`, `StorageService`, `SignedUrlService`, `providerRecipes`, DI tokens, interfaces, `StorageException`, `NoOpUploadValidator`, `NoOpFileScanner` |
+| `.`        | Server runtime: `BymaxStorageModule`, `StorageService`, `SignedUrlService`, `BucketLifecycleService`, `providerRecipes`, DI tokens, interfaces, `StorageException`, `NoOpUploadValidator`, `NoOpFileScanner` |
 | `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`) + `STORAGE_ERROR_CODES` + `StorageErrorCode`                                            |
 
 ```
@@ -549,6 +551,70 @@ await storage.delete('temp/file.png') // idempotent — no error on 404
 const { deleted, failed } = await storage.deleteMany(['a.png', 'b.png', 'c.png'])
 ```
 
+### Bucket Lifecycle Rules
+
+`BucketLifecycleService` manages the bucket's lifecycle configuration: read the rules, add or
+replace one expiration rule by id, remove one. Every other rule in the bucket — transitions,
+tag filters, multipart aborts — is sent back exactly as the provider returned it.
+
+```typescript
+import { BucketLifecycleService } from '@bymax-one/nest-storage'
+
+// Expire everything under `expiring/` seven days after creation.
+await lifecycle.upsert({ id: 'expire-tmp', prefix: 'expiring/', expirationDays: 7 })
+
+const rules = await lifecycle.get() // [] when the bucket has no configuration
+
+const removed = await lifecycle.remove('expire-tmp') // true; false when no rule has that id
+```
+
+- **Read-modify-write.** `PutBucketLifecycleConfiguration` replaces the whole configuration
+  ([AWS: "this will overwrite an existing lifecycle configuration"][aws-put-lifecycle]), so
+  `upsert` and `remove` read the rules, change the one with the given id, and write all of them
+  back. A rule with the same id is replaced in place; a new id is appended.
+- **Removing the last rule deletes the configuration.** A put with no rules is invalid (the `Rule`
+  element is required), so the service calls `DeleteBucketLifecycle` instead.
+- **Not atomic.** S3 has no conditional write for lifecycle configuration. If another writer
+  changes the bucket between the read and the write, that change is overwritten. The service does
+  not lock; run lifecycle changes from one place (an operator command or a single deployment step).
+- **`prefix` is relative to `keyPrefix`.** The rule's effective prefix is `keyPrefix` plus the one
+  you pass, because that is where the objects live. `get()` returns filter prefixes the same
+  relative way `list()` returns keys, so `upsert({ prefix: rule.Filter.Prefix, ... })` on a value
+  read from `get()` does not prefix twice. The deprecated rule-level `Prefix` is returned as stored.
+- **Rules outside `keyPrefix` are read-only.** With a `keyPrefix` set, a rule whose filter prefix
+  does not start with it — written by another application or by hand, tag-only, or covering the
+  whole bucket — is returned exactly as stored with `isOutsideKeyPrefix: true`. `upsert` and
+  `remove` refuse an id that names such a rule (`STORAGE_LIFECYCLE_RULE_INVALID`), and every write
+  sends it back field for field. Without a `keyPrefix`, no rule is flagged.
+- **Inputs are validated before any request.** `id` is 1 to 255 characters (the AWS limit),
+  `expirationDays` is an integer of at least 1, and `prefix` is a non-empty string that passes the
+  same key guard as every other key. An empty prefix is refused on purpose: an expiry over the whole
+  bucket is not supported by this API. A bad input throws `STORAGE_LIFECYCLE_RULE_INVALID`.
+- **Typed provider errors.** A provider that does not implement the API throws
+  `STORAGE_LIFECYCLE_UNSUPPORTED` (501); a configuration the provider refuses throws
+  `STORAGE_LIFECYCLE_REJECTED` (422). `details` carries the provider's error code, status and
+  request id, never the caught error.
+- **`TransitionDefaultMinimumObjectSize`.** When the provider reports this setting, a write sends it
+  back unchanged so existing transition behaviour does not reset.
+
+**Provider support**
+
+| Provider                                   | Status                | Basis                                                                                                                                               |
+| ------------------------------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MinIO (tested with the `pgsty/silo` image) | **Verified**          | The end-to-end suite applies a rule once, keeps unrelated rules through upsert, replace and remove, and deletes the configuration on the last rule. |
+| Cloudflare R2                              | **Verified (docs)**   | R2 documents the three S3 lifecycle calls ([R2 object lifecycles][r2-lifecycles]); this repository does not run them against R2.                   |
+| AWS S3                                     | Documented, not run   | The behaviour follows the S3 API reference ([Put][aws-put-lifecycle], [Get][aws-get-lifecycle], [Delete][aws-delete-lifecycle]); no test here hits AWS. |
+| Backblaze B2, DigitalOcean Spaces, Wasabi  | **Unverified**        | Neither documented nor tested here. A provider without the API surfaces as `STORAGE_LIFECYCLE_UNSUPPORTED`.                                        |
+
+Expiry timing is the provider's, not this library's. R2 states that objects "will typically be
+removed from a bucket within 24 hours" of their expiry; MinIO's scanner runs at low priority, so an
+object can outlive its rule period.
+
+[aws-put-lifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html
+[aws-get-lifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycleConfiguration.html
+[aws-delete-lifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketLifecycle.html
+[r2-lifecycles]: https://developers.cloudflare.com/r2/buckets/object-lifecycles/
+
 ### Raw S3Client (Advanced)
 
 For provider-specific operations not covered by the public API, inject the raw client:
@@ -615,6 +681,9 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_MULTIPART_ABORTED`      | 500  | Multipart upload failed and was aborted                                                                                                                                                                            |
 | `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                                                                                                                    |
 | `STORAGE_TIMEOUT`                | 504  | Request exceeded `requestTimeoutMs`                                                                                                                                                                                |
+| `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: empty or over-long `id`, non-positive or non-integer `expirationDays`, bad `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |
+| `STORAGE_LIFECYCLE_UNSUPPORTED` | 501  | The provider does not implement the lifecycle API |
+| `STORAGE_LIFECYCLE_REJECTED` | 422  | The provider refused the lifecycle configuration (`MalformedXML`, `InvalidArgument`, `InvalidRequest`) |
 
 ```typescript
 import { StorageException, STORAGE_ERROR_CODES } from '@bymax-one/nest-storage'
@@ -658,6 +727,14 @@ This is the index.
 | `getDownloadUrl`         | `(options: SignedGetUrlOptions) => Promise<SignedUrlResult>`                  | GET presign                                                   |
 | `getUploadUrl`           | `(options: SignedPutUrlOptions) => Promise<SignedUrlResult>`                  | PUT presign, with optional content-type and length conditions |
 | `getMultipartUploadUrls` | `(options: MultipartUploadUrlsOptions) => Promise<MultipartUploadUrlsResult>` | One signed URL per part, plus the upload id                   |
+
+### `BucketLifecycleService`
+
+| Method   | Signature                                                              | Notes                                                                   |
+| -------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `get`    | `(options?) => Promise<BucketLifecycleRuleView[]>`                     | `[]` when the bucket has no configuration; filter prefixes are relative to `keyPrefix`; rules outside it carry `isOutsideKeyPrefix` |
+| `upsert` | `(rule: ExpirationRuleInput, options?) => Promise<void>`               | Read-modify-write; replaces the rule with the same id, keeps the rest   |
+| `remove` | `(id: string, options?) => Promise<boolean>`                           | `false` and no write for an unknown id; deletes the configuration when it removes the last rule |
 
 ### Key normalization
 

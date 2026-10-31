@@ -243,6 +243,7 @@ src/
 │   │   ├── key-resolver.service.ts    # path-traversal guard (internal)
 │   │   ├── storage.service.ts         # StorageService (exported)
 │   │   ├── signed-url.service.ts      # SignedUrlService (exported)
+│   │   ├── bucket-lifecycle.service.ts # BucketLifecycleService (exported)
 │   │   ├── validation.service.ts      # ValidationService (internal)
 │   │   └── file-scanner.service.ts    # FileScannerService (internal)
 │   └── utils/
