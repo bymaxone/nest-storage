@@ -218,14 +218,23 @@ describe('stream-utils', () => {
       expect((replacementBody as Readable).destroyed).toBe(true)
     })
 
-    it('does not touch a source that has already ended', async () => {
-      const source = Readable.from([Buffer.from('abcdefgh')])
+    it('does not destroy a source that has already ended', async () => {
+      // autoDestroy is off so any destroy() call comes from the tee, not from the stream itself.
+      const source = new Readable({
+        autoDestroy: false,
+        read() {
+          this.push(Buffer.from('abcdefgh'))
+          this.push(null)
+        },
+      })
+      const destroy = jest.spyOn(source, 'destroy')
 
       const { replacementBody } = await peekFirstBytes(source, 4)
       const text = await collect(replacementBody as NodeJS.ReadableStream)
+      await new Promise((resolve) => setImmediate(resolve))
 
       expect(text).toBe('abcdefgh')
-      expect(source.destroyed).toBe(true)
+      expect(destroy).not.toHaveBeenCalled()
     })
   })
 
