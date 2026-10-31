@@ -16,10 +16,19 @@ interface AwsLikeError {
 }
 
 /** Error names that mean the provider does not implement the lifecycle API. */
-const UNSUPPORTED_NAMES = new Set(['NotImplemented', 'XNotImplemented', 'MethodNotAllowed'])
+const UNSUPPORTED_NAMES = new Set<string | undefined>([
+  'NotImplemented',
+  'XNotImplemented',
+  'MethodNotAllowed',
+])
 
 /** Error names that mean the provider refused the configuration it was sent. */
-const REJECTED_NAMES = new Set(['MalformedXML', 'InvalidArgument', 'InvalidRequest', 'BadRequest'])
+const REJECTED_NAMES = new Set<string | undefined>([
+  'MalformedXML',
+  'InvalidArgument',
+  'InvalidRequest',
+  'BadRequest',
+])
 
 const UNSUPPORTED_STATUSES = new Set([405, 501])
 
@@ -51,7 +60,7 @@ export function mapLifecycleError(
 ): StorageException {
   const mapped = mapAwsError(err, context)
   const e = (err ?? {}) as AwsLikeError
-  const name = e.Code ?? e.name ?? ''
+  const name = e.Code ?? e.name
   const status = e.$metadata?.httpStatusCode ?? 0
   const details = (mapped.getResponse() as { error: { details: Record<string, unknown> } }).error
     .details
