@@ -216,6 +216,37 @@ describe('pre-upload scan of a stream body', () => {
     expect(seen).toEqual([0])
   })
 
+  it('releases the original stream when a validator-teed stream is refused for its size', async () => {
+    // The validator's readBytes replaces the body with a tee; refusing that replacement must close the source.
+    const seen: number[] = []
+    const storage = await storageWith(seen, {
+      validation: {
+        maxSizeBytes: 100,
+        customValidators: [
+          {
+            name: 'magic',
+            async validate(ctx) {
+              await ctx.readBytes?.(4)
+              return { ok: true }
+            },
+          },
+        ],
+      },
+    })
+    const source = new Readable({ read() {} })
+    source.push(Buffer.alloc(80, 1))
+    source.push(Buffer.alloc(80, 2))
+
+    const error: unknown = await storage
+      .upload({ key: 'teed.bin', body: source, contentType: 'application/octet-stream' })
+      .catch((err: unknown) => err)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+    expect(source.destroyed).toBe(true)
+    expect(requests).toEqual([])
+  })
+
   it('lets a validator read the head of a stream and still stores the whole body', async () => {
     // The other step that reads a stream before the upload: a validator calling readBytes.
     const seen: number[] = []

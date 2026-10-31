@@ -108,9 +108,18 @@ async function teeAndPeek(
       uploadPT.once('drain', () => source.resume())
     }
   })
+  let sourceEnded = false
   source.on('end', () => {
+    sourceEnded = true
     closePeek()
     uploadPT.end()
+  })
+  // A consumer that gives up on the replacement (a size limit, a failed upload) must also
+  // release the original: a destroyed replacement would otherwise leave it paused and open.
+  uploadPT.once('close', () => {
+    if (!sourceEnded) {
+      ;(source as Readable).destroy()
+    }
   })
   source.on('error', (err: Error) => {
     // End the peek side gracefully so the head resolves with whatever arrived,

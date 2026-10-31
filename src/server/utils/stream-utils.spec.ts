@@ -191,6 +191,29 @@ describe('stream-utils', () => {
     })
   })
 
+  describe('peekFirstBytes releases the original stream', () => {
+    it('destroys the source when the consumer destroys the replacement before the end', async () => {
+      const source = new Readable({ read() {} })
+      source.push(Buffer.from('%PDF-1.7 and a long body'))
+
+      const { replacementBody } = await peekFirstBytes(source, 4)
+      ;(replacementBody as Readable).destroy()
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(source.destroyed).toBe(true)
+    })
+
+    it('does not touch a source that has already ended', async () => {
+      const source = Readable.from([Buffer.from('abcdefgh')])
+
+      const { replacementBody } = await peekFirstBytes(source, 4)
+      const text = await collect(replacementBody as NodeJS.ReadableStream)
+
+      expect(text).toBe('abcdefgh')
+      expect(source.destroyed).toBe(true)
+    })
+  })
+
   describe('readStreamUpTo', () => {
     it('returns the whole body when it fits', async () => {
       const body = await readStreamUpTo(Readable.from([Buffer.from('ab'), Buffer.from('cd')]), 10)
