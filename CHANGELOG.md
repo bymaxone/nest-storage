@@ -57,9 +57,11 @@ note on each entry is the compatibility contract — read it, not the number.
   package; and it ignored every undeclared name, so a call through one resolved to `any`. Every
   snippet is now compiled with the syntactic and semantic diagnostics together, public names are
   imported for it, and the names a snippet takes from the surrounding prose are typed in
-  `scripts/readme-prelude.d.ts`. A diagnostic about a missing property is excused as an abbreviated
+  `scripts/readme-prelude.ts`. A diagnostic about a missing property is excused as an abbreviated
   example only when the type is a plain identifier the snippet declares itself, searched outside its
   imports, so a wrong method on an imported or union type fails.
+  The prelude is compiled as a `.ts` file, so a type in it that stops resolving is an error rather than
+  an `any`, and any syntax error in a snippet fails the gate.
 - **README option defaults and examples now match the code.** The configuration table listed
   `signedUrls.defaultTtlSeconds` (no such option; the options are `defaultGetTtlSeconds` and
   `defaultPutTtlSeconds`, both 300 s, not 3600), a 10 MiB multipart threshold and an 8 MiB part size

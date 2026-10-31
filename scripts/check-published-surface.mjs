@@ -21,10 +21,10 @@
  *   2. Every snippet is compiled, with the package's public names imported for those
  *      that do not import it.
  *   3. The names a snippet takes from the surrounding prose are typed in
- *      `scripts/readme-prelude.d.ts`; an undeclared name is an error, and a typed one
+ *      `scripts/readme-prelude.ts`; an undeclared name is an error, and a typed one
  *      is checked instead of resolving to `any`.
  *
- * Portable between packages: everything here is generic except `readme-prelude.d.ts`
+ * Portable between packages: everything here is generic except `readme-prelude.ts`
  * (the typed names, `SnippetContext` and the helper classes the README assumes) and the
  * service names that `prepareSnippet` writes into `SnippetController`.
  *
@@ -572,7 +572,7 @@ function scaffoldConsumer() {
   )
   // The names a snippet uses without introducing them, typed for real so a call
   // made through one is checked instead of silently resolving to `any`.
-  copyFileSync(join(ROOT, 'scripts', 'readme-prelude.d.ts'), join(GATE_DIR, 'prelude.d.ts'))
+  copyFileSync(join(ROOT, 'scripts', 'readme-prelude.ts'), join(GATE_DIR, 'prelude.ts'))
 }
 
 // ---------------------------------------------------------------------------
@@ -614,16 +614,13 @@ function checkSnippets() {
   })
 
   // The names a snippet uses without introducing them are declared, typed, in
-  // `readme-prelude.d.ts`, so a call through one of them is checked and an
-  // undeclared name is an error. What is still not held against a snippet is a
-  // parse-level elision (`…`, a bare `return`) and a peer package the fixture does
-  // not install; those are counted and reported, never dropped silently.
-  const CONTEXT_ONLY = new Set([
-    // Parse-level: a snippet that elides code with `…` or shows a bare `return`
-    // is prose, not a program.
-    'TS1108',
-    'TS1109',
-  ])
+  // `readme-prelude.ts`, compiled as a `.ts` file so that `skipLibCheck` does not hide
+  // a declaration that stopped resolving. A call through one of them is checked and an
+  // undeclared name is an error. Any syntax error fails the gate: the one elision
+  // form, `{ ... }`, is rewritten before the parse, so it never reaches the compiler
+  // as one. A module the fixture cannot resolve and that is not this package is
+  // excused, counted and reported, never dropped silently: the gate cannot tell a peer
+  // it does not install from a misspelled third-party name.
   /** `Property 'x' does not exist on type 'Y'` is an API defect when `Y` comes
    * from the package, and snippet noise when `Y` is a class the snippet declares
    * itself and abbreviates — a README example routinely writes `this.repo`
@@ -659,7 +656,6 @@ function checkSnippets() {
     }
     const real = lines.filter(
       (l) =>
-        !CONTEXT_ONLY.has((/error (TS\d+)/.exec(l) ?? [])[1]) &&
         !isForeignModule(l) &&
         !isAbbreviatedLocalType(l, sources),
     )
@@ -674,7 +670,7 @@ function checkSnippets() {
       console.log(
         `  snippets: ${subjects.length} compiled against dist/` +
           (context > 0
-            ? ` (${context} diagnostic(s) ignored: a peer the fixture does not install, or a parse-level elision)`
+            ? ` (${context} diagnostic(s) ignored: a peer the fixture does not install, or an abbreviated local type)`
             : ''),
       )
     }
