@@ -188,6 +188,44 @@ describe('pre-upload scan of a stream body', () => {
     expect(requests).toEqual([])
   })
 
+  it('closes the stream it refuses for lack of a bound, including one a validator has teed', async () => {
+    // A refused upload must not leave the caller's file descriptor or connection open.
+    const seen: number[] = []
+    const plain = await storageWith(seen, {})
+    const plainSource = new Readable({ read() {} })
+    plainSource.push(Buffer.from('abc'))
+
+    await plain
+      .upload({ key: 'x.bin', body: plainSource, contentType: 'text/plain' })
+      .catch((err: unknown) => err)
+    expect(plainSource.destroyed).toBe(true)
+
+    await moduleRef?.close()
+    const teed = await storageWith(seen, {
+      validation: {
+        customValidators: [
+          {
+            name: 'magic',
+            async validate(ctx) {
+              await ctx.readBytes?.(4)
+              return { ok: true }
+            },
+          },
+        ],
+      },
+    })
+    const teedSource = new Readable({ read() {} })
+    teedSource.push(Buffer.from('%PDF-1.7 body'))
+
+    const error: unknown = await teed
+      .upload({ key: 'y.bin', body: teedSource, contentType: 'application/pdf' })
+      .catch((err: unknown) => err)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+    expect(teedSource.destroyed).toBe(true)
+  })
+
   it('leaves a Buffer body alone in pre-upload mode, with or without a bound', async () => {
     const seen: number[] = []
     const storage = await storageWith(seen, {})

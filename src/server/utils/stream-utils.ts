@@ -67,10 +67,19 @@ export async function peekFirstBytes(
 }
 
 /**
+ * Destroys a stream when it can be destroyed. `NodeJS.ReadableStream` does not declare
+ * `destroy()`, so a stream without it is left alone instead of throwing.
+ *
+ * @param stream - The stream to release.
+ */
+export function destroyStream(stream: NodeJS.ReadableStream): void {
+  ;(stream as Partial<Readable>).destroy?.()
+}
+
+/**
  * Destroys `source` when the consumer closes `replacement` before the source ended. A consumer
  * that gives up on the replacement (a size limit, a failed upload) must also release the original,
- * which would otherwise stay paused and open. `NodeJS.ReadableStream` does not promise
- * `destroy()`; every Node stream has it.
+ * which would otherwise stay paused and open.
  */
 function releaseSourceOnEarlyClose(
   source: NodeJS.ReadableStream,
@@ -79,7 +88,7 @@ function releaseSourceOnEarlyClose(
 ): void {
   replacement.once('close', () => {
     if (!sourceEnded()) {
-      ;(source as Partial<Readable>).destroy?.()
+      destroyStream(source)
     }
   })
 }

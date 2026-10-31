@@ -44,7 +44,13 @@ import {
   buildContentDisposition,
   buildSSE,
 } from '../utils/header-utils'
-import { getBodySize, isBufferLike, readStreamUpTo, type UploadBody } from '../utils/stream-utils'
+import {
+  destroyStream,
+  getBodySize,
+  isBufferLike,
+  readStreamUpTo,
+  type UploadBody,
+} from '../utils/stream-utils'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
 import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
@@ -184,6 +190,7 @@ export class StorageService {
     }
     const maxSizeBytes = this.options.validation?.maxSizeBytes
     if (maxSizeBytes === undefined) {
+      destroyStream(body)
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
         key: finalKey,
         reason:
