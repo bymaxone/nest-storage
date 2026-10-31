@@ -55,11 +55,11 @@ minimal.
   keys are refused, and only then is `keyPrefix` prepended. A tenant cannot climb out of its
   prefix by naming a key.
 - **Uploads are refused before they are stored.** MIME allowlist and size limit first, then any
-  `IUploadValidator` you register, then the `IFileScanner` if configured — pre-upload,
-  post-upload, or both.
-- **Presigned URLs cannot outlive what SigV4 allows.** TTLs are clamped and the hard ceiling of
-  604 800 s is enforced locally, rather than handed to a signature the provider rejects at use
-  time.
+  `IUploadValidator` you register, then the `IFileScanner` if configured — before the upload
+  or after it.
+- **Presigned URLs stay inside a configured ceiling.** A requested TTL above
+  `signedUrls.maxTtlSeconds` (604 800 s, the SigV4 limit, by default) is clamped locally, rather
+  than handed to a signature the provider rejects at use time.
 
 ---
 
@@ -73,18 +73,18 @@ minimal.
   limit, refused before a byte is stored
 - ✅ **Pluggable validators** — register any number of `IUploadValidator`s; each runs after the
   built-in checks and can refuse with its own reason
-- ✅ **Virus scanning hook** — `IFileScanner` pre-upload, post-upload or both, for ClamAV, AWS
+- ✅ **Virus scanning hook** — `IFileScanner` pre-upload or post-upload, for ClamAV, AWS
   Macie or anything that answers `'clean' | 'infected' | 'unknown'`
 - ✅ **Idempotent retries** — an in-memory LRU (1 000 entries / 24 h by default) returns the
   cached `UploadResult` for a repeated `idempotencyKey` instead of storing the object twice
 
 ### 🔗 Access & URLs
 
-- ✅ **Presigned GET / PUT** — with optional content-type and length conditions on the PUT
+- ✅ **Presigned GET / PUT** — the PUT signs the `Content-Type` (and ACL and metadata, when set) as required headers
 - ✅ **Presigned multipart** — one signed URL per part plus the upload id, so a browser can
   upload directly without the bytes passing through your process
-- ✅ **TTL clamping** — SigV4's hard ceiling of 604 800 s (7 days) is enforced locally, not
-  discovered when the provider rejects the signature
+- ✅ **TTL clamping** — a requested TTL above `signedUrls.maxTtlSeconds` (default 604 800 s, the
+  7-day SigV4 limit) is clamped locally, not discovered when the provider rejects the signature
 - ✅ **Public URL composition** — `getPublicUrl` builds from `cdnBaseUrl` or `publicBaseUrl` for
   buckets that are public by policy; it composes, it does not sign
 
@@ -124,7 +124,7 @@ minimal.
 | Subpath    | Contents                                                                                                                                                                           |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `.`        | Server runtime: `BymaxStorageModule`, `StorageService`, `SignedUrlService`, `BucketLifecycleService`, `providerRecipes`, DI tokens, interfaces, `StorageException`, `NoOpUploadValidator`, `NoOpFileScanner` |
-| `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`) + `STORAGE_ERROR_CODES` + `StorageErrorCode`                                            |
+| `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`, `StorageErrorResponse`) + `STORAGE_ERROR_CODES` + `StorageErrorCode` + the default MIME whitelists and the TTL and multipart default constants                                            |
 
 ```
 @bymax-one/nest-storage          (server — NestJS + @aws-sdk/client-s3)
@@ -260,14 +260,20 @@ The full configuration reference lives in `docs/technical_specification.md` §4.
 | `cdnBaseUrl`                   | `string`                                          | —                 | CDN edge URL (preferred over `publicBaseUrl`)  |
 | `keyPrefix`                    | `string`                                          | —                 | Prepended to every resolved key (multi-tenant) |
 | `maxAttempts`                  | `number`                                          | `3`               | SDK v3 retry count                             |
-| `serverSideEncryption`         | `'AES256' \| 'aws:kms' \| 'NONE'`                 | —                 | Global SSE policy                              |
+| `serverSideEncryption`         | `'AES256' \| 'aws:kms'`                           | —                 | Global SSE policy; `aws:kms` needs `kmsKeyId`. `'NONE'` is accepted per upload only |
 | `requestChecksumCalculation`   | `'WHEN_SUPPORTED' \| 'WHEN_REQUIRED'`             | SDK default       | Set to `'WHEN_REQUIRED'` for non-AWS providers |
 | `responseChecksumValidation`   | `'WHEN_SUPPORTED' \| 'WHEN_REQUIRED'`             | SDK default       | Set to `'WHEN_REQUIRED'` for non-AWS providers |
-| `signedUrls.defaultTtlSeconds` | `number`                                          | `3600`            | Default signed-URL TTL                         |
-| `signedUrls.maxTtlSeconds`     | `number`                                          | `604800`          | Hard ceiling; clamped to 7 days at init        |
-| `multipart.thresholdBytes`     | `number`                                          | `10 MiB`          | Switch to multipart above this size            |
-| `multipart.partSizeBytes`      | `number`                                          | `8 MiB`           | Part size (S3 minimum: 5 MiB)                  |
-| `validation.mimeWhitelist`     | `string[]`                                        | sensible defaults | Wildcards: `'image/*'`                         |
+| `defaultPublicRead`            | `boolean`                                         | `false`           | ACL `public-read` on uploads; see Public Access / ACLs |
+| `defaultCacheControl`          | `string`                                          | `public, max-age=31536000, immutable` | Default `Cache-Control` on uploads |
+| `defaultContentDisposition`    | `'inline' \| 'attachment'`                        | `inline`          | Default `Content-Disposition` on uploads       |
+| `requestTimeoutMs`             | `number`                                          | `30000`           | Accepted and resolved; not yet applied to the client |
+| `signedUrls.defaultGetTtlSeconds` | `number`                                       | `300`             | Default TTL for `getDownloadUrl`               |
+| `signedUrls.defaultPutTtlSeconds` | `number`                                       | `300`             | Default TTL for `getUploadUrl`                 |
+| `signedUrls.maxTtlSeconds`     | `number`                                          | `604800`          | Per-request TTLs above this are clamped; 604800 is the 7-day SigV4 limit |
+| `multipart.thresholdBytes`     | `number`                                          | `5 MiB`           | Switch to multipart at or above this size      |
+| `multipart.partSizeBytes`      | `number`                                          | `5 MiB`           | Part size (S3 minimum: 5 MiB)                  |
+| `multipart.queueSize`          | `number`                                          | `4`               | Concurrent parts                               |
+| `validation.mimeWhitelist`     | `string[]`                                        | —                 | No MIME check when absent. Wildcards: `'image/*'` |
 | `validation.maxSizeBytes`      | `number`                                          | —                 | Maximum upload size in bytes                   |
 
 > **Do not use `maxRetries` or `signatureVersion`** — these are AWS SDK v2 options that do not exist in v3. The v3 SDK is SigV4-only. Use `maxAttempts` (default `3`) for retry configuration.
@@ -281,7 +287,7 @@ The full configuration reference lives in `docs/technical_specification.md` §4.
 | `providerRecipes.awsS3(...)`              | AWS S3              | Keeps the SDK default checksum mode (`'WHEN_SUPPORTED'`); sets SSE-AES256             |
 | `providerRecipes.cloudflareR2(...)`       | Cloudflare R2       | `customDomain` required; checksums `'WHEN_REQUIRED'`; `region: 'auto'`                |
 | `providerRecipes.backblazeB2(...)`        | Backblaze B2        | `forcePathStyle: false` (B2 supports virtual-hosted); checksums `'WHEN_REQUIRED'`     |
-| `providerRecipes.digitalOceanSpaces(...)` | DigitalOcean Spaces | Sets `cdnBaseUrl` to `*.cdn.digitaloceanspaces.com`; checksums `'WHEN_REQUIRED'`      |
+| `providerRecipes.digitalOceanSpaces(...)` | DigitalOcean Spaces | Sets `cdnBaseUrl` to `*.cdn.digitaloceanspaces.com` and `defaultPublicRead: true`; checksums `'WHEN_REQUIRED'`      |
 | `providerRecipes.minio(...)`              | MinIO / self-hosted | `forcePathStyle: true`; checksums `'WHEN_REQUIRED'`; region defaults to `'us-east-1'` |
 | `providerRecipes.wasabi(...)`             | Wasabi Hot Cloud    | Virtual-hosted; checksums `'WHEN_REQUIRED'`                                           |
 
@@ -346,7 +352,7 @@ await storage.upload({
 })
 ```
 
-Uploads are automatically routed to multipart when `size >= multipart.thresholdBytes` (default 10 MiB). A `Readable` without a `size` always uses multipart. Multipart aborts automatically on failure (`leavePartsOnError: false`).
+Uploads are automatically routed to multipart when `size >= multipart.thresholdBytes` (default 5 MiB). A `Readable` without a `size` always uses multipart. Multipart aborts automatically on failure (`leavePartsOnError: false`).
 
 ### Idempotency
 
@@ -428,7 +434,7 @@ async getSignedPut(@Body() body: { folder: string; contentType: string }) {
 }
 ```
 
-> **Caveat:** a signed PUT bypasses the library's local MIME/size validation. Pair it with a presigner `maxSizeBytes` (Content-Length-Range policy), a `HEAD` check after upload, and an `IFileScanner` post-upload hook.
+> **Caveat:** a signed PUT bypasses the library's local MIME/size validation. No size limit is bound into the signature — `maxSizeBytes` is advisory — so verify the size with a `HEAD` check after upload and add an `IFileScanner` post-upload hook.
 
 ```typescript
 // Frontend
@@ -440,16 +446,16 @@ await fetchJson('/uploads/confirm', { key }) // backend persists metadata
 ### Presigned Multipart
 
 ```typescript
-const { uploadId, parts, key } = await signedUrls.getMultipartUploadUrls({
+const { uploadId, partUrls, completeUrl } = await signedUrls.getMultipartUploadUrls({
   key: 'videos/large.mp4',
   contentType: 'video/mp4',
-  partCount: 10,
+  parts: 10,
   ttlSeconds: 3600,
 })
 // Upload each part with the corresponding signed URL, then call CompleteMultipartUpload.
 ```
 
-> **TTL clamp:** per-request `ttlSeconds` values above `signedUrls.maxTtlSeconds` are silently clamped; `maxTtlSeconds` is itself clamped to 604 800 s (7-day SigV4 ceiling) at module init. A `ttlSeconds` ≤ 0 throws `STORAGE_SIGNED_URL_TTL_INVALID`.
+> **TTL clamp:** per-request `ttlSeconds` values above `signedUrls.maxTtlSeconds` are silently clamped. `maxTtlSeconds` defaults to 604 800 s (the 7-day SigV4 limit); a larger configured value is not capped, and the provider rejects a signature that outlives its limit. A `ttlSeconds` ≤ 0 throws `STORAGE_SIGNED_URL_TTL_INVALID`.
 
 ---
 
@@ -462,15 +468,15 @@ import type { IUploadValidator } from '@bymax-one/nest-storage'
 /** Magic-byte PDF check — reads the first 4 bytes of the stream. */
 @Injectable()
 export class PdfValidator implements IUploadValidator {
-  async validate(input: {
-    body: Buffer | NodeJS.ReadableStream
-    readBytes: (n: number) => Promise<Buffer>
-  }) {
-    const header = await input.readBytes(4)
+  readonly name = 'pdf-magic-bytes'
+
+  async validate(ctx: Parameters<IUploadValidator['validate']>[0]) {
+    if (!ctx.readBytes) return { ok: true as const }
+    const header = await ctx.readBytes(4)
     if (header.toString('ascii', 0, 4) !== '%PDF') {
-      return { valid: false, reason: 'Not a valid PDF (magic bytes mismatch)' }
+      return { ok: false as const, reason: 'Not a valid PDF (magic bytes mismatch)' }
     }
-    return { valid: true }
+    return { ok: true as const }
   }
 }
 ```
@@ -483,8 +489,8 @@ BymaxStorageModule.forRoot({
   validation: {
     mimeWhitelist: ['application/pdf'],
     maxSizeBytes: 25 * 1024 * 1024,
+    customValidators: [new PdfValidator()],
   },
-  validators: [{ useClass: PdfValidator }],
 })
 ```
 
@@ -510,7 +516,7 @@ BymaxStorageModule.forRoot({
   ...providerRecipes.awsS3({ ... }),
   scanner: {
     impl: new ClamAvScanner(),
-    mode: 'pre-upload',       // 'pre-upload' | 'post-upload' | 'both'
+    mode: 'pre-upload',       // 'pre-upload' | 'post-upload'
     rejectOnUnknown: false,   // treat inconclusive scans as pass (true = reject)
   },
 })
@@ -665,7 +671,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | Code                             | HTTP | When                                                                                                                                                                                                               |
 | -------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `STORAGE_NOT_CONFIGURED`         | 503  | Credentials missing and an operation was called                                                                                                                                                                    |
-| `STORAGE_KEY_INVALID`            | 400  | Path traversal (`..`), key starts with `/`, or empty after normalization                                                                                                                                           |
+| `STORAGE_KEY_INVALID`            | 400  | Empty key, null byte, path traversal (`..`), or key starts with `/`                                                                                                                                           |
 | `STORAGE_BODY_MISSING`           | 400  | `upload()` called without a body                                                                                                                                                                                   |
 | `STORAGE_CONTENT_TYPE_REQUIRED`  | 400  | `upload()` called without `contentType`                                                                                                                                                                            |
 | `STORAGE_MIME_NOT_ALLOWED`       | 415  | `contentType` outside `mimeWhitelist`                                                                                                                                                                              |
@@ -676,12 +682,12 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_OBJECT_NOT_FOUND`       | 404  | `head()`, `download()`, or `copy()` on a nonexistent key                                                                                                                                                           |
 | `STORAGE_PROVIDER_ERROR`         | 502  | AWS SDK error (network, 5xx, throttling, `AccessControlListNotSupported`); `details` carries `awsCode`, `awsMessage`, `httpStatus`, `requestId` plus the operation context (`op`, `bucket`, and `key` or `prefix`) |
 | `STORAGE_SIGNED_URL_TTL_INVALID` | 400  | Per-request `ttlSeconds` ≤ 0                                                                                                                                                                                       |
-| `STORAGE_PART_TOO_SMALL`         | 400  | Multipart with part < 5 MiB (S3 limit)                                                                                                                                                                             |
+| `STORAGE_PART_TOO_SMALL`         | 400  | Reserved: a `multipart.partSizeBytes` below 5 MiB is rejected at init as `STORAGE_INVALID_CONFIG`                                                                                                                                                                             |
 | `STORAGE_INVALID_PART_COUNT`     | 400  | `getMultipartUploadUrls()` with `parts <= 0` (`details.provided`)                                                                                                                                                  |
 | `STORAGE_BUCKET_UNDEFINED`       | 400  | Operation without a bucket and no default in config                                                                                                                                                                |
 | `STORAGE_MULTIPART_ABORTED`      | 500  | Multipart upload failed and was aborted                                                                                                                                                                            |
 | `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                                                                                                                    |
-| `STORAGE_TIMEOUT`                | 504  | Request exceeded `requestTimeoutMs`                                                                                                                                                                                |
+| `STORAGE_TIMEOUT`                | 504  | The SDK reported a `TimeoutError` (`requestTimeoutMs` is accepted but not yet applied to the client)                                                                                                                                                                                |
 | `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: empty or over-long `id`, non-positive or non-integer `expirationDays`, bad `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |
 | `STORAGE_LIFECYCLE_UNSUPPORTED` | 501  | The provider does not implement the lifecycle API |
 | `STORAGE_LIFECYCLE_REJECTED` | 422  | The provider refused the lifecycle configuration |
@@ -714,20 +720,20 @@ This is the index.
 | `download`       | `(options: DownloadOptions) => Promise<{ stream, metadata }>` | Streaming; the body is never buffered                        |
 | `downloadBuffer` | `(options: DownloadOptions) => Promise<{ buffer, metadata }>` | Buffers — bounded by the caller's own memory                 |
 | `head`           | `(key, options?) => Promise<ObjectMetadata>`                  | Metadata without transferring the body                       |
-| `exists`         | `(key, options?) => Promise<boolean>`                         | `head` reduced to a boolean                                  |
+| `exists`         | `(key, options?) => Promise<boolean>`                         | `head` reduced to a boolean; any non-404 failure is logged and returns `false`                                  |
 | `getPublicUrl`   | `(key, options?) => string`                                   | Composed, not signed — for buckets that are public by policy |
 | `delete`         | `(key, options?) => Promise<void>`                            | Idempotent, as S3 delete is                                  |
 | `deleteMany`     | `(keys: string[], options?) => Promise<DeleteManyResult>`     | Partial failures are reported, not thrown                    |
 | `list`           | `(options: ListOptions) => Promise<ListResult>`               | Paginated by continuation token                              |
-| `copy`           | `(options: CopyOptions) => Promise<{ key, etag }>`            | Server-side; the bytes never reach this process              |
+| `copy`           | `(options: CopyOptions) => Promise<{ etag }>`            | Server-side; the bytes never reach this process              |
 
 ### `SignedUrlService`
 
 | Method                   | Signature                                                                     | Notes                                                         |
 | ------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `getDownloadUrl`         | `(options: SignedGetUrlOptions) => Promise<SignedUrlResult>`                  | GET presign                                                   |
-| `getUploadUrl`           | `(options: SignedPutUrlOptions) => Promise<SignedUrlResult>`                  | PUT presign, with optional content-type and length conditions |
-| `getMultipartUploadUrls` | `(options: MultipartUploadUrlsOptions) => Promise<MultipartUploadUrlsResult>` | One signed URL per part, plus the upload id                   |
+| `getUploadUrl`           | `(options: SignedPutUrlOptions) => Promise<SignedUrlResult>`                  | PUT presign; signs `Content-Type` and returns the `requiredHeaders` |
+| `getMultipartUploadUrls` | `(options: MultipartUploadUrlsOptions) => Promise<MultipartUploadUrlsResult>` | One signed URL per part, plus the upload id and the completion URL                   |
 
 ### `BucketLifecycleService`
 
@@ -812,7 +818,7 @@ instance; it does not coordinate between replicas.
 | 🔑 **One key chokepoint**        | Every caller-supplied key passes through `KeyResolverService` before it reaches S3. `..`, a leading `/`, null bytes and empty keys are refused, and `keyPrefix` is prepended after normalization — so it cannot be escaped by the key |
 | 🧩 **One engine, six recipes**   | `providerRecipes` differ in endpoint, region and per-provider flags only. There is no per-provider code path, so a provider swap is configuration and every operation behaves the same afterwards                                     |
 | 🚫 **Refuse before storing**     | MIME allowlist and size limit, then registered `IUploadValidator`s, then the `IFileScanner`. An upload that will be rejected is rejected before a byte is written                                                                     |
-| ⏱️ **Bounded signatures**        | Presign TTLs are clamped and SigV4's 604 800 s ceiling is enforced locally, not discovered when the provider rejects the signature                                                                                                    |
+| ⏱️ **Bounded signatures**        | Presign TTLs above `signedUrls.maxTtlSeconds` (default 604 800 s, the SigV4 limit) are clamped locally, not discovered when the provider rejects the signature                                                                                                    |
 | 💥 **Fail at boot, mostly**      | Options are validated before any client is built. Credentials are the deliberate exception: empty values are tolerated so a development workflow boots, and operations then fail with `STORAGE_NOT_CONFIGURED`                        |
 | 🧊 **Zero runtime dependencies** | `dependencies` is `{}`. You choose the exact `@aws-sdk/*` versions and the supply-chain surface stays yours                                                                                                                           |
 
@@ -835,9 +841,9 @@ one.
 
 ### Presigned URLs are bearer credentials
 
-Anyone holding one has the access it encodes, for as long as it lives. TTLs are clamped,
-and SigV4's hard ceiling of 604 800 s (7 days) is enforced here rather than passed through
-to a signature the provider would reject at use time. Treat a signed URL like a password
+Anyone holding one has the access it encodes, for as long as it lives. A requested TTL
+above `signedUrls.maxTtlSeconds` (604 800 s, SigV4's limit, by default) is clamped here rather
+than passed through to a signature the provider would reject at use time. Treat a signed URL like a password
 with an expiry, not like a link.
 
 ### Credentials stay where they were put
@@ -863,8 +869,8 @@ is itself sensitive in your deployment, do not log the envelope verbatim.
 ### Uploads are refused before they are stored
 
 MIME allowlist (wildcards included) and size limit run first, then any `IUploadValidator`
-you register, then the `IFileScanner` if configured. A scanner can run pre-upload,
-post-upload, or both — the post-upload position exists because some scanners only accept an
+you register, then the `IFileScanner` if configured. A scanner runs either pre-upload or
+post-upload — the post-upload position exists because some scanners only accept an
 object they can fetch.
 
 ### `keyPrefix` is a namespace, not an access boundary
@@ -883,7 +889,7 @@ that must survive a compromised client belongs in IAM policies or separate bucke
 | Multi-tenancy    | `keyPrefix` prepended after normalization, so it cannot be escaped by the key                                                                          |
 | Credentials      | Injected options only; never read from `process.env`, never logged, never in an exception; held in a non-enumerable accessor, so serializing a service omits them |
 | Error payloads   | Provider code and message, HTTP status, request id, and the operation context (`op`, `bucket`, `key`/`prefix`) — never credentials, never a signed URL |
-| Presign lifetime | TTL clamped, SigV4's 7-day ceiling enforced locally                                                                                                    |
+| Presign lifetime | TTL clamped to `signedUrls.maxTtlSeconds` (default: SigV4's 7-day limit)                                                                                                    |
 | Encryption       | Server-side (AES256 / `aws:kms`) configurable globally or per upload                                                                                   |
 | Content          | MIME allowlist + size limit, then registered validators, then the scanner                                                                              |
 | Supply chain     | `dependencies: {}`; third-party Actions pinned by commit SHA (org-internal reusables by tag); CodeQL, OSV-Scanner and OpenSSF Scorecard                |
@@ -899,7 +905,7 @@ that must survive a compromised client belongs in IAM policies or separate bucke
 ## 🧱 Tech Stack
 
 - **Runtime:** Node.js 24+
-- **Framework:** NestJS 11 (`ConfigurableModuleBuilder`, `@Global()`, `Symbol()` tokens)
+- **Framework:** NestJS 11 (a hand-written `forRoot` / `forRootAsync` dynamic module, `@Global()`, `Symbol()` tokens)
 - **Storage engine:** `@aws-sdk/client-s3 ^3.700` (peer), with `@aws-sdk/lib-storage`
   for multipart and `@aws-sdk/s3-request-presigner` for presigns — all peers
 - **Providers:** AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, MinIO, Wasabi

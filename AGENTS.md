@@ -350,13 +350,13 @@ opt-out is a blocking finding; removing it from an existing one is the same find
 ### The path-traversal guard runs before the SDK, always
 
 `KeyResolverService` is the boundary between a caller-supplied key and the AWS SDK: it rejects `..`
-segments, a leading `/`, and a key that is empty after normalisation, and it applies `keyPrefix`.
+segments, a leading `/`, a null byte, and an empty key, and it applies `keyPrefix`.
 Any path that reaches an SDK command with a key that did not go through it is a blocking finding,
 however the key was obtained.
 
 ### Two documented limitations are not bugs to report
 
-Both are stated in the deep-dive below and in the published docs; raising either as a defect costs a
+Both are stated in `docs/architecture.md` and in the published docs; raising either as a defect costs a
 round trip and changes nothing.
 
 - **The idempotency cache is in-memory and per process instance.** Two replicas can each accept the
