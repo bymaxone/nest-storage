@@ -618,8 +618,9 @@ function checkSnippets() {
   // a declaration that stopped resolving. A call through one of them is checked and an
   // undeclared name is an error. Any syntax error fails the gate: the one elision
   // form, `{ ... }`, is rewritten before the parse, so it never reaches the compiler
-  // as one. Only a peer package the fixture does not install is excused, counted and
-  // reported, never dropped silently.
+  // as one. A module the fixture cannot resolve and that is not this package is
+  // excused, counted and reported, never dropped silently: the gate cannot tell a peer
+  // it does not install from a misspelled third-party name.
   /** `Property 'x' does not exist on type 'Y'` is an API defect when `Y` comes
    * from the package, and snippet noise when `Y` is a class the snippet declares
    * itself and abbreviates — a README example routinely writes `this.repo`
