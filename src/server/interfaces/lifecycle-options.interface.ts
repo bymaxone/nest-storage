@@ -25,7 +25,7 @@ export interface LifecycleBucketOptions {
   bucket?: string
 }
 
-/** The one rule shape `BucketLifecycleService.upsert()` writes: expire a prefix after N days. */
+/** A rule `BucketLifecycleService.upsert()` writes: expire a prefix after N days. */
 export interface ExpirationRuleInput {
   /** Unique rule id, 1 to 255 characters (the AWS limit). */
   id: string
@@ -33,4 +33,27 @@ export interface ExpirationRuleInput {
   prefix: string
   /** Days after creation until an object under the prefix expires. A positive integer. */
   expirationDays: number
+  /** A rule is an expiration or an abort rule, never both. */
+  abortIncompleteMultipartDays?: never
 }
+
+/**
+ * A rule `BucketLifecycleService.upsert()` writes: abort multipart uploads that were not completed
+ * within N days of starting, which frees the parts they hold.
+ */
+export interface AbortMultipartRuleInput {
+  /** Unique rule id, 1 to 255 characters (the AWS limit). */
+  id: string
+  /**
+   * Key prefix the rule applies to, relative to the module's `keyPrefix`. May be empty, which means
+   * every upload in the module's namespace: unlike expiration, aborting a stale upload deletes no object.
+   */
+  prefix: string
+  /** Days after an upload starts until it is aborted. A positive integer. */
+  abortIncompleteMultipartDays: number
+  /** A rule is an expiration or an abort rule, never both. */
+  expirationDays?: never
+}
+
+/** Either rule shape `BucketLifecycleService.upsert()` accepts. */
+export type LifecycleRuleInput = ExpirationRuleInput | AbortMultipartRuleInput
