@@ -67,6 +67,33 @@ export async function peekFirstBytes(
 }
 
 /**
+ * Destroys a stream when it can be destroyed. `NodeJS.ReadableStream` does not declare
+ * `destroy()`, so a stream without it is left alone instead of throwing.
+ *
+ * @param stream - The stream to release.
+ */
+export function destroyStream(stream: NodeJS.ReadableStream): void {
+  ;(stream as Partial<Readable>).destroy?.()
+}
+
+/**
+ * Destroys `source` when the consumer closes `replacement` before the source ended. A consumer
+ * that gives up on the replacement (a size limit, a failed upload) must also release the original,
+ * which would otherwise stay paused and open.
+ */
+function releaseSourceOnEarlyClose(
+  source: NodeJS.ReadableStream,
+  replacement: PassThrough,
+  sourceEnded: () => boolean,
+): void {
+  replacement.once('close', () => {
+    if (!sourceEnded()) {
+      destroyStream(source)
+    }
+  })
+}
+
+/**
  * Tees a source stream: the peek side receives at most `maxBytes`, the upload
  * side receives the full stream.
  *
@@ -108,10 +135,13 @@ async function teeAndPeek(
       uploadPT.once('drain', () => source.resume())
     }
   })
+  let sourceEnded = false
   source.on('end', () => {
+    sourceEnded = true
     closePeek()
     uploadPT.end()
   })
+  releaseSourceOnEarlyClose(source, uploadPT, () => sourceEnded)
   source.on('error', (err: Error) => {
     // End the peek side gracefully so the head resolves with whatever arrived,
     // and surface the failure on the upload side for the consumer to handle.
@@ -139,4 +169,31 @@ async function collectStream(stream: PassThrough): Promise<Buffer> {
  */
 export function bufferToReadable(buf: Buffer | Uint8Array): Readable {
   return Readable.from(Buffer.isBuffer(buf) ? buf : Buffer.from(buf))
+}
+
+/**
+ * Reads a stream into one `Buffer`, counting bytes as they arrive and stopping at
+ * the first chunk that takes the total past `maxBytes`, so an oversized or endless
+ * stream is never held in memory.
+ *
+ * @param source - The stream to drain.
+ * @param maxBytes - The most bytes accepted.
+ * @returns The whole body, or `undefined` when it is longer than `maxBytes` (the
+ *   stream is destroyed in that case).
+ */
+export async function readStreamUpTo(
+  source: NodeJS.ReadableStream,
+  maxBytes: number,
+): Promise<Buffer | undefined> {
+  const chunks: Buffer[] = []
+  let total = 0
+  for await (const chunk of source) {
+    const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
+    total += buf.byteLength
+    if (total > maxBytes) {
+      return undefined
+    }
+    chunks.push(buf)
+  }
+  return Buffer.concat(chunks)
 }

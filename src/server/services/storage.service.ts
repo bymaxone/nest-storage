@@ -44,7 +44,13 @@ import {
   buildContentDisposition,
   buildSSE,
 } from '../utils/header-utils'
-import { getBodySize, isBufferLike, type UploadBody } from '../utils/stream-utils'
+import {
+  destroyStream,
+  getBodySize,
+  isBufferLike,
+  readStreamUpTo,
+  type UploadBody,
+} from '../utils/stream-utils'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
 import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
@@ -142,10 +148,12 @@ export class StorageService {
       ...(options.size !== undefined ? { size: options.size } : {}),
       ...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
     })
-    const validatedOptions = { ...options, body: validated.body }
+    // A stream cannot be read by the scanner and then sent: buffer it first, bounded.
+    const body = await this.bufferForPreUploadScan(validated.body, finalKey)
+    const validatedOptions = { ...options, body }
 
     // Pre-upload scan: runs before the S3 PutObject.
-    await this.runPreUploadScan(validated.body, finalKey, bucket, options)
+    await this.runPreUploadScan(body, finalKey, bucket, options)
 
     const strategy = pickUploadStrategy(
       validatedOptions.body,
@@ -169,6 +177,37 @@ export class StorageService {
     return result
   }
 
+  /**
+   * In pre-upload scan mode a stream body is read into one `Buffer`, so the scanner
+   * and the upload see the same bytes; a stream is single-use, and one the scanner
+   * had consumed would leave the upload with nothing to send. The read is bounded by
+   * `validation.maxSizeBytes`, and a stream with no bound is refused rather than
+   * buffered without limit. Other bodies and modes pass through unchanged.
+   */
+  private async bufferForPreUploadScan(body: UploadBody, finalKey: string): Promise<UploadBody> {
+    if (!this.scanner.isEnabled() || this.scanner.getMode() !== 'pre-upload' || isBufferLike(body)) {
+      return body
+    }
+    const maxSizeBytes = this.options.validation?.maxSizeBytes
+    if (maxSizeBytes === undefined) {
+      destroyStream(body)
+      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
+        key: finalKey,
+        reason:
+          'Pre-upload scanning of a stream needs validation.maxSizeBytes to bound the buffer; set it or use scanner mode post-upload',
+      })
+    }
+    const buffered = await readStreamUpTo(body, maxSizeBytes)
+    if (buffered === undefined) {
+      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
+        key: finalKey,
+        maxSizeBytes,
+        reason: 'The stream is longer than validation.maxSizeBytes, so it cannot be scanned before upload',
+      })
+    }
+    return buffered
+  }
+
   /** Runs a pre-upload scan when configured; throws on infected. */
   private async runPreUploadScan(
     body: UploadBody,
@@ -190,15 +229,12 @@ export class StorageService {
   }
 
   /**
-   * Coerces a buffer-like scan body (`Buffer` or `Uint8Array`) to a `Buffer` so
-   * the scanner always receives its declared contract type; streams pass through
-   * unchanged.
+   * Coerces the scan body to a `Buffer` so the scanner always receives its declared
+   * contract type. In pre-upload mode a stream has already been buffered by
+   * {@link bufferForPreUploadScan}, so only `Buffer` and `Uint8Array` arrive here.
    */
-  private normalizeScanBody(body: UploadBody): Buffer | NodeJS.ReadableStream {
-    if (isBufferLike(body)) {
-      return Buffer.isBuffer(body) ? body : Buffer.from(body)
-    }
-    return body
+  private normalizeScanBody(body: UploadBody): Buffer {
+    return Buffer.isBuffer(body) ? body : Buffer.from(body as Uint8Array)
   }
 
   /**
@@ -428,7 +464,7 @@ export class StorageService {
     bucket: string,
   ): ObjectMetadata {
     return {
-      key: finalKey,
+      key: this.keyResolver.stripPrefix(finalKey),
       bucket,
       size: response.ContentLength ?? 0,
       contentType: response.ContentType ?? 'application/octet-stream',
@@ -561,7 +597,7 @@ export class StorageService {
     multipart: boolean
   }): UploadResult {
     return {
-      key: params.finalKey,
+      key: this.keyResolver.stripPrefix(params.finalKey),
       bucket: params.bucket,
       etag: params.etag ?? '',
       contentType: params.contentType,

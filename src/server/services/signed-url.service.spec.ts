@@ -408,7 +408,7 @@ describe('SignedUrlService', () => {
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT)
       // Details must state the exact reason and echo the offending part count.
       const details = detailsOf(err)
-      expect(details.reason).toBe('parts must be a positive integer')
+      expect(details.reason).toBe('parts must be an integer from 1 to 10000')
       expect(details.provided).toBe(0)
     })
 
@@ -425,6 +425,51 @@ describe('SignedUrlService', () => {
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT)
+    })
+
+    it.each([
+      ['a fraction', 1.5],
+      ['NaN', Number.NaN],
+      ['Infinity', Number.POSITIVE_INFINITY],
+      ['one more than the S3 maximum', 10_001],
+    ])('throws STORAGE_INVALID_PART_COUNT for %s, before any S3 call', async (_label, parts) => {
+      // S3 numbers parts 1 to 10 000; anything else could never complete, and a huge count
+      // would presign that many URLs for nothing.
+      const s3Provider = buildMockS3Provider(true, { UploadId: MOCK_UPLOAD_ID })
+      const service = await buildService(buildOptions(), s3Provider, buildMockKeyResolver())
+
+      const err = await service
+        .getMultipartUploadUrls({ key: KEY, contentType: 'image/png', parts })
+        .catch((e: unknown) => e)
+
+      expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT)
+      expect(detailsOf(err).reason).toBe('parts must be an integer from 1 to 10000')
+    })
+
+    it('accepts a single part', async () => {
+      // the lower boundary is valid
+      const service = await buildService(
+        buildOptions(),
+        buildMockS3Provider(true, { UploadId: MOCK_UPLOAD_ID }),
+        buildMockKeyResolver(),
+      )
+
+      const result = await service.getMultipartUploadUrls({ key: KEY, contentType: 'image/png', parts: 1 })
+
+      expect(result.partUrls.map((p) => p.partNumber)).toEqual([1])
+    })
+
+    it('accepts the S3 maximum of 10 000 parts', async () => {
+      // the boundary itself is valid: one URL per part plus the completion URL
+      const service = await buildService(
+        buildOptions(),
+        buildMockS3Provider(true, { UploadId: MOCK_UPLOAD_ID }),
+        buildMockKeyResolver(),
+      )
+
+      const result = await service.getMultipartUploadUrls({ key: KEY, contentType: 'image/png', parts: 10_000 })
+
+      expect(result.partUrls).toHaveLength(10_000)
     })
 
     it('throws STORAGE_PROVIDER_ERROR when CreateMultipartUpload returns no UploadId', async () => {
