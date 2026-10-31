@@ -19,6 +19,19 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   DEFAULT_SIGNED_URLS,
 } from '../constants/default-options.constants'
+import { MAX_SIGNED_URL_TTL_SECONDS } from '../../shared/constants/default-ttls.constants'
+
+/**
+ * Merges the signed-URL options over their defaults and caps `maxTtlSeconds` at the
+ * SigV4 presign limit: the signer rejects any longer expiry, so a larger configured
+ * ceiling could never produce a working URL.
+ */
+function resolveSignedUrls(
+  configured: BymaxStorageModuleOptions['signedUrls'],
+): ResolvedBymaxStorageOptions['signedUrls'] {
+  const merged = { ...DEFAULT_SIGNED_URLS, ...(configured ?? {}) }
+  return { ...merged, maxTtlSeconds: Math.min(merged.maxTtlSeconds, MAX_SIGNED_URL_TTL_SECONDS) }
+}
 
 /**
  * Produces the resolved options consumed by every service. Optional fields
@@ -49,7 +62,7 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     keyPrefix: options.keyPrefix ?? '',
     defaultCacheControl: options.defaultCacheControl ?? DEFAULT_CACHE_CONTROL,
     defaultContentDisposition: options.defaultContentDisposition ?? DEFAULT_CONTENT_DISPOSITION,
-    signedUrls: { ...DEFAULT_SIGNED_URLS, ...(options.signedUrls ?? {}) },
+    signedUrls: resolveSignedUrls(options.signedUrls),
     multipart: { ...DEFAULT_MULTIPART, ...(options.multipart ?? {}) },
     ...(options.validation !== undefined ? { validation: options.validation } : {}),
     ...(options.scanner !== undefined ? { scanner: options.scanner } : {}),

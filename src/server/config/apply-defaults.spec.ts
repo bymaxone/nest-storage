@@ -217,4 +217,27 @@ describe('applyDefaults', () => {
     expect(r.signedUrls.defaultGetTtlSeconds).toBe(60)
     expect(r.signedUrls.maxTtlSeconds).toBe(604_800)
   })
+
+  it.each([
+    ['below the SigV4 limit', 3600, 3600],
+    ['exactly the SigV4 limit', 604_800, 604_800],
+    ['one second above the SigV4 limit', 604_801, 604_800],
+    ['thirty days', 2_592_000, 604_800],
+  ])('should resolve a configured maxTtlSeconds %s to the effective ceiling', (_label, configured, effective) => {
+    // The signer rejects any presign longer than 7 days, so a larger ceiling is capped at init.
+    const r = applyDefaults({ ...base, signedUrls: { maxTtlSeconds: configured } })
+    expect(r.signedUrls.maxTtlSeconds).toBe(effective)
+  })
+
+  it('should cap only maxTtlSeconds and leave the other signed-URL options as configured', () => {
+    const r = applyDefaults({
+      ...base,
+      signedUrls: { defaultGetTtlSeconds: 90, defaultPutTtlSeconds: 120, maxTtlSeconds: 9_999_999 },
+    })
+    expect(r.signedUrls).toEqual({
+      defaultGetTtlSeconds: 90,
+      defaultPutTtlSeconds: 120,
+      maxTtlSeconds: 604_800,
+    })
+  })
 })

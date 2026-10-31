@@ -71,4 +71,37 @@ describe('Storage E2E — signed URLs', () => {
     const response = await fetch(tampered, { method: 'PUT', headers: requiredHeaders, body: 'x' })
     expect(response.status).toBeGreaterThanOrEqual(400)
   })
+
+  it('signs a request for more than 7 days with X-Amz-Expires=604800, and the server accepts it', async () => {
+    // A ceiling above the SigV4 limit is capped at init, so a longer request yields a URL the signer
+    // can produce and the server verifies, instead of an SDK rejection at sign time.
+    const longLived = await Test.createTestingModule({
+      imports: [
+        BymaxStorageModule.forRoot({
+          ...providerRecipes.minio({
+            endpoint: minio.endpoint,
+            bucket: minio.bucket,
+            accessKeyId: minio.accessKeyId,
+            secretAccessKey: minio.secretAccessKey,
+          }),
+          signedUrls: { maxTtlSeconds: 2_592_000 },
+        }),
+      ],
+    }).compile()
+    await longLived.init()
+    try {
+      const longStorage = longLived.get(StorageService)
+      const longSigned = longLived.get(SignedUrlService)
+      await longStorage.upload({ key: 'e2e/long-ttl.txt', body: Buffer.from('long'), contentType: 'text/plain' })
+
+      const { url } = await longSigned.getDownloadUrl({ key: 'e2e/long-ttl.txt', ttlSeconds: 1_000_000 })
+
+      expect(new URL(url).searchParams.get('X-Amz-Expires')).toBe('604800')
+      const response = await fetch(url)
+      expect(response.status).toBe(200)
+      expect(await response.text()).toBe('long')
+    } finally {
+      await longLived.close()
+    }
+  })
 })
