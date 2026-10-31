@@ -35,6 +35,15 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Changed
 
+- **`upload()` destroys a `Readable` body it rejects.** A rejected upload (invalid key or content
+  type, a validation or scan failure, a provider error) used to leave the caller's stream open, so the
+  file handle or the connection behind it stayed held. The library now takes ownership of the stream, as
+  `stream.pipeline` does, and destroys it with the error; a cache hit destroys it unread. Destroying can
+  emit `'error'` on a stream nobody listens to (with the error given, or when the stream's own cleanup
+  fails), so the library attaches a no-op listener first.
+
+  **Apply to a derived backend:** do not reuse a stream you passed to `upload()`. A caller that
+  fixed a validation error and retried with the same, still unread, stream must open a new one.
 - **Keys the library returns are relative to `keyPrefix`, so every one can be passed back.**
   `UploadResult.key` and `ObjectMetadata.key` (from `head`, `download`, `downloadBuffer`) carried
   the `keyPrefix`, while every method prepends it again, so with a prefix set `head(r.key)`,

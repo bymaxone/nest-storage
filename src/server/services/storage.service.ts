@@ -114,11 +114,26 @@ export class StorageService {
    * `idempotencyKey` is supplied and a matching result is cached within the TTL
    * window, the cached result is returned without re-uploading.
    *
+   * The library takes ownership of a `Readable` body, as `stream.pipeline` does: when the
+   * upload is rejected for any reason (configuration, validation, scan, provider failure)
+   * the stream is destroyed with the error, which releases the file handle or socket behind
+   * it; a cache hit destroys it unread. A stream consumed by a successful upload ends on its own.
+   *
    * @param options - The upload request.
    * @returns The upload result.
    * @throws StorageException for missing configuration, body, or content type.
    */
   async upload(options: UploadOptions): Promise<UploadResult> {
+    try {
+      return await this.uploadOwningBody(options)
+    } catch (err) {
+      destroyStream(options.body as NodeJS.ReadableStream, err as Error)
+      throw err
+    }
+  }
+
+  /** The upload itself; `upload()` destroys a stream body when this rejects. */
+  private async uploadOwningBody(options: UploadOptions): Promise<UploadResult> {
     this.assertConfigured()
     // Defensive boundary check: callers may pass an absent body from untyped
     // (JS / request-parsed) data despite the compile-time type.
@@ -136,6 +151,7 @@ export class StorageService {
       const cacheKey = this.idempotencyCache.computeKey(options.idempotencyKey, finalKey)
       const cached = this.idempotencyCache.get(cacheKey)
       if (cached) {
+        destroyStream(options.body as NodeJS.ReadableStream)
         return { ...cached, fromIdempotencyCache: true }
       }
     }

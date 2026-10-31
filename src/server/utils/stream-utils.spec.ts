@@ -6,6 +6,7 @@
 import { EventEmitter } from 'node:events'
 import { PassThrough, Readable } from 'node:stream'
 import {
+  destroyStream,
   readStreamUpTo,
   bufferToReadable,
   getBodySize,
@@ -235,6 +236,37 @@ describe('stream-utils', () => {
 
       expect(text).toBe('abcdefgh')
       expect(destroy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('destroyStream', () => {
+    it('keeps an error from crashing the process, whether it is given or comes from the stream cleanup', async () => {
+      // A stream's own _destroy can fail even when destroy() was called without an error.
+      const failingCleanup = new Readable({
+        read() {},
+        destroy(_err, callback) {
+          callback(new Error('resource close failed'))
+        },
+      })
+      const withError = new Readable({ read() {} })
+      const crashed = jest.fn()
+      process.once('uncaughtException', crashed)
+
+      destroyStream(failingCleanup)
+      destroyStream(withError, new Error('rejected'))
+      await new Promise((resolve) => setImmediate(resolve))
+      process.removeListener('uncaughtException', crashed)
+
+      expect(crashed).not.toHaveBeenCalled()
+      expect(failingCleanup.destroyed).toBe(true)
+      expect(withError.destroyed).toBe(true)
+    })
+
+    it('ignores an absent body and a body that cannot be destroyed', () => {
+      expect(() => {
+        destroyStream(undefined as unknown as NodeJS.ReadableStream, new Error('x'))
+        destroyStream(Buffer.from('abc') as unknown as NodeJS.ReadableStream, new Error('x'))
+      }).not.toThrow()
     })
   })
 
