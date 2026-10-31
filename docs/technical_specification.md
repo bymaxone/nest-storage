@@ -731,6 +731,22 @@ export interface SignedUrlResult {
 }
 ```
 
+### 7.2b `BucketLifecycleService`
+
+```typescript
+@Injectable()
+export class BucketLifecycleService {
+  get(options?: { bucket?: string }): Promise<BucketLifecycleRuleView[]>
+  upsert(rule: { id: string; prefix: string; expirationDays: number }, options?: { bucket?: string }): Promise<void>
+  remove(id: string, options?: { bucket?: string }): Promise<boolean>
+}
+```
+
+- Each write reads the configuration, changes only the rule with the given id and writes all rules back. S3 has no conditional lifecycle write, so this is not atomic.
+- Removing the last rule calls `DeleteBucketLifecycle`, because a put with no rules is invalid.
+- `prefix` goes through the key guard and `keyPrefix`; `get()` returns filter prefixes relative to `keyPrefix` and flags rules outside it with `isOutsideKeyPrefix`, which `upsert` and `remove` refuse to change.
+- Errors: `STORAGE_LIFECYCLE_RULE_INVALID` (400), `STORAGE_LIFECYCLE_UNSUPPORTED` (501), `STORAGE_LIFECYCLE_REJECTED` (422). Only MinIO is exercised end to end; see the README for provider status.
+
 ### 7.3 Security
 
 - Use the smallest viable TTL (5 min default covers most cases).
@@ -974,7 +990,9 @@ export class StorageException extends HttpException {
 | `STORAGE_PROVIDER_ERROR`          | 502  | AWS SDK error (network, 5xx, throttling); `details.awsCode`, `httpStatus`, `requestId`     |
 | `STORAGE_SIGNED_URL_TTL_INVALID`  | 400  | Per-request `ttlSeconds` ≤ 0. (A `ttlSeconds` above `maxTtlSeconds` is silently clamped, not rejected; the configured `maxTtlSeconds` is itself clamped to the 604800s SigV4 cap at init.) |
 | `STORAGE_PART_TOO_SMALL`          | 400  | Reserved; not thrown today (a `multipart.partSizeBytes` under 5 MB fails at init as `STORAGE_INVALID_CONFIG`) |
-| `STORAGE_INVALID_PART_COUNT`      | 400  | `getMultipartUploadUrls()` called with `parts` ≤ 0                                         |
+| `STORAGE_INVALID_PART_COUNT`      | 400  | `getMultipartUploadUrls()` called with `parts` not an integer from 1 to 10 000             |
+| `STORAGE_NOT_MODIFIED`            | 304  | `download()` with `ifNoneMatch` equal to the current ETag                                  |
+| `STORAGE_PRECONDITION_FAILED`     | 412  | `download()` with `ifMatch` different from the current ETag                                |
 | `STORAGE_BUCKET_UNDEFINED`        | 400  | Operation without a bucket and no default bucket in the config                                 |
 | `STORAGE_MULTIPART_ABORTED`       | 500  | Multipart upload failed and was aborted. With `@aws-sdk/lib-storage` (`leavePartsOnError: false`) the abort is automatic; on the raw presigned-multipart path the lib issues `AbortMultipartUpload` to avoid orphan parts being billed |
 | `STORAGE_INVALID_CONFIG`          | 500  | `BymaxStorageModuleOptions` validation failed at initialization                            |

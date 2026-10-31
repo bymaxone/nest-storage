@@ -20,6 +20,8 @@ interface AwsLikeError {
  *
  * Heuristics:
  *   - `name === 'NotFound'` or HTTP 404 → `STORAGE_OBJECT_NOT_FOUND` (404)
+ *   - HTTP 304 (`If-None-Match` matched) → `STORAGE_NOT_MODIFIED` (304)
+ *   - HTTP 412 (`If-Match` failed)       → `STORAGE_PRECONDITION_FAILED` (412)
  *   - `name === 'TimeoutError'`          → `STORAGE_TIMEOUT` (504)
  *   - anything else                      → `STORAGE_PROVIDER_ERROR` (502)
  *
@@ -44,6 +46,16 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
     return new StorageException(
       STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND,
       HttpStatus.NOT_FOUND,
+      details,
+    )
+  }
+  if (httpStatus === 304) {
+    return new StorageException(STORAGE_ERROR_CODES.STORAGE_NOT_MODIFIED, HttpStatus.NOT_MODIFIED, details)
+  }
+  if (httpStatus === 412) {
+    return new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_PRECONDITION_FAILED,
+      HttpStatus.PRECONDITION_FAILED,
       details,
     )
   }

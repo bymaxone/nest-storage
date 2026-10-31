@@ -26,6 +26,9 @@ import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constant
 import { buildACL } from '../utils/header-utils'
 import { clampTtl } from '../utils/ttl-clamp'
 
+/** S3 allows part numbers 1 to 10 000 in one multipart upload. */
+const MAX_MULTIPART_PARTS = 10_000
+
 @Injectable()
 export class SignedUrlService {
   constructor(
@@ -165,9 +168,9 @@ export class SignedUrlService {
    */
   async getMultipartUploadUrls(options: MultipartUploadUrlsOptions): Promise<MultipartUploadUrlsResult> {
     this.assertConfigured()
-    if (options.parts <= 0) {
+    if (!Number.isInteger(options.parts) || options.parts < 1 || options.parts > MAX_MULTIPART_PARTS) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT, undefined, {
-        reason: 'parts must be a positive integer',
+        reason: `parts must be an integer from 1 to ${String(MAX_MULTIPART_PARTS)}`,
         provided: options.parts,
       })
     }

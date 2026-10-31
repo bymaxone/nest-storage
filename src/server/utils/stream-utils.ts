@@ -140,3 +140,30 @@ async function collectStream(stream: PassThrough): Promise<Buffer> {
 export function bufferToReadable(buf: Buffer | Uint8Array): Readable {
   return Readable.from(Buffer.isBuffer(buf) ? buf : Buffer.from(buf))
 }
+
+/**
+ * Reads a stream into one `Buffer`, counting bytes as they arrive and stopping at
+ * the first chunk that takes the total past `maxBytes`, so an oversized or endless
+ * stream is never held in memory.
+ *
+ * @param source - The stream to drain.
+ * @param maxBytes - The most bytes accepted.
+ * @returns The whole body, or `undefined` when it is longer than `maxBytes` (the
+ *   stream is destroyed in that case).
+ */
+export async function readStreamUpTo(
+  source: NodeJS.ReadableStream,
+  maxBytes: number,
+): Promise<Buffer | undefined> {
+  const chunks: Buffer[] = []
+  let total = 0
+  for await (const chunk of source) {
+    const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
+    total += buf.byteLength
+    if (total > maxBytes) {
+      return undefined
+    }
+    chunks.push(buf)
+  }
+  return Buffer.concat(chunks)
+}

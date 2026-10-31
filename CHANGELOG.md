@@ -33,6 +33,29 @@ note on each entry is the compatibility contract — read it, not the number.
   to `keyPrefix`; with a `keyPrefix` set, rules outside it are returned flagged and are not changed.
   Providers other than MinIO (tested) and Cloudflare R2 (documented) are unverified; see the README.
 
+### Changed
+
+- **Keys the library returns are relative to `keyPrefix`, so every one can be passed back.**
+  `UploadResult.key` and `ObjectMetadata.key` (from `head`, `download`, `downloadBuffer`) carried
+  the `keyPrefix`, while every method prepends it again, so with a prefix set `head(r.key)`,
+  `exists`, `download`, `delete` and a signed-URL call addressed `prefix/prefix/key`. `delete`
+  was the quiet one: it removed nothing and reported success. `list()` and `deleteMany()` already
+  returned relative keys. `UploadResult.publicUrl` is unchanged and still carries the prefix.
+
+  **Apply to a derived backend:** only a deployment with a non-empty `keyPrefix` is affected. In
+  1.0.0 to 1.1.1 the returned key is `prefix/name` and cannot be passed back; from this release it is
+  `name`. A `.key` value you stored from an earlier version carries the prefix: strip it once (for
+  example `stored.slice(prefix.length + 1)`, where `prefix` is the normalized `keyPrefix` without
+  surrounding slashes) before passing it to the library, and when you read keys from your database
+  stop adding or removing the prefix yourself.
+
+### Added
+
+- **`STORAGE_NOT_MODIFIED` (304) and `STORAGE_PRECONDITION_FAILED` (412).** `download()` with
+  `ifNoneMatch` equal to the current ETag, or `ifMatch` that differs, used to surface as a generic
+  `STORAGE_PROVIDER_ERROR` (502); they now have their own codes, so a caller can branch on them.
+  A 304 is thrown, not returned.
+
 ### Fixed
 
 - **`requestTimeoutMs` now takes effect.** It was resolved and defaulted to 30 000 ms but never
@@ -45,6 +68,22 @@ note on each entry is the compatibility contract — read it, not the number.
   attempt, and an upload body counts toward it: a single-shot upload that needs longer than 30 s
   (a slow link, a body near `multipart.thresholdBytes`) now fails. Raise `requestTimeoutMs` for
   such workloads before upgrading. It does not limit reading a download stream.
+- **A stream body under a pre-upload scanner no longer hangs the upload.** The scanner and the upload
+  were handed the same stream object; a scanner that read it left the upload with nothing to send, and
+  `upload()` never returned (nothing was stored). In `pre-upload` mode a stream is now read into one
+  buffer, bounded by `validation.maxSizeBytes`, and the scanner and the upload share that buffer. A
+  stream longer than the limit, or any stream when `maxSizeBytes` is unset, is refused with
+  `STORAGE_VALIDATION_FAILED`.
+
+  **Apply to a derived backend:** if you scan streams before upload, set `validation.maxSizeBytes`
+  (or switch the scanner to `post-upload`), and expect the stream to be held in memory up to that size.
+  With `requestTimeoutMs` an upload whose stream was consumed fails as `STORAGE_TIMEOUT` instead of
+  hanging.
+- **`getMultipartUploadUrls` validates `parts`.** Only `parts <= 0` was refused, so a fraction, `NaN`
+  or a count above S3's 10 000 part numbers was accepted. `parts` must now be an integer from 1 to
+  10 000, or the call throws `STORAGE_INVALID_PART_COUNT`. The README documents the 5 MiB minimum for
+  every part but the last, the absence of an abort URL, and the `AbortIncompleteMultipartUpload`
+  lifecycle rule recommended against orphaned uploads.
 - **`signedUrls.maxTtlSeconds` above 604 800 is reduced at init.** The SigV4 signer rejects any
   expiry over 7 days, so a larger configured ceiling made every request above 7 days fail with a
   provider error while shorter requests worked. The ceiling is now capped at 604 800 s when the

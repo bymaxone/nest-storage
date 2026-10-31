@@ -5,6 +5,7 @@
  */
 import { PassThrough, Readable } from 'node:stream'
 import {
+  readStreamUpTo,
   bufferToReadable,
   getBodySize,
   isBufferLike,
@@ -187,6 +188,60 @@ describe('stream-utils', () => {
     it('wraps a Uint8Array as a readable stream', async () => {
       // The non-Buffer branch converts then streams.
       expect(await collect(bufferToReadable(new Uint8Array([104, 105])))).toBe('hi')
+    })
+  })
+
+  describe('readStreamUpTo', () => {
+    it('returns the whole body when it fits', async () => {
+      const body = await readStreamUpTo(Readable.from([Buffer.from('ab'), Buffer.from('cd')]), 10)
+
+      expect(body?.toString()).toBe('abcd')
+    })
+
+    it('accepts a body exactly as long as the limit', async () => {
+      const body = await readStreamUpTo(Readable.from([Buffer.from('abcd')]), 4)
+
+      expect(body?.toString()).toBe('abcd')
+    })
+
+    it('returns undefined and destroys the stream at the first chunk past the limit', async () => {
+      const source = new Readable({ read() {} })
+      source.push(Buffer.alloc(3))
+      source.push(Buffer.alloc(3))
+      source.push(Buffer.alloc(3))
+
+      const body = await readStreamUpTo(source, 5)
+
+      expect(body).toBeUndefined()
+      expect(source.destroyed).toBe(true)
+    })
+
+    it('accepts string chunks', async () => {
+      const source = new Readable({
+        encoding: 'utf8',
+        read() {
+          this.push('ab')
+          this.push('c')
+          this.push(null)
+        },
+      })
+
+      const body = await readStreamUpTo(source, 10)
+
+      expect(body?.toString()).toBe('abc')
+    })
+
+    it('returns an empty buffer for an empty stream', async () => {
+      const body = await readStreamUpTo(Readable.from([]), 10)
+
+      expect(body?.length).toBe(0)
+    })
+
+    it('rejects when the stream errors', async () => {
+      const source = new Readable({ read() {} })
+      source.destroy(new Error('boom'))
+
+      await expect(readStreamUpTo(source, 10)).rejects.toThrow('boom')
     })
   })
 })

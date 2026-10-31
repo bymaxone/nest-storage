@@ -28,6 +28,20 @@ describe('mapAwsError', () => {
     expect(e.code).toBe('STORAGE_OBJECT_NOT_FOUND')
   })
 
+  it('should map HTTP 304 to STORAGE_NOT_MODIFIED', () => {
+    // A matching If-None-Match: the provider answers 304 and the SDK names it NotModified.
+    const e = mapAwsError({ name: 'NotModified', $metadata: { httpStatusCode: 304 } })
+    expect(e.code).toBe('STORAGE_NOT_MODIFIED')
+    expect(e.getStatus()).toBe(HttpStatus.NOT_MODIFIED)
+  })
+
+  it('should map HTTP 412 to STORAGE_PRECONDITION_FAILED', () => {
+    // A failing If-Match: the provider answers 412.
+    const e = mapAwsError({ name: 'PreconditionFailed', $metadata: { httpStatusCode: 412 } })
+    expect(e.code).toBe('STORAGE_PRECONDITION_FAILED')
+    expect(e.getStatus()).toBe(HttpStatus.PRECONDITION_FAILED)
+  })
+
   it('should map a TimeoutError to STORAGE_TIMEOUT', () => {
     // Second condition branch.
     const e = mapAwsError({ name: 'TimeoutError' })

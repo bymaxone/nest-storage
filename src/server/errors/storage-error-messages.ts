@@ -28,7 +28,7 @@ export const STORAGE_ERROR_MESSAGES: Record<StorageErrorCode, string> = {
   [STORAGE_ERROR_CODES.STORAGE_SIGNED_URL_TTL_INVALID]: 'Signed URL TTL is invalid',
   [STORAGE_ERROR_CODES.STORAGE_PART_TOO_SMALL]: 'Multipart part size is below the 5 MB minimum',
   [STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT]:
-    'Multipart part count is invalid (must be a positive integer)',
+    'Multipart part count is invalid (must be an integer from 1 to 10000)',
   [STORAGE_ERROR_CODES.STORAGE_BUCKET_UNDEFINED]:
     'Bucket is undefined (no default configured and none provided per call)',
   [STORAGE_ERROR_CODES.STORAGE_MULTIPART_ABORTED]: 'Multipart upload was aborted',
@@ -39,4 +39,6 @@ export const STORAGE_ERROR_MESSAGES: Record<StorageErrorCode, string> = {
     'The storage provider does not support bucket lifecycle configuration',
   [STORAGE_ERROR_CODES.STORAGE_LIFECYCLE_REJECTED]:
     'The storage provider rejected the lifecycle configuration',
+  [STORAGE_ERROR_CODES.STORAGE_NOT_MODIFIED]: 'The object has not changed since the supplied ETag',
+  [STORAGE_ERROR_CODES.STORAGE_PRECONDITION_FAILED]: 'The object does not satisfy the supplied precondition',
 }
