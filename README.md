@@ -602,7 +602,7 @@ const removed = await lifecycle.remove('expire-tmp') // true; false when no rule
 | Provider                                   | Status                | Basis                                                                                                                                               |
 | ------------------------------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MinIO (tested with the `pgsty/silo` image) | **Verified**          | The end-to-end suite applies a rule once, keeps unrelated rules through upsert, replace and remove, and deletes the configuration on the last rule. |
-| Cloudflare R2                              | **Verified (docs)**   | R2 documents the three S3 lifecycle calls ([R2 object lifecycles][r2-lifecycles]); this repository does not run them against R2.                   |
+| Cloudflare R2                              | **Verified (docs)**   | R2 documents the S3 lifecycle calls ([R2 object lifecycles][r2-lifecycles]); this repository does not run them against R2.                   |
 | AWS S3                                     | Documented, not run   | The behaviour follows the S3 API reference ([Put][aws-put-lifecycle], [Get][aws-get-lifecycle], [Delete][aws-delete-lifecycle]); no test here hits AWS. |
 | Backblaze B2, DigitalOcean Spaces, Wasabi  | **Unverified**        | Neither documented nor tested here. A provider without the API surfaces as `STORAGE_LIFECYCLE_UNSUPPORTED`.                                        |
 
@@ -683,7 +683,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_TIMEOUT`                | 504  | Request exceeded `requestTimeoutMs`                                                                                                                                                                                |
 | `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: empty or over-long `id`, non-positive or non-integer `expirationDays`, bad `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |
 | `STORAGE_LIFECYCLE_UNSUPPORTED` | 501  | The provider does not implement the lifecycle API |
-| `STORAGE_LIFECYCLE_REJECTED` | 422  | The provider refused the lifecycle configuration (`MalformedXML`, `InvalidArgument`, `InvalidRequest`) |
+| `STORAGE_LIFECYCLE_REJECTED` | 422  | The provider refused the lifecycle configuration |
 
 ```typescript
 import { StorageException, STORAGE_ERROR_CODES } from '@bymax-one/nest-storage'

@@ -23,7 +23,7 @@ note on each entry is the compatibility contract — read it, not the number.
   `DeleteBucketLifecycle`, because S3 rejects a put with no rules. The read-modify-write is not
   atomic: S3 has no conditional lifecycle write, so a concurrent writer can be overwritten.
   The service is exported from the package and from the module.
-- **Three error codes:** `STORAGE_LIFECYCLE_RULE_INVALID` (400), `STORAGE_LIFECYCLE_UNSUPPORTED`
+- **Error codes:** `STORAGE_LIFECYCLE_RULE_INVALID` (400), `STORAGE_LIFECYCLE_UNSUPPORTED`
   (501) and `STORAGE_LIFECYCLE_REJECTED` (422).
 - Types `BucketLifecycleRule`, `BucketLifecycleRuleView`, `LifecycleBucketOptions` and
   `ExpirationRuleInput`.
