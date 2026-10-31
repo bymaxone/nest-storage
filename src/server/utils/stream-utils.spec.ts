@@ -240,18 +240,26 @@ describe('stream-utils', () => {
   })
 
   describe('destroyStream', () => {
-    it('attaches an error listener only when it destroys with an error', () => {
-      // The listener exists to keep an unheard 'error' from crashing; without an error there is nothing to hear.
-      const quiet = new Readable({ read() {} })
-      const failing = new Readable({ read() {} })
+    it('keeps an error from crashing the process, whether it is given or comes from the stream cleanup', async () => {
+      // A stream's own _destroy can fail even when destroy() was called without an error.
+      const failingCleanup = new Readable({
+        read() {},
+        destroy(_err, callback) {
+          callback(new Error('resource close failed'))
+        },
+      })
+      const withError = new Readable({ read() {} })
+      const crashed = jest.fn()
+      process.once('uncaughtException', crashed)
 
-      destroyStream(quiet)
-      destroyStream(failing, new Error('rejected'))
+      destroyStream(failingCleanup)
+      destroyStream(withError, new Error('rejected'))
+      await new Promise((resolve) => setImmediate(resolve))
+      process.removeListener('uncaughtException', crashed)
 
-      expect(quiet.destroyed).toBe(true)
-      expect(quiet.listenerCount('error')).toBe(0)
-      expect(failing.destroyed).toBe(true)
-      expect(failing.listenerCount('error')).toBe(1)
+      expect(crashed).not.toHaveBeenCalled()
+      expect(failingCleanup.destroyed).toBe(true)
+      expect(withError.destroyed).toBe(true)
     })
 
     it('ignores an absent body and a body that cannot be destroyed', () => {

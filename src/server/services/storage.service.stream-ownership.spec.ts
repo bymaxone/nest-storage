@@ -213,6 +213,38 @@ describe('upload() takes ownership of a Readable body', () => {
     expect(source.destroyed).toBe(true)
   })
 
+  it('does not crash when the stream a cache hit discards fails to clean up', async () => {
+    status = 200
+    const storage = await storageWith()
+    await storage.upload({
+      key: 'a',
+      body: Buffer.from('first'),
+      contentType: 'text/plain',
+      idempotencyKey: 'order-2',
+    })
+    const source = new Readable({
+      read() {},
+      destroy(_err, callback) {
+        callback(new Error('resource close failed'))
+      },
+    })
+    const crashed = jest.fn()
+    process.once('uncaughtException', crashed)
+
+    const second = await storage.upload({
+      key: 'a',
+      body: source,
+      contentType: 'text/plain',
+      idempotencyKey: 'order-2',
+    })
+    await settle()
+    process.removeListener('uncaughtException', crashed)
+
+    expect(second.fromIdempotencyCache).toBe(true)
+    expect(crashed).not.toHaveBeenCalled()
+    expect(source.destroyed).toBe(true)
+  })
+
   it('leaves no unhandled error when the destroyed stream has no listener', async () => {
     // destroy(err) emits 'error'; with nobody listening that would crash the process.
     const storage = await storageWith({ validation: { mimeWhitelist: ['image/png'] } })
