@@ -67,6 +67,24 @@ export async function peekFirstBytes(
 }
 
 /**
+ * Destroys `source` when the consumer closes `replacement` before the source ended. A consumer
+ * that gives up on the replacement (a size limit, a failed upload) must also release the original,
+ * which would otherwise stay paused and open. `NodeJS.ReadableStream` does not promise
+ * `destroy()`; every Node stream has it.
+ */
+function releaseSourceOnEarlyClose(
+  source: NodeJS.ReadableStream,
+  replacement: PassThrough,
+  sourceEnded: () => boolean,
+): void {
+  replacement.once('close', () => {
+    if (!sourceEnded()) {
+      ;(source as Partial<Readable>).destroy?.()
+    }
+  })
+}
+
+/**
  * Tees a source stream: the peek side receives at most `maxBytes`, the upload
  * side receives the full stream.
  *
@@ -114,14 +132,7 @@ async function teeAndPeek(
     closePeek()
     uploadPT.end()
   })
-  // A consumer that gives up on the replacement (a size limit, a failed upload) must also
-  // release the original: a destroyed replacement would otherwise leave it paused and open.
-  uploadPT.once('close', () => {
-    if (!sourceEnded) {
-      // `NodeJS.ReadableStream` does not promise `destroy()`; every Node stream has it.
-      ;(source as Partial<Readable>).destroy?.()
-    }
-  })
+  releaseSourceOnEarlyClose(source, uploadPT, () => sourceEnded)
   source.on('error', (err: Error) => {
     // End the peek side gracefully so the head resolves with whatever arrived,
     // and surface the failure on the upload side for the consumer to handle.
