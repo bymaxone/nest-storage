@@ -15,7 +15,7 @@
  *   which silently turns the release notes into the generic fallback.
  * - README examples used option, method and field names the package does not have
  *   (`validators`, `partCount`, a validator that returned `{ valid }`) and the snippet
- *   check passed, because of three blind spots in how it compiled them:
+ *   check passed, because of blind spots in how it compiled them:
  *   1. The `tsc` command reports no semantic error once any file has a syntax error,
  *      and a snippet that elides code with `...` is allowed one. The project is now
  *      compiled through the TypeScript API, which returns both kinds together.
@@ -27,8 +27,8 @@
  *      surrounding prose are typed in `scripts/readme-prelude.d.ts`.
  *
  * Portable between packages: everything here is generic except `readme-prelude.d.ts`
- * (the typed names and helper classes the README assumes) and the `SnippetContext` /
- * `SnippetController` members that `prepareSnippet` builds from the service names.
+ * (the typed names, `SnippetContext` and the helper classes the README assumes) and the
+ * service names that `prepareSnippet` writes into `SnippetController`.
  *
  * Run after `pnpm build` — the snippets compile against `dist/`.
  */
