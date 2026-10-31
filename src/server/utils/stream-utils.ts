@@ -158,6 +158,8 @@ async function teeAndPeek(
     // End the peek side gracefully so the head resolves with whatever arrived,
     // and surface the failure on the upload side for the consumer to handle.
     closePeek()
+    // No consumer may be attached yet (a validator can reject first); an unheard error would crash.
+    uploadPT.once('error', () => undefined)
     uploadPT.destroy(err)
   })
   const head = await collectStream(peekPT)

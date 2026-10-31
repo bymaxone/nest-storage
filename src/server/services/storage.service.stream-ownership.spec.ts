@@ -228,6 +228,35 @@ describe('upload() takes ownership of a Readable body', () => {
     expect(source.destroyed).toBe(true)
   })
 
+  it('does not crash when a validator that read the head of the stream then rejects it', async () => {
+    // readBytes tees the stream; destroying the source with an error reaches the tee's replacement,
+    // which nobody is listening to because the upload never started.
+    const storage = await storageWith({
+      validation: {
+        customValidators: [
+          {
+            name: 'magic',
+            async validate(ctx) {
+              await ctx.readBytes?.(4)
+              return { ok: false as const, reason: 'not a pdf' }
+            },
+          },
+        ],
+      },
+    })
+    const source = openStream()
+    const crashed = jest.fn()
+    process.once('uncaughtException', crashed)
+
+    const error = await reject(storage.upload({ key: 'a', body: source, contentType: 'application/pdf' }))
+    await settle()
+    process.removeListener('uncaughtException', crashed)
+
+    expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+    expect(crashed).not.toHaveBeenCalled()
+    expect(source.destroyed).toBe(true)
+  })
+
   it('does not touch a Buffer body, and a successful stream upload still completes', async () => {
     status = 200
     const storage = await storageWith()
