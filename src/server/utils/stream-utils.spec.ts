@@ -3,6 +3,7 @@
  * guards, sizing, the memory-bounded peek/tee, and the buffer-to-stream adapter.
  * @layer server/utils
  */
+import { EventEmitter } from 'node:events'
 import { PassThrough, Readable } from 'node:stream'
 import {
   readStreamUpTo,
@@ -201,6 +202,20 @@ describe('stream-utils', () => {
       await new Promise((resolve) => setImmediate(resolve))
 
       expect(source.destroyed).toBe(true)
+    })
+
+    it('leaves a source without destroy() alone when the replacement is destroyed early', async () => {
+      // NodeJS.ReadableStream does not promise destroy(); a minimal stream must not throw from the close handler.
+      const emitter = new EventEmitter()
+      const minimal = Object.assign(emitter, { pause: () => minimal, resume: () => minimal })
+      const heading = peekFirstBytes(minimal as unknown as NodeJS.ReadableStream, 4)
+      minimal.emit('data', Buffer.from('%PDF-1.7 and a long body'))
+      const { replacementBody } = await heading
+
+      ;(replacementBody as Readable).destroy()
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect((replacementBody as Readable).destroyed).toBe(true)
     })
 
     it('does not touch a source that has already ended', async () => {

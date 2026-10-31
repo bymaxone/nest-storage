@@ -118,7 +118,8 @@ async function teeAndPeek(
   // release the original: a destroyed replacement would otherwise leave it paused and open.
   uploadPT.once('close', () => {
     if (!sourceEnded) {
-      ;(source as Readable).destroy()
+      // `NodeJS.ReadableStream` does not promise `destroy()`; every Node stream has it.
+      ;(source as Partial<Readable>).destroy?.()
     }
   })
   source.on('error', (err: Error) => {
