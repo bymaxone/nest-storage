@@ -487,8 +487,8 @@ const { uploadId, partUrls, completeUrl } = await signedUrls.getMultipartUploadU
   `AbortMultipartUpload` request, and an upload nobody completes keeps its parts, and their storage
   cost, until it is aborted. Recommended: a bucket lifecycle rule with `AbortIncompleteMultipartUpload`
   ([AWS: "we recommend that you configure a lifecycle rule by using the `AbortIncompleteMultipartUpload`
-  action"][aws-mpu-abort-rule]). `BucketLifecycleService` keeps such a rule through every change but only
-  writes expiration rules, so set that rule once with the provider's console or CLI.
+  action"][aws-mpu-abort-rule]). `BucketLifecycleService` can write it
+  (`upsert({ id, prefix, abortIncompleteMultipartDays })`) and keeps it through every change.
 
 > **TTL clamp:** per-request `ttlSeconds` values above `signedUrls.maxTtlSeconds` are silently clamped. `maxTtlSeconds` defaults to 604 800 s (the 7-day SigV4 limit). A larger configured value is reduced to 604 800 s at module init, with one warning, because the signer rejects a longer expiry and no URL longer than 7 days can exist ([AWS: "the expiration time can be set as high as 7 days"][aws-presigned-expiry]). A `ttlSeconds` ≤ 0 throws `STORAGE_SIGNED_URL_TTL_INVALID`.
 
@@ -603,7 +603,7 @@ const { deleted, failed } = await storage.deleteMany(['a.png', 'b.png', 'c.png']
 ### Bucket Lifecycle Rules
 
 `BucketLifecycleService` manages the bucket's lifecycle configuration: read the rules, add or
-replace one expiration rule by id, remove one. Every other rule in the bucket — transitions,
+replace one expiration rule or one multipart-abort rule by id, remove one. Every other rule in the bucket — transitions,
 tag filters, multipart aborts — is sent back exactly as the provider returned it.
 
 ```typescript
@@ -611,6 +611,9 @@ import { BucketLifecycleService } from '@bymax-one/nest-storage'
 
 // Expire everything under `expiring/` seven days after creation.
 await lifecycle.upsert({ id: 'expire-tmp', prefix: 'expiring/', expirationDays: 7 })
+
+// Abort multipart uploads that were never completed, so their parts stop costing storage.
+await lifecycle.upsert({ id: 'abort-stale', prefix: 'uploads/', abortIncompleteMultipartDays: 7 })
 
 const rules = await lifecycle.get() // [] when the bucket has no configuration
 
@@ -636,10 +639,16 @@ const removed = await lifecycle.remove('expire-tmp') // true; false when no rule
   whole bucket — is returned exactly as stored with `isOutsideKeyPrefix: true`. `upsert` and
   `remove` refuse an id that names such a rule (`STORAGE_LIFECYCLE_RULE_INVALID`), and every write
   sends it back field for field. Without a `keyPrefix`, no rule is flagged.
-- **Inputs are validated before any request.** `id` is 1 to 255 characters (the AWS limit),
-  `expirationDays` is an integer of at least 1, and `prefix` is a non-empty string that passes the
-  same key guard as every other key. An empty prefix is refused on purpose: an expiry over the whole
-  bucket is not supported by this API. A bad input throws `STORAGE_LIFECYCLE_RULE_INVALID`.
+- **Two rule kinds.** An input has exactly one of `expirationDays` (delete objects under the prefix after
+  N days) and `abortIncompleteMultipartDays` (abort uploads not completed within N days of starting;
+  [AWS: "Specifies the number of days after which Amazon S3 aborts an incomplete multipart
+  upload"][aws-abort-mpu]). A rule with the same id is replaced, whichever kind it was.
+- **Inputs are validated before any request.** `id` is 1 to 255 characters (the AWS limit), the day
+  count is an integer of at least 1, and `prefix` passes the same key guard as every other key. An
+  expiration rule needs a non-empty prefix: an expiry over the whole bucket is not supported by this
+  API. A multipart-abort rule may have an empty prefix, which means every upload in the module's
+  namespace (the whole bucket without a `keyPrefix`), because aborting a stale upload deletes no object.
+  A bad input throws `STORAGE_LIFECYCLE_RULE_INVALID`.
 - **Typed provider errors.** A provider that does not implement the API throws
   `STORAGE_LIFECYCLE_UNSUPPORTED` (501); a configuration the provider refuses throws
   `STORAGE_LIFECYCLE_REJECTED` (422). `details` carries the provider's error code, status and
@@ -651,9 +660,9 @@ const removed = await lifecycle.remove('expire-tmp') // true; false when no rule
 
 | Provider                                   | Status                | Basis                                                                                                                                               |
 | ------------------------------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MinIO (tested with the `pgsty/silo` image) | **Verified**          | The end-to-end suite applies a rule once, keeps unrelated rules through upsert, replace and remove, and deletes the configuration on the last rule. |
-| Cloudflare R2                              | **Verified (docs)**   | R2 documents the S3 lifecycle calls ([R2 object lifecycles][r2-lifecycles]); this repository does not run them against R2.                   |
-| AWS S3                                     | Documented, not run   | The behaviour follows the S3 API reference ([Put][aws-put-lifecycle], [Get][aws-get-lifecycle], [Delete][aws-delete-lifecycle]); no test here hits AWS. |
+| MinIO (tested with the `pgsty/silo` image) | **Verified**          | The end-to-end suite applies an expiration rule once, keeps unrelated rules through upsert, replace and remove, and deletes the configuration on the last rule. It does not accept a multipart-abort rule: the server answers HTTP 400 `InvalidArgument`, which the library types as `STORAGE_LIFECYCLE_REJECTED`, and the existing rules stay as they were (also checked end to end). |
+| Cloudflare R2                              | **Verified (docs)**   | R2 documents the S3 lifecycle calls ([R2 object lifecycles][r2-lifecycles]) and multipart-abort rules, and a default rule that expires multipart uploads after seven days; this repository does not run them against R2. |
+| AWS S3                                     | Documented, not run   | The behaviour follows the S3 API reference ([Put][aws-put-lifecycle], [Get][aws-get-lifecycle], [Delete][aws-delete-lifecycle]), including multipart-abort rules; no test here hits AWS. |
 | Backblaze B2, DigitalOcean Spaces, Wasabi  | **Unverified**        | Neither documented nor tested here. A provider without the API surfaces as `STORAGE_LIFECYCLE_UNSUPPORTED`.                                        |
 
 Expiry timing is the provider's, not this library's. R2 states that objects "will typically be
@@ -661,6 +670,7 @@ removed from a bucket within 24 hours" of their expiry; MinIO's scanner runs at 
 object can outlive its rule period.
 
 [aws-put-lifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html
+[aws-abort-mpu]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortIncompleteMultipartUpload.html
 [aws-get-lifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycleConfiguration.html
 [aws-delete-lifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketLifecycle.html
 [r2-lifecycles]: https://developers.cloudflare.com/r2/buckets/object-lifecycles/

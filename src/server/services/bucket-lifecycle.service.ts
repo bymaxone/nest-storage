@@ -17,8 +17,8 @@ import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type {
   BucketLifecycleRule,
   BucketLifecycleRuleView,
-  ExpirationRuleInput,
   LifecycleBucketOptions,
+  LifecycleRuleInput,
 } from '../interfaces/lifecycle-options.interface'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
@@ -50,6 +50,13 @@ function ruleInvalid(reason: string): StorageException {
   return new StorageException(STORAGE_ERROR_CODES.STORAGE_LIFECYCLE_RULE_INVALID, undefined, {
     reason,
   })
+}
+
+/** A day count must be a positive integer, whichever rule it belongs to. */
+function assertDays(field: string, value: unknown): asserts value is number {
+  if (!Number.isInteger(value) || (value as number) < 1) {
+    throw ruleInvalid(`${field} must be an integer of at least 1`)
+  }
 }
 
 /**
@@ -102,7 +109,7 @@ export class BucketLifecycleService {
    * @example
    *   await lifecycle.upsert({ id: 'expire-tmp', prefix: 'expiring/', expirationDays: 7 })
    */
-  async upsert(rule: ExpirationRuleInput, options?: LifecycleBucketOptions): Promise<void> {
+  async upsert(rule: LifecycleRuleInput, options?: LifecycleBucketOptions): Promise<void> {
     this.assertConfigured()
     const owned = this.toRule(rule)
     const bucket = this.resolveBucket(options?.bucket)
@@ -250,15 +257,32 @@ export class BucketLifecycleService {
     }
   }
 
-  /** Validates the input and builds the one rule shape this service writes. */
-  private toRule(rule: ExpirationRuleInput): BucketLifecycleRule {
+  /** Validates the input and builds the rule, an expiration or a multipart-abort rule. */
+  private toRule(rule: LifecycleRuleInput): BucketLifecycleRule {
     this.assertRuleId(rule.id)
+    if (rule.abortIncompleteMultipartDays !== undefined) {
+      assertDays('abortIncompleteMultipartDays', rule.abortIncompleteMultipartDays)
+      // Untyped callers can pass both; the types already forbid it.
+      if ((rule as { expirationDays?: unknown }).expirationDays !== undefined) {
+        throw ruleInvalid('Give exactly one of expirationDays and abortIncompleteMultipartDays')
+      }
+      if (typeof rule.prefix !== 'string') {
+        throw ruleInvalid('Prefix must be a string')
+      }
+      // An empty abort prefix is the module's whole namespace (aborting a stale upload deletes
+      // no object); the key guard itself needs a non-empty key.
+      const prefix = rule.prefix === '' ? this.keyResolver.getPrefix() : this.keyResolver.normalize(rule.prefix)
+      return {
+        ID: rule.id,
+        Status: 'Enabled',
+        Filter: { Prefix: prefix },
+        AbortIncompleteMultipartUpload: { DaysAfterInitiation: rule.abortIncompleteMultipartDays },
+      }
+    }
     if (typeof rule.prefix !== 'string' || rule.prefix.length === 0) {
       throw ruleInvalid('Prefix must be a non-empty string')
     }
-    if (!Number.isInteger(rule.expirationDays) || rule.expirationDays < 1) {
-      throw ruleInvalid('expirationDays must be an integer of at least 1')
-    }
+    assertDays('expirationDays', rule.expirationDays)
     return {
       ID: rule.id,
       Status: 'Enabled',

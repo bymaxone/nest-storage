@@ -15,6 +15,14 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Added
 
+- **`BucketLifecycleService.upsert` writes multipart-abort rules.** An input with
+  `abortIncompleteMultipartDays` instead of `expirationDays` adds or replaces an
+  `AbortIncompleteMultipartUpload` rule, so abandoned multipart uploads stop holding storage. The
+  read-modify-write, the preservation of other rules and the `keyPrefix` rules are the same; an empty
+  prefix is allowed for this rule only (it means the module's whole namespace, and aborting deletes no
+  object). Types `AbortMultipartRuleInput` and `LifecycleRuleInput`. MinIO does not accept this rule
+  through the S3 API (the end-to-end suite shows the typed `STORAGE_LIFECYCLE_REJECTED`); AWS and R2
+  document it.
 - **`BucketLifecycleService`: bucket lifecycle rules.** `get()` returns the rules (an empty array when
   the bucket has no configuration), `upsert({ id, prefix, expirationDays })` adds or replaces one
   expiration rule by id, and `remove(id)` deletes one. Both writes read the configuration, change

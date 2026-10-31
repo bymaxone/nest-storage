@@ -104,6 +104,22 @@ describe('Storage E2E — bucket lifecycle', () => {
     await expect(lifecycle.get()).resolves.toEqual([])
   })
 
+  it('answers a multipart-abort rule with the typed rejection MinIO documents, and changes nothing', async () => {
+    // MinIO does not accept AbortIncompleteMultipartUpload through PutBucketLifecycleConfiguration;
+    // the rule reaches the server, which refuses it, and the rules already there stay as they were.
+    await lifecycle.upsert({ id: 'expire-kept', prefix: 'expiring/', expirationDays: 5 })
+    const before = await lifecycle.get()
+
+    const error: unknown = await lifecycle
+      .upsert({ id: 'abort-stale', prefix: 'uploads/', abortIncompleteMultipartDays: 7 })
+      .catch((err: unknown) => err)
+
+    expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_REJECTED', status: 422 })
+    expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).toContain('InvalidArgument')
+    await expect(lifecycle.get()).resolves.toEqual(before)
+    await lifecycle.remove('expire-kept')
+  })
+
   it('rejects an invalid rule before reaching the server', async () => {
     await expect(
       lifecycle.upsert({ id: 'bad', prefix: 'p/', expirationDays: 0 }),

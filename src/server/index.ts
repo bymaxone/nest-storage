@@ -53,6 +53,8 @@ export type {
   BucketLifecycleRuleView,
   LifecycleBucketOptions,
   ExpirationRuleInput,
+  AbortMultipartRuleInput,
+  LifecycleRuleInput,
 } from './interfaces'
 
 // Errors

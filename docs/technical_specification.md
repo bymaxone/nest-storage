@@ -737,11 +737,15 @@ export interface SignedUrlResult {
 @Injectable()
 export class BucketLifecycleService {
   get(options?: { bucket?: string }): Promise<BucketLifecycleRuleView[]>
-  upsert(rule: { id: string; prefix: string; expirationDays: number }, options?: { bucket?: string }): Promise<void>
+  upsert(
+    rule: { id: string; prefix: string; expirationDays: number } | { id: string; prefix: string; abortIncompleteMultipartDays: number },
+    options?: { bucket?: string },
+  ): Promise<void>
   remove(id: string, options?: { bucket?: string }): Promise<boolean>
 }
 ```
 
+- A rule is an expiration rule (`expirationDays`, non-empty prefix) or a multipart-abort rule (`abortIncompleteMultipartDays`, empty prefix allowed); exactly one day field is given.
 - Each write reads the configuration, changes only the rule with the given id and writes all rules back. S3 has no conditional lifecycle write, so this is not atomic.
 - Removing the last rule calls `DeleteBucketLifecycle`, because a put with no rules is invalid.
 - `prefix` goes through the key guard and `keyPrefix`; `get()` returns filter prefixes relative to `keyPrefix` and flags rules outside it with `isOutsideKeyPrefix`, which `upsert` and `remove` refuse to change.

@@ -30,4 +30,6 @@ export type {
   BucketLifecycleRuleView,
   LifecycleBucketOptions,
   ExpirationRuleInput,
+  AbortMultipartRuleInput,
+  LifecycleRuleInput,
 } from './lifecycle-options.interface'
