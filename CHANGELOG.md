@@ -33,6 +33,21 @@ note on each entry is the compatibility contract — read it, not the number.
   to `keyPrefix`; with a `keyPrefix` set, rules outside it are returned flagged and are not changed.
   Providers other than MinIO (tested) and Cloudflare R2 (documented) are unverified; see the README.
 
+### Fixed
+
+- **README option defaults and examples now match the code.** The configuration table listed
+  `signedUrls.defaultTtlSeconds` (no such option; the options are `defaultGetTtlSeconds` and
+  `defaultPutTtlSeconds`, both 300 s, not 3600), a 10 MiB multipart threshold and an 8 MiB part size
+  (both are 5 MiB), a `'NONE'` module-level encryption value (accepted per upload only) and a "sensible
+  default" MIME whitelist (there is none). The validator, scanner-mode and multipart-URL examples used
+  names that do not exist (`validators`, `'both'`, `partCount`, `valid`). The error-code table now
+  matches the key guard (it rejects an empty key and a null byte, not "empty after normalization"),
+  and the notes on `requestTimeoutMs` and `STORAGE_PART_TOO_SMALL` say what the code does today.
+  A new spec parses the README option-default table and the error-code table and fails when either
+  drifts from the code.
+
+  **Apply to a derived backend:** documentation only; no behaviour changed.
+
 ## [1.1.1] - 2026-10-30
 
 Apart from the removal below, nothing here changes the published bundle: the remaining entries are

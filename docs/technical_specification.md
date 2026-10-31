@@ -962,7 +962,7 @@ export class StorageException extends HttpException {
 | Code                              | HTTP | When it occurs                                                                             |
 | --------------------------------- | ---- | ------------------------------------------------------------------------------------------ |
 | `STORAGE_NOT_CONFIGURED`          | 503  | Credentials missing and an operation was called                                            |
-| `STORAGE_KEY_INVALID`             | 400  | Path traversal (`..`), key starts with `/`, or empty after normalization                   |
+| `STORAGE_KEY_INVALID`             | 400  | Empty key, null byte, path traversal (`..`), or key starts with `/`                   |
 | `STORAGE_BODY_MISSING`            | 400  | `upload()` without body                                                                    |
 | `STORAGE_CONTENT_TYPE_REQUIRED`   | 400  | `upload()` without `contentType`                                                           |
 | `STORAGE_MIME_NOT_ALLOWED`        | 415  | `contentType` outside `mimeWhitelist`                                                      |

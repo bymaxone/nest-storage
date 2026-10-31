@@ -39,7 +39,7 @@ A presigned URL is a temporary credential. **Never log it**, never include it in
 
 ### 4 — Path-traversal guard is mandatory and non-negotiable
 
-`KeyResolverService` blocks `..`, leading `/`, and empty-after-normalize keys. It must be the first thing called before any key reaches the AWS SDK. Never bypass it; never relax its guards.
+`KeyResolverService` blocks `..`, a leading `/`, null bytes, and empty keys. It must be the first thing called before any key reaches the AWS SDK. Never bypass it; never relax its guards.
 
 ### 5 — Idempotency cache is in-memory and per-instance
 
