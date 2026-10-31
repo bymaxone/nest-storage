@@ -514,13 +514,17 @@ describe('StorageService — getPublicUrl', () => {
 
 describe('StorageService — scan integration', () => {
   /** Builds a service wired with a custom scanner instead of the disabled stub. */
-  function makeServiceWithScanner(scanner: FileScannerService): { service: StorageService; send: jest.Mock } {
+  function makeServiceWithScanner(
+    scanner: FileScannerService,
+    extra: Partial<BymaxStorageModuleOptions> = {},
+  ): { service: StorageService; send: jest.Mock } {
     const resolved = applyDefaults({
       endpoint: 'https://s3.example.com',
       region: 'us-east-1',
       bucket: 'test-bucket',
       credentials: { accessKeyId: 'k', secretAccessKey: 's' },
       publicBaseUrl: 'https://cdn.example.com',
+      ...extra,
     })
     const send = jest.fn().mockResolvedValue({ ETag: '"abc"' })
     const client = { send } as unknown as S3Client
@@ -592,21 +596,24 @@ describe('StorageService — scan integration', () => {
     expect(Buffer.isBuffer(scanArg.body)).toBe(true)
   })
 
-  it('passes a stream body through unchanged to the pre-upload scan', async () => {
-    // stream bodies are handed to the scanner as-is (never buffered)
+  it('hands the pre-upload scan and the upload the same buffered bytes of a stream body', async () => {
+    // A stream is single-use: the scanner and the upload must share one Buffer, not one stream.
     const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
     const scanner: FileScannerService = {
       isEnabled: jest.fn().mockReturnValue(true),
       getMode: jest.fn().mockReturnValue('pre-upload'),
       scan: scanFn,
     } as unknown as FileScannerService
-    const { service } = makeServiceWithScanner(scanner)
-    const stream = Readable.from([Buffer.from('hi')])
+    const { service, send } = makeServiceWithScanner(scanner, { validation: { maxSizeBytes: 1024 } })
+    const stream = Readable.from([Buffer.from('h'), Buffer.from('i')])
 
     await service.upload({ key: 'a.txt', body: stream, contentType: 'text/plain', size: 2 })
 
     const [[scanArg]] = scanFn.mock.calls as [[{ body: unknown }]]
-    expect(scanArg.body).toBe(stream)
+    expect(Buffer.isBuffer(scanArg.body)).toBe(true)
+    expect((scanArg.body as Buffer).toString()).toBe('hi')
+    const [[command]] = send.mock.calls as [[{ input: { Body: unknown } }]]
+    expect(command.input.Body).toBe(scanArg.body)
   })
 
   it('calls scan with mode "post-upload" after the object has been uploaded (no size)', async () => {

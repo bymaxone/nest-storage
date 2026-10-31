@@ -111,8 +111,8 @@ minimal.
   that pull in nothing at all
 - ✅ **Escape hatch** — `BYMAX_STORAGE_S3_CLIENT` injects the raw `S3Client` for the
   provider-specific operations this surface deliberately does not wrap
-- ✅ **Multi-tenant key prefix** — `keyPrefix` prepended after normalization, so it cannot be
-  escaped by the key
+- ✅ **Key prefix** — `keyPrefix` is prepended after normalization, so a key cannot escape it; the
+  keys the library returns are relative to it, so they can be passed straight back
 - ✅ **Server-side encryption** — AES256 or `aws:kms`, globally or per upload
 - ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and
   `noUncheckedIndexedAccess`; zero `any`
@@ -258,7 +258,7 @@ The full configuration reference lives in `docs/technical_specification.md` §4.
 | `forcePathStyle`               | `boolean`                                         | `false`           | Set to `true` for MinIO and self-hosted        |
 | `publicBaseUrl`                | `string`                                          | —                 | Base URL for public `getPublicUrl()` results   |
 | `cdnBaseUrl`                   | `string`                                          | —                 | CDN edge URL (preferred over `publicBaseUrl`)  |
-| `keyPrefix`                    | `string`                                          | —                 | Prepended to every resolved key (multi-tenant) |
+| `keyPrefix`                    | `string`                                          | —                 | Prepended to every key before it reaches the provider; fixed per module instance |
 | `maxAttempts`                  | `number`                                          | `3`               | SDK v3 retry count                             |
 | `serverSideEncryption`         | `'AES256' \| 'aws:kms'`                           | —                 | Global SSE policy; `aws:kms` needs `kmsKeyId`. `'NONE'` is accepted per upload only |
 | `requestChecksumCalculation`   | `'WHEN_SUPPORTED' \| 'WHEN_REQUIRED'`             | SDK default       | Set to `'WHEN_REQUIRED'` for non-AWS providers |
@@ -281,6 +281,9 @@ The full configuration reference lives in `docs/technical_specification.md` §4.
 **`requestTimeoutMs`** is passed to the S3 client's request handler as `requestTimeout` with `throwOnRequestTimeout` ([AWS SDK for JavaScript v3: `requestHandler: { requestTimeout: 3_000, ... }`][sdk-request-timeout]). It bounds one attempt, from sending the request until the response headers arrive, and an upload body counts toward it, so a large single-shot upload on a slow link needs a larger value. It does not limit reading a download stream. With `maxAttempts` above 1 a stalled request is retried, so the total wait is the timeout times the attempts.
 
 [aws-presigned-expiry]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html
+[aws-get-object]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html
+[aws-mpu-limits]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
+[aws-mpu-abort-rule]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpu-abort-incomplete-mpu-lifecycle-config.html
 [sdk-request-timeout]: https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/node-configuring-maxsockets.html
 
 ---
@@ -402,6 +405,20 @@ async download(@Param('key') key: string, @Res() res: Response) {
 const { buffer, metadata } = await this.storage.downloadBuffer({ key: 'docs/report.pdf' })
 ```
 
+### Conditional and ranged reads
+
+`download` and `downloadBuffer` accept `range`, `ifNoneMatch` and `ifMatch`. S3 answers a matching
+`If-None-Match` with 304 ([AWS GetObject: "otherwise, return a `304 Not Modified` error"][aws-get-object])
+and a failing `If-Match` with 412, and the library turns them into typed errors:
+
+| Outcome | Error code | HTTP |
+|---|---|---|
+| `ifNoneMatch` equals the current ETag | `STORAGE_NOT_MODIFIED` | 304 |
+| `ifMatch` differs from the current ETag | `STORAGE_PRECONDITION_FAILED` | 412 |
+
+A 304 is therefore thrown, not returned: catch `StorageException` and branch on `code`. A `range`
+(`'bytes=0-99'`) returns the requested bytes, and the metadata describes the whole object.
+
 ---
 
 ## 🔗 Signed URLs (GET / PUT / Multipart)
@@ -459,6 +476,19 @@ const { uploadId, partUrls, completeUrl } = await signedUrls.getMultipartUploadU
 })
 // Upload each part with the corresponding signed URL, then call CompleteMultipartUpload.
 ```
+
+- `parts` is an integer from 1 to 10 000, S3's limit of part numbers per upload ([AWS multipart
+  limits][aws-mpu-limits]); anything else throws `STORAGE_INVALID_PART_COUNT` before a request is made.
+- Every part except the last must be at least 5 MiB. The library signs the URLs and does not see the
+  bytes, so it cannot check part sizes; a client that sends a smaller non-final part gets the
+  provider's `EntityTooSmall` when it completes the upload.
+- The client completes the upload itself, by sending the part ETags as the XML body to `completeUrl`.
+- The library issues no abort URL. A client that gives up should abort with its own signed
+  `AbortMultipartUpload` request, and an upload nobody completes keeps its parts, and their storage
+  cost, until it is aborted. Recommended: a bucket lifecycle rule with `AbortIncompleteMultipartUpload`
+  ([AWS: "we recommend that you configure a lifecycle rule by using the `AbortIncompleteMultipartUpload`
+  action"][aws-mpu-abort-rule]). `BucketLifecycleService` keeps such a rule through every change but only
+  writes expiration rules, so set that rule once with the provider's console or CLI.
 
 > **TTL clamp:** per-request `ttlSeconds` values above `signedUrls.maxTtlSeconds` are silently clamped. `maxTtlSeconds` defaults to 604 800 s (the 7-day SigV4 limit). A larger configured value is reduced to 604 800 s at module init, with one warning, because the signer rejects a longer expiry and no URL longer than 7 days can exist ([AWS: "the expiration time can be set as high as 7 days"][aws-presigned-expiry]). A `ttlSeconds` ≤ 0 throws `STORAGE_SIGNED_URL_TTL_INVALID`.
 
@@ -526,6 +556,14 @@ BymaxStorageModule.forRoot({
   },
 })
 ```
+
+**Streams in pre-upload mode.** A stream can be read once, so the scanner and the upload could not
+both consume it. In `pre-upload` mode a stream body is first read into memory, counted as it
+arrives, and the scanner and the upload then share that buffer. The read is bounded by
+`validation.maxSizeBytes`: a stream longer than the limit is refused with
+`STORAGE_VALIDATION_FAILED` as soon as it passes it, and with no `maxSizeBytes` a stream is
+refused with a reason that says to set it or use `post-upload`. Buffer bodies and `post-upload`
+mode are not affected; `post-upload` hands the scanner no body, only the key.
 
 ---
 
@@ -688,7 +726,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_PROVIDER_ERROR`         | 502  | AWS SDK error (network, 5xx, throttling, `AccessControlListNotSupported`); `details` carries `awsCode`, `awsMessage`, `httpStatus`, `requestId` plus the operation context (`op`, `bucket`, and `key` or `prefix`) |
 | `STORAGE_SIGNED_URL_TTL_INVALID` | 400  | Per-request `ttlSeconds` ≤ 0                                                                                                                                                                                       |
 | `STORAGE_PART_TOO_SMALL`         | 400  | Reserved: a `multipart.partSizeBytes` below 5 MiB is rejected at init as `STORAGE_INVALID_CONFIG`                                                                                                                                                                             |
-| `STORAGE_INVALID_PART_COUNT`     | 400  | `getMultipartUploadUrls()` with `parts <= 0` (`details.provided`)                                                                                                                                                  |
+| `STORAGE_INVALID_PART_COUNT`     | 400  | `getMultipartUploadUrls()` with `parts` not an integer from 1 to 10 000 (`details.provided`, `details.reason`)                                                                                                                                                  |
 | `STORAGE_BUCKET_UNDEFINED`       | 400  | Operation without a bucket and no default in config                                                                                                                                                                |
 | `STORAGE_MULTIPART_ABORTED`      | 500  | Multipart upload failed and was aborted                                                                                                                                                                            |
 | `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                                                                                                                    |
@@ -696,6 +734,8 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: empty or over-long `id`, non-positive or non-integer `expirationDays`, bad `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |
 | `STORAGE_LIFECYCLE_UNSUPPORTED` | 501  | The provider does not implement the lifecycle API |
 | `STORAGE_LIFECYCLE_REJECTED` | 422  | The provider refused the lifecycle configuration |
+| `STORAGE_NOT_MODIFIED`           | 304  | `download()` with `ifNoneMatch` equal to the current ETag |
+| `STORAGE_PRECONDITION_FAILED`    | 412  | `download()` with `ifMatch` different from the current ETag |
 
 ```typescript
 import { StorageException, STORAGE_ERROR_CODES } from '@bymax-one/nest-storage'
@@ -752,8 +792,42 @@ This is the index.
 
 `KeyResolverService` is internal — it is not exported, and it is not something a
 consumer calls. It is named here because every method above passes the key you
-supply through it first: the guard below, then `keyPrefix`. The key you read back in
-`UploadResult` and `ListedObject` is the resolved one.
+supply through it first: the guard below, then `keyPrefix`.
+
+**Keys the library returns are relative to `keyPrefix`.** `UploadResult.key`, `ObjectMetadata.key`
+(from `head`, `download` and `downloadBuffer`), `ListedObject.key`, `commonPrefixes` and the
+`deleteMany` result all omit the prefix, so any of them can be passed straight back to `head`,
+`download`, `delete`, `copy` or a signed-URL call, which prepend it once. `UploadResult.publicUrl`
+is the one full value: it is a URL, and the prefix is part of the object's real path. Error
+`details` carry the real, prefixed key, because they describe what was sent to the provider.
+
+### Exported types and constants
+
+Every name the package exports is listed here, so none is a surprise.
+
+- **Module configuration:** `BymaxStorageModuleOptions`, `BymaxStorageModuleAsyncOptions` (the
+  `forRootAsync` shape: `imports`, `inject`, and one of `useFactory`, `useClass`, `useExisting`) and
+  `BymaxStorageModuleOptionsFactory` (the `createStorageOptions()` contract for `useClass` /
+  `useExisting`).
+- **Provider recipes:** `providerRecipes`, and the `ProviderRecipe<TInput>` type for writing a recipe
+  for another S3-compatible provider (it must keep the `'WHEN_REQUIRED'` checksum opt-out).
+- **Operation inputs and results:** `UploadOptions`, `DownloadOptions`, `ListOptions`, `ListResult`,
+  `CopyOptions`, `DeleteManyOptions`, `DeleteManyResult`, `FailedDeletion`, `SignedGetUrlOptions`,
+  `SignedPutUrlOptions`, `MultipartUploadUrlsOptions`, `MultipartUploadUrlsResult`.
+- **Lifecycle:** `BucketLifecycleRule` (the provider's rule as stored), `BucketLifecycleRuleView` (what
+  `get()` returns), `ExpirationRuleInput` and `LifecycleBucketOptions` (`{ bucket? }`).
+- **Extension points:** `IUploadValidator`, `IFileScanner`, `FileScanResult`, and the helpers
+  `NoOpUploadValidator` and `NoOpFileScanner`.
+- **From `./shared`:** `UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`,
+  `StorageErrorResponse`, `StorageErrorCode`, `STORAGE_ERROR_CODES`, the three MIME presets
+  `DEFAULT_IMAGE_MIME_WHITELIST`, `DEFAULT_VIDEO_MIME_WHITELIST`, `DEFAULT_DOC_MIME_WHITELIST`, and the
+  defaults `DEFAULT_SIGNED_URL_TTL_SECONDS`, `MAX_SIGNED_URL_TTL_SECONDS`,
+  `DEFAULT_MULTIPART_THRESHOLD_BYTES`, `DEFAULT_MULTIPART_PART_SIZE_BYTES`,
+  `DEFAULT_MULTIPART_QUEUE_SIZE`.
+
+`BYMAX_STORAGE_OPTIONS` is exported so a provider of yours can read the resolved configuration, and it
+is also reachable by every other provider in the application. The credentials are not enumerable on
+that object, but they are readable on it: treat the token as sensitive.
 
 ### DI tokens
 
@@ -883,6 +957,13 @@ object they can fetch.
 It scopes the keys this library composes; it does not restrict what the credentials can
 reach. Anything holding the bucket's credentials can read every prefix in it. Isolation
 that must survive a compromised client belongs in IAM policies or separate buckets.
+
+It is also fixed when the module is registered: `forRoot` resolves one prefix, and the
+module is `@Global()` with one `StorageService` behind fixed injection tokens, so it is not
+designed to be registered twice in one application with different prefixes. To keep tenants
+apart in one application, build the tenant segment into the key on each call from a trusted
+source (`tenants/${tenantId}/${name}`, never from request input) or give each tenant its own
+bucket and credentials.
 
 ---
 

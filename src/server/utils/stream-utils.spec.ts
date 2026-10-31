@@ -3,8 +3,10 @@
  * guards, sizing, the memory-bounded peek/tee, and the buffer-to-stream adapter.
  * @layer server/utils
  */
+import { EventEmitter } from 'node:events'
 import { PassThrough, Readable } from 'node:stream'
 import {
+  readStreamUpTo,
   bufferToReadable,
   getBodySize,
   isBufferLike,
@@ -187,6 +189,106 @@ describe('stream-utils', () => {
     it('wraps a Uint8Array as a readable stream', async () => {
       // The non-Buffer branch converts then streams.
       expect(await collect(bufferToReadable(new Uint8Array([104, 105])))).toBe('hi')
+    })
+  })
+
+  describe('peekFirstBytes releases the original stream', () => {
+    it('destroys the source when the consumer destroys the replacement before the end', async () => {
+      const source = new Readable({ read() {} })
+      source.push(Buffer.from('%PDF-1.7 and a long body'))
+
+      const { replacementBody } = await peekFirstBytes(source, 4)
+      ;(replacementBody as Readable).destroy()
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(source.destroyed).toBe(true)
+    })
+
+    it('leaves a source without destroy() alone when the replacement is destroyed early', async () => {
+      // NodeJS.ReadableStream does not promise destroy(); a minimal stream must not throw from the close handler.
+      const emitter = new EventEmitter()
+      const minimal = Object.assign(emitter, { pause: () => minimal, resume: () => minimal })
+      const heading = peekFirstBytes(minimal as unknown as NodeJS.ReadableStream, 4)
+      minimal.emit('data', Buffer.from('%PDF-1.7 and a long body'))
+      const { replacementBody } = await heading
+
+      ;(replacementBody as Readable).destroy()
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect((replacementBody as Readable).destroyed).toBe(true)
+    })
+
+    it('does not destroy a source that has already ended', async () => {
+      // autoDestroy is off so any destroy() call comes from the tee, not from the stream itself.
+      const source = new Readable({
+        autoDestroy: false,
+        read() {
+          this.push(Buffer.from('abcdefgh'))
+          this.push(null)
+        },
+      })
+      const destroy = jest.spyOn(source, 'destroy')
+
+      const { replacementBody } = await peekFirstBytes(source, 4)
+      const text = await collect(replacementBody as NodeJS.ReadableStream)
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(text).toBe('abcdefgh')
+      expect(destroy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('readStreamUpTo', () => {
+    it('returns the whole body when it fits', async () => {
+      const body = await readStreamUpTo(Readable.from([Buffer.from('ab'), Buffer.from('cd')]), 10)
+
+      expect(body?.toString()).toBe('abcd')
+    })
+
+    it('accepts a body exactly as long as the limit', async () => {
+      const body = await readStreamUpTo(Readable.from([Buffer.from('abcd')]), 4)
+
+      expect(body?.toString()).toBe('abcd')
+    })
+
+    it('returns undefined and destroys the stream at the first chunk past the limit', async () => {
+      const source = new Readable({ read() {} })
+      source.push(Buffer.alloc(3))
+      source.push(Buffer.alloc(3))
+      source.push(Buffer.alloc(3))
+
+      const body = await readStreamUpTo(source, 5)
+
+      expect(body).toBeUndefined()
+      expect(source.destroyed).toBe(true)
+    })
+
+    it('accepts string chunks', async () => {
+      const source = new Readable({
+        encoding: 'utf8',
+        read() {
+          this.push('ab')
+          this.push('c')
+          this.push(null)
+        },
+      })
+
+      const body = await readStreamUpTo(source, 10)
+
+      expect(body?.toString()).toBe('abc')
+    })
+
+    it('returns an empty buffer for an empty stream', async () => {
+      const body = await readStreamUpTo(Readable.from([]), 10)
+
+      expect(body?.length).toBe(0)
+    })
+
+    it('rejects when the stream errors', async () => {
+      const source = new Readable({ read() {} })
+      source.destroy(new Error('boom'))
+
+      await expect(readStreamUpTo(source, 10)).rejects.toThrow('boom')
     })
   })
 })
