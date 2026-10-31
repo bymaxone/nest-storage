@@ -973,7 +973,7 @@ export class StorageException extends HttpException {
 | `STORAGE_OBJECT_NOT_FOUND`        | 404  | `head()`, `download()`, or `copy()` on a nonexistent key                                   |
 | `STORAGE_PROVIDER_ERROR`          | 502  | AWS SDK error (network, 5xx, throttling); `details.awsCode`, `httpStatus`, `requestId`     |
 | `STORAGE_SIGNED_URL_TTL_INVALID`  | 400  | Per-request `ttlSeconds` ≤ 0. (A `ttlSeconds` above `maxTtlSeconds` is silently clamped, not rejected; the configured `maxTtlSeconds` is itself clamped to the 604800s SigV4 cap at init.) |
-| `STORAGE_PART_TOO_SMALL`          | 400  | Multipart with part < 5 MB (S3 limit)                                                      |
+| `STORAGE_PART_TOO_SMALL`          | 400  | Reserved; not thrown today (a `multipart.partSizeBytes` under 5 MB fails at init as `STORAGE_INVALID_CONFIG`) |
 | `STORAGE_INVALID_PART_COUNT`      | 400  | `getMultipartUploadUrls()` called with `parts` ≤ 0                                         |
 | `STORAGE_BUCKET_UNDEFINED`        | 400  | Operation without a bucket and no default bucket in the config                                 |
 | `STORAGE_MULTIPART_ABORTED`       | 500  | Multipart upload failed and was aborted. With `@aws-sdk/lib-storage` (`leavePartsOnError: false`) the abort is automatic; on the raw presigned-multipart path the lib issues `AbortMultipartUpload` to avoid orphan parts being billed |

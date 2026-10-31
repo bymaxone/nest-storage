@@ -7,7 +7,7 @@
  * regardless of how it was configured.
  * @layer server/module
  */
-import { type DynamicModule, Global, Module, type Provider } from '@nestjs/common'
+import { type DynamicModule, Global, Logger, Module, type Provider } from '@nestjs/common'
 import type { S3Client } from '@aws-sdk/client-s3'
 import {
   BYMAX_STORAGE_FILE_SCANNER,
@@ -40,7 +40,16 @@ import { IdempotencyCache } from './utils/idempotency-cache'
 /** Validates raw options and materializes the fully-resolved options shape. */
 function resolveAsyncOptions(options: BymaxStorageModuleOptions): ResolvedBymaxStorageOptions {
   validateOptions(options)
-  return applyDefaults(options)
+  const resolved = applyDefaults(options)
+  const configured = options.signedUrls?.maxTtlSeconds
+  if (configured !== undefined && configured > resolved.signedUrls.maxTtlSeconds) {
+    // Once per module init: this runs when the options are resolved, never per request.
+    new Logger(BymaxStorageModule.name).warn(
+      `signedUrls.maxTtlSeconds=${String(configured)} exceeds the SigV4 presigned-URL limit; ` +
+        `using ${String(resolved.signedUrls.maxTtlSeconds)} seconds (7 days) instead.`,
+    )
+  }
+  return resolved
 }
 
 @Global()

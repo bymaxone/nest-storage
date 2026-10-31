@@ -3,6 +3,7 @@
  * the public DI surface, validator/scanner tokens, and credential tolerance.
  * @layer server/module
  */
+import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { S3Client } from '@aws-sdk/client-s3'
 import { BymaxStorageModule } from './bymax-storage.module'
@@ -127,5 +128,62 @@ describe('BymaxStorageModule', () => {
   it('should throw when the options are invalid', () => {
     // forRoot delegates to validateOptions.
     expect(() => BymaxStorageModule.forRoot({ ...base, endpoint: '' })).toThrow(StorageException)
+  })
+
+  describe('signedUrls.maxTtlSeconds above the SigV4 limit', () => {
+    let warn: jest.SpyInstance<void, [message: unknown, ...optionalParams: unknown[]]>
+
+    beforeEach(() => {
+      warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+      warn.mockRestore()
+    })
+
+    async function resolvedFor(maxTtlSeconds: number): Promise<ResolvedBymaxStorageOptions> {
+      const moduleRef = await Test.createTestingModule({
+        imports: [BymaxStorageModule.forRoot({ ...base, signedUrls: { maxTtlSeconds } })],
+      }).compile()
+      return moduleRef.get<ResolvedBymaxStorageOptions>(BYMAX_STORAGE_OPTIONS)
+    }
+
+    it('should not warn at exactly 604800', async () => {
+      const resolved = await resolvedFor(604_800)
+      expect(resolved.signedUrls.maxTtlSeconds).toBe(604_800)
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    it('should clamp 604801 to 604800 and warn once, naming both values', async () => {
+      const resolved = await resolvedFor(604_801)
+      expect(resolved.signedUrls.maxTtlSeconds).toBe(604_800)
+      expect(warn).toHaveBeenCalledTimes(1)
+      const message = String(warn.mock.calls[0]?.[0])
+      expect(message).toContain('604801')
+      expect(message).toContain('604800')
+    })
+
+    it('should warn once per init, not per resolved read', async () => {
+      const moduleRef = await Test.createTestingModule({
+        imports: [BymaxStorageModule.forRoot({ ...base, signedUrls: { maxTtlSeconds: 2_592_000 } })],
+      }).compile()
+      moduleRef.get(StorageService)
+      moduleRef.get(SignedUrlService)
+      moduleRef.get(StorageService)
+      expect(warn).toHaveBeenCalledTimes(1)
+    })
+
+    it('should clamp and warn once through forRootAsync as well', async () => {
+      const moduleRef = await Test.createTestingModule({
+        imports: [
+          BymaxStorageModule.forRootAsync({
+            useFactory: () => ({ ...base, signedUrls: { maxTtlSeconds: 1_000_000 } }),
+          }),
+        ],
+      }).compile()
+      const resolved = moduleRef.get<ResolvedBymaxStorageOptions>(BYMAX_STORAGE_OPTIONS)
+      expect(resolved.signedUrls.maxTtlSeconds).toBe(604_800)
+      expect(warn).toHaveBeenCalledTimes(1)
+    })
   })
 })

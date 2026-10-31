@@ -100,6 +100,13 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
           : {}),
       },
       maxAttempts: this.options.maxAttempts,
+      // `requestTimeout` bounds one attempt, from sending the request until the response
+      // headers arrive; the SDK only throws a `TimeoutError` (mapped to
+      // `STORAGE_TIMEOUT`) when `throwOnRequestTimeout` is set, otherwise it logs a warning.
+      requestHandler: {
+        requestTimeout: this.options.requestTimeoutMs,
+        throwOnRequestTimeout: true,
+      },
       // Data-integrity checksums: AWS SDK v3 defaults to 'WHEN_SUPPORTED' (CRC32
       // headers), which non-AWS S3-compatible providers reject. Provider recipes
       // pass 'WHEN_REQUIRED'.

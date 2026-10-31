@@ -266,10 +266,10 @@ The full configuration reference lives in `docs/technical_specification.md` §4.
 | `defaultPublicRead`            | `boolean`                                         | `false`           | ACL `public-read` on uploads; see Public Access / ACLs |
 | `defaultCacheControl`          | `string`                                          | `public, max-age=31536000, immutable` | Default `Cache-Control` on uploads |
 | `defaultContentDisposition`    | `'inline' \| 'attachment'`                        | `inline`          | Default `Content-Disposition` on uploads       |
-| `requestTimeoutMs`             | `number`                                          | `30000`           | Accepted and resolved; not yet applied to the client |
+| `requestTimeoutMs`             | `number`                                          | `30000`           | Per attempt, until the response headers arrive; see below the table |
 | `signedUrls.defaultGetTtlSeconds` | `number`                                       | `300`             | Default TTL for `getDownloadUrl`               |
 | `signedUrls.defaultPutTtlSeconds` | `number`                                       | `300`             | Default TTL for `getUploadUrl`                 |
-| `signedUrls.maxTtlSeconds`     | `number`                                          | `604800`          | Per-request TTLs above this are clamped; 604800 is the 7-day SigV4 limit |
+| `signedUrls.maxTtlSeconds`     | `number`                                          | `604800`          | Per-request TTLs above this are clamped; a value above 604800 (the 7-day SigV4 limit) is reduced to it at init |
 | `multipart.thresholdBytes`     | `number`                                          | `5 MiB`           | Switch to multipart at or above this size      |
 | `multipart.partSizeBytes`      | `number`                                          | `5 MiB`           | Part size (S3 minimum: 5 MiB)                  |
 | `multipart.queueSize`          | `number`                                          | `4`               | Concurrent parts                               |
@@ -277,6 +277,11 @@ The full configuration reference lives in `docs/technical_specification.md` §4.
 | `validation.maxSizeBytes`      | `number`                                          | —                 | Maximum upload size in bytes                   |
 
 > **Do not use `maxRetries` or `signatureVersion`** — these are AWS SDK v2 options that do not exist in v3. The v3 SDK is SigV4-only. Use `maxAttempts` (default `3`) for retry configuration.
+
+**`requestTimeoutMs`** is passed to the S3 client's request handler as `requestTimeout` with `throwOnRequestTimeout` ([AWS SDK for JavaScript v3: `requestHandler: { requestTimeout: 3_000, ... }`][sdk-request-timeout]). It bounds one attempt, from sending the request until the response headers arrive, and an upload body counts toward it, so a large single-shot upload on a slow link needs a larger value. It does not limit reading a download stream. With `maxAttempts` above 1 a stalled request is retried, so the total wait is the timeout times the attempts.
+
+[aws-presigned-expiry]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html
+[sdk-request-timeout]: https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/node-configuring-maxsockets.html
 
 ---
 
@@ -455,7 +460,7 @@ const { uploadId, partUrls, completeUrl } = await signedUrls.getMultipartUploadU
 // Upload each part with the corresponding signed URL, then call CompleteMultipartUpload.
 ```
 
-> **TTL clamp:** per-request `ttlSeconds` values above `signedUrls.maxTtlSeconds` are silently clamped. `maxTtlSeconds` defaults to 604 800 s (the 7-day SigV4 limit); a larger configured value is not capped, and the provider rejects a signature that outlives its limit. A `ttlSeconds` ≤ 0 throws `STORAGE_SIGNED_URL_TTL_INVALID`.
+> **TTL clamp:** per-request `ttlSeconds` values above `signedUrls.maxTtlSeconds` are silently clamped. `maxTtlSeconds` defaults to 604 800 s (the 7-day SigV4 limit). A larger configured value is reduced to 604 800 s at module init, with one warning, because the signer rejects a longer expiry and no URL longer than 7 days can exist ([AWS: "the expiration time can be set as high as 7 days"][aws-presigned-expiry]). A `ttlSeconds` ≤ 0 throws `STORAGE_SIGNED_URL_TTL_INVALID`.
 
 ---
 
@@ -687,7 +692,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_BUCKET_UNDEFINED`       | 400  | Operation without a bucket and no default in config                                                                                                                                                                |
 | `STORAGE_MULTIPART_ABORTED`      | 500  | Multipart upload failed and was aborted                                                                                                                                                                            |
 | `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                                                                                                                    |
-| `STORAGE_TIMEOUT`                | 504  | The SDK reported a `TimeoutError` (`requestTimeoutMs` is accepted but not yet applied to the client)                                                                                                                                                                                |
+| `STORAGE_TIMEOUT`                | 504  | An attempt got no response headers within `requestTimeoutMs` (the SDK's `TimeoutError`); a failure inside a multipart upload surfaces as `STORAGE_MULTIPART_ABORTED`                                                                                                                                                                                |
 | `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: empty or over-long `id`, non-positive or non-integer `expirationDays`, bad `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |
 | `STORAGE_LIFECYCLE_UNSUPPORTED` | 501  | The provider does not implement the lifecycle API |
 | `STORAGE_LIFECYCLE_REJECTED` | 422  | The provider refused the lifecycle configuration |

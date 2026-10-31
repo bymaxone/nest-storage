@@ -35,6 +35,30 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Fixed
 
+- **`requestTimeoutMs` now takes effect.** It was resolved and defaulted to 30 000 ms but never
+  passed to the S3 client, so a request to an endpoint that stopped answering waited forever. It is
+  now the client's `requestTimeout` with `throwOnRequestTimeout`, and an attempt that gets no
+  response headers in time fails as `STORAGE_TIMEOUT` (504). A failure inside a multipart upload
+  still surfaces as `STORAGE_MULTIPART_ABORTED`.
+
+  **Apply to a derived backend:** a behaviour change. The 30 s default now applies to every
+  attempt, and an upload body counts toward it: a single-shot upload that needs longer than 30 s
+  (a slow link, a body near `multipart.thresholdBytes`) now fails. Raise `requestTimeoutMs` for
+  such workloads before upgrading. It does not limit reading a download stream.
+- **`signedUrls.maxTtlSeconds` above 604 800 is reduced at init.** The SigV4 signer rejects any
+  expiry over 7 days, so a larger configured ceiling made every request above 7 days fail with a
+  provider error while shorter requests worked. The ceiling is now capped at 604 800 s when the
+  module starts, with one warning naming both values, which is what `docs/architecture.md` always
+  described. A boot that worked before still boots.
+- **`STORAGE_PART_TOO_SMALL` is documented as reserved.** Nothing throws it: a part size under the
+  S3 minimum is rejected at init as `STORAGE_INVALID_CONFIG`. The code stays in the contract.
+- **The published-surface gate now fails on a wrong option, method or field in a README snippet.**
+  `check:published` ran `tsc` on the snippets, which stops after syntax errors and so never reported
+  the semantic ones once any snippet had a parse error; it compiled only snippets that import the
+  package; and it ignored every undeclared name, so a call through one resolved to `any`. Every
+  snippet is now compiled with the syntactic and semantic diagnostics together, public names are
+  imported for it, and the names a snippet takes from the surrounding prose are typed in
+  `scripts/readme-prelude.d.ts`.
 - **README option defaults and examples now match the code.** The configuration table listed
   `signedUrls.defaultTtlSeconds` (no such option; the options are `defaultGetTtlSeconds` and
   `defaultPutTtlSeconds`, both 300 s, not 3600), a 10 MiB multipart threshold and an 8 MiB part size
@@ -42,7 +66,7 @@ note on each entry is the compatibility contract — read it, not the number.
   default" MIME whitelist (there is none). The validator, scanner-mode and multipart-URL examples used
   names that do not exist (`validators`, `'both'`, `partCount`, `valid`). The error-code table now
   matches the key guard (it rejects an empty key and a null byte, not "empty after normalization"),
-  and the notes on `requestTimeoutMs` and `STORAGE_PART_TOO_SMALL` say what the code does today.
+  and the `STORAGE_PART_TOO_SMALL` note says what the code does.
   A new spec parses the README option-default table and the error-code table and fails when either
   drifts from the code.
 
