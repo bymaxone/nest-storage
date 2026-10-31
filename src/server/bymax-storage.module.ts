@@ -29,6 +29,7 @@ import {
   DEFAULT_IDEMPOTENCY_CACHE_TTL_MS,
 } from './constants/default-options.constants'
 import { S3ClientProvider } from './providers/s3-client.provider'
+import { BucketLifecycleService } from './services/bucket-lifecycle.service'
 import { KeyResolverService } from './services/key-resolver.service'
 import { StorageService } from './services/storage.service'
 import { SignedUrlService } from './services/signed-url.service'
@@ -144,6 +145,7 @@ export class BymaxStorageModule {
       },
       StorageService,
       SignedUrlService,
+      BucketLifecycleService,
       // ValidationService and FileScannerService are internal — consumed via
       // StorageService.upload() only, not exported from the module.
       ValidationService,
@@ -167,6 +169,7 @@ export class BymaxStorageModule {
     return [
       StorageService,
       SignedUrlService,
+      BucketLifecycleService,
       BYMAX_STORAGE_OPTIONS,
       BYMAX_STORAGE_S3_CLIENT,
       BYMAX_STORAGE_UPLOAD_VALIDATORS,

@@ -34,4 +34,9 @@ export const STORAGE_ERROR_MESSAGES: Record<StorageErrorCode, string> = {
   [STORAGE_ERROR_CODES.STORAGE_MULTIPART_ABORTED]: 'Multipart upload was aborted',
   [STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG]: 'Module configuration is invalid',
   [STORAGE_ERROR_CODES.STORAGE_TIMEOUT]: 'Storage request timed out',
+  [STORAGE_ERROR_CODES.STORAGE_LIFECYCLE_RULE_INVALID]: 'Lifecycle rule input is invalid',
+  [STORAGE_ERROR_CODES.STORAGE_LIFECYCLE_UNSUPPORTED]:
+    'The storage provider does not support bucket lifecycle configuration',
+  [STORAGE_ERROR_CODES.STORAGE_LIFECYCLE_REJECTED]:
+    'The storage provider rejected the lifecycle configuration',
 }

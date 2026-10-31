@@ -376,7 +376,7 @@ convenience — including a small utility that could be written inline.
 ### Internal services stay internal
 
 `KeyResolverService`, `ValidationService`, `FileScannerService` and `S3ClientProvider` are not in the
-barrel. The public surface is `StorageService`, `SignedUrlService`, `providerRecipes`, the DI tokens,
+barrel. The public surface is `StorageService`, `SignedUrlService`, `BucketLifecycleService`, `providerRecipes`, the DI tokens,
 the public types, `StorageException`, `NoOpUploadValidator` and `NoOpFileScanner`. Adding an internal
 service to `src/server/index.ts` widens the API this library has to keep working.
 

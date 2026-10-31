@@ -75,7 +75,7 @@ NestJS applications in the Bymax ecosystem that store files; multi-tenant applic
 
 ### 1.6 Features
 
-**Core (always active):** `StorageService` (upload, download, delete, list, head, copy, exists), `S3ClientProvider` (`S3Client` lifecycle), `SignedUrlService` (presigned GET/PUT/multipart), `KeyResolverService` (normalization and path traversal guard).
+**Core (always active):** `StorageService` (upload, download, delete, list, head, copy, exists), `S3ClientProvider` (`S3Client` lifecycle), `SignedUrlService` (presigned GET/PUT/multipart), `BucketLifecycleService` (bucket lifecycle rules: get/upsert/remove), `KeyResolverService` (normalization and path traversal guard).
 
 **Opt-in (enabled via config):** `ValidationService` (`validation: {}`) for MIME/size/custom validators; `FileScannerService` (`scanner: {}`) for virus scan via an injected `IFileScanner`.
 
@@ -211,7 +211,7 @@ Three options were evaluated: (A) a separate SDK per provider — multiplies pee
 - Module: `BymaxStorageModule`
 - Tokens: `BYMAX_STORAGE_OPTIONS`, `BYMAX_STORAGE_S3_CLIENT`, `BYMAX_STORAGE_UPLOAD_VALIDATORS`, `BYMAX_STORAGE_FILE_SCANNER`
 - Types: `BymaxStorageModuleOptions`, `BymaxStorageModuleAsyncOptions`, `BymaxStorageModuleOptionsFactory`, `UploadOptions`, `UploadResult`, `DownloadOptions`, `ListOptions`, `ListResult`, `ListedObject`, `CopyOptions`, `DeleteManyOptions`, `DeleteManyResult`, `FailedDeletion`, `SignedGetUrlOptions`, `SignedPutUrlOptions`, `MultipartUploadUrlsOptions`, `MultipartUploadUrlsResult`, `SignedUrlResult`, `ObjectMetadata`, `IUploadValidator`, `IFileScanner`, `FileScanResult`, `ProviderRecipe`, `StorageErrorCode`
-- Public services: `StorageService`, `SignedUrlService`
+- Public services: `StorageService`, `SignedUrlService`, `BucketLifecycleService`
 - Errors: `StorageException`, `STORAGE_ERROR_CODES`
 - Helpers: `providerRecipes`, `NoOpUploadValidator`, `NoOpFileScanner`
 
@@ -220,7 +220,7 @@ Three options were evaluated: (A) a separate SDK per provider — multiplies pee
 - Types: `UploadResult`, `ObjectMetadata`, `ListedObject`, `StorageErrorResponse`, `SignedUrlResult`, `StorageErrorCode`
 - Constants: `STORAGE_ERROR_CODES`, `DEFAULT_IMAGE_MIME_WHITELIST`, `DEFAULT_VIDEO_MIME_WHITELIST`, `DEFAULT_DOC_MIME_WHITELIST`, `DEFAULT_SIGNED_URL_TTL_SECONDS`, `MAX_SIGNED_URL_TTL_SECONDS`, `DEFAULT_MULTIPART_THRESHOLD_BYTES`, `DEFAULT_MULTIPART_PART_SIZE_BYTES`, `DEFAULT_MULTIPART_QUEUE_SIZE`
 
-> **Public vs internal:** only `StorageService` and `SignedUrlService` are exported for direct use. `KeyResolverService`, `ValidationService`, and `FileScannerService` are implementation details.
+> **Public vs internal:** only `StorageService`, `SignedUrlService` and `BucketLifecycleService` are exported for direct use. `KeyResolverService`, `ValidationService`, and `FileScannerService` are implementation details.
 
 > **Shared re-exports:** the server entry (`.`) re-exports the `./shared` types `UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult` and `StorageErrorCode`, plus `STORAGE_ERROR_CODES`, so server consumers import them from `@bymax-one/nest-storage` directly; `StorageErrorResponse` and the other constants are available only from `./shared`, which exists for frontends/workers that need only the zero-dependency types and constants.
 

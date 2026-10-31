@@ -25,3 +25,9 @@ export type {
 export type { IUploadValidator } from './upload-validator.interface'
 export type { IFileScanner, FileScanResult } from './file-scanner.interface'
 export type { ProviderRecipe } from './provider-recipe.interface'
+export type {
+  BucketLifecycleRule,
+  BucketLifecycleRuleView,
+  LifecycleBucketOptions,
+  ExpirationRuleInput,
+} from './lifecycle-options.interface'

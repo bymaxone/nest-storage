@@ -59,7 +59,7 @@ AWS SDK v3 is SigV4-only. There is no `signatureVersion` option. The retry knob 
 
 ### 9 — Internal services are internal
 
-`KeyResolverService`, `ValidationService`, `FileScannerService`, and `S3ClientProvider` are **not** exported from the package barrel. Only `StorageService`, `SignedUrlService`, `providerRecipes`, the DI tokens, the public types, `StorageException`, `NoOpUploadValidator`, and `NoOpFileScanner` are public.
+`KeyResolverService`, `ValidationService`, `FileScannerService`, and `S3ClientProvider` are **not** exported from the package barrel. Only `StorageService`, `SignedUrlService`, `BucketLifecycleService`, `providerRecipes`, the DI tokens, the public types, `StorageException`, `NoOpUploadValidator`, and `NoOpFileScanner` are public.
 
 ---
 
@@ -96,7 +96,8 @@ BymaxStorageModule (forRoot / forRootAsync)
 ├── ValidationService         (MIME wildcard + size + IUploadValidator chain — internal)
 ├── FileScannerService        (IFileScanner pre/post-upload — internal)
 ├── StorageService            (public — upload / download / head / list / copy / delete)
-└── SignedUrlService          (public — presigned GET / PUT / multipart)
+├── SignedUrlService          (public — presigned GET / PUT / multipart)
+└── BucketLifecycleService    (public — bucket lifecycle rules: get / upsert / remove)
 ```
 
 Full diagram and component descriptions: `docs/architecture.md`.

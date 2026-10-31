@@ -11,6 +11,7 @@ export { BymaxStorageModule } from './bymax-storage.module'
 // Services
 export { StorageService } from './services/storage.service'
 export { SignedUrlService } from './services/signed-url.service'
+export { BucketLifecycleService } from './services/bucket-lifecycle.service'
 
 // No-op helpers (default implementations for validation and scanning)
 export { NoOpUploadValidator } from './providers/no-op-validator'
@@ -48,6 +49,10 @@ export type {
   IFileScanner,
   FileScanResult,
   ProviderRecipe,
+  BucketLifecycleRule,
+  BucketLifecycleRuleView,
+  LifecycleBucketOptions,
+  ExpirationRuleInput,
 } from './interfaces'
 
 // Errors
