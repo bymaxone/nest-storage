@@ -103,6 +103,25 @@ export class IdempotencyCache {
   }
 
   /**
+   * Drops every entry whose cached result is this object, so a repeated upload after the object
+   * was deleted runs instead of being answered with a success that no longer holds.
+   *
+   * @param bucket - The bucket of the deleted object.
+   * @param key - The object's key, relative to `keyPrefix`, as `UploadResult.key` carries it.
+   * @returns How many entries were dropped.
+   */
+  invalidate(bucket: string, key: string): number {
+    let dropped = 0
+    for (const [cacheKey, entry] of this.entries) {
+      if (entry.value.bucket === bucket && entry.value.key === key) {
+        this.entries.delete(cacheKey)
+        dropped += 1
+      }
+    }
+    return dropped
+  }
+
+  /**
    * Reports the current number of cached entries.
    *
    * @returns The entry count.

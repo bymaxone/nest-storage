@@ -385,6 +385,12 @@ const r2 = await storage.upload(opts) // returns cached result instantly
 console.log(r2.fromIdempotencyCache) // true
 ```
 
+A repeated upload is answered from the cache only while this instance still believes the object
+exists: `delete()` and `deleteMany()` drop the entries of the objects they remove, so uploading
+again after a delete stores the object again. The cache is **per instance**. A delete made by
+another replica, or outside this library, does not reach it, and there a repeated upload can be
+answered with a success for an object that no longer exists.
+
 ---
 
 ## ⬇️ Download
@@ -571,6 +577,14 @@ arrives, and the scanner and the upload then share that buffer. The read is boun
 refused with a reason that says to set it or use `post-upload`. Buffer bodies and `post-upload`
 mode are not affected; `post-upload` hands the scanner no body, only the key.
 
+**A rejected object that could not be removed.** In `post-upload` mode the object is already
+stored when the scanner rejects it, so the library deletes it and rejects `upload()` with the
+verdict (`STORAGE_SCAN_INFECTED` or `STORAGE_SCAN_INCONCLUSIVE`). When that delete fails, the
+verdict is still the error, and `details` says so: `cleanup: 'failed'`, the `key` and the delete
+failure in `cleanupError`; the failure is also logged at error level with the code
+`STORAGE_SCAN_CLEANUP_FAILED`. No `details.cleanup` means the object was removed; `cleanup:
+'failed'` means it is **still stored** and has to be removed by other means.
+
 ---
 
 ## ♻️ Lifecycle Operations
@@ -736,7 +750,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_MIME_NOT_ALLOWED`       | 415  | `contentType` outside `mimeWhitelist`                                                                                                                                                                              |
 | `STORAGE_SIZE_EXCEEDED`          | 413  | `size > maxSizeBytes`                                                                                                                                                                                              |
 | `STORAGE_VALIDATION_FAILED`      | 400  | `IUploadValidator` rejected the file (`details.reason`)                                                                                                                                                            |
-| `STORAGE_SCAN_INFECTED`          | 422  | Scanner returned `'infected'` (`details.threat`)                                                                                                                                                                   |
+| `STORAGE_SCAN_INFECTED`          | 422  | Scanner returned `'infected'` (`details.threat`); `details.cleanup: 'failed'` means the object is still stored                                                                                                    |
 | `STORAGE_SCAN_INCONCLUSIVE`      | 422  | Scanner returned `'unknown'` and `rejectOnUnknown: true`                                                                                                                                                           |
 | `STORAGE_OBJECT_NOT_FOUND`       | 404  | `head()`, `download()`, or `copy()` on a nonexistent key                                                                                                                                                           |
 | `STORAGE_PROVIDER_ERROR`         | 502  | AWS SDK error (network, 5xx, throttling, `AccessControlListNotSupported`); `details` carries `awsCode`, `awsMessage`, `httpStatus`, `requestId` plus the operation context (`op`, `bucket`, and `key` or `prefix`) |
@@ -744,7 +758,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_PART_TOO_SMALL`         | 400  | Reserved: a `multipart.partSizeBytes` below 5 MiB is rejected at init as `STORAGE_INVALID_CONFIG`                                                                                                                                                                             |
 | `STORAGE_INVALID_PART_COUNT`     | 400  | `getMultipartUploadUrls()` with `parts` not an integer from 1 to 10 000 (`details.provided`, `details.reason`)                                                                                                                                                  |
 | `STORAGE_BUCKET_UNDEFINED`       | 400  | Operation without a bucket and no default in config                                                                                                                                                                |
-| `STORAGE_MULTIPART_ABORTED`      | 500  | Multipart upload failed and was aborted                                                                                                                                                                            |
+| `STORAGE_MULTIPART_ABORTED`      | 500  | A multipart upload failed. `details.abort` is `'completed'` when the library aborted it and `'failed'` (with `abortError`) when the abort itself failed: that upload stays open on the provider until a lifecycle rule removes it |
 | `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                                                                                                                    |
 | `STORAGE_TIMEOUT`                | 504  | An attempt got no response headers within `requestTimeoutMs` (the SDK's `TimeoutError`); a multipart source that stays silent for `uploadIdleTimeoutMs` also surfaces as `STORAGE_TIMEOUT` (`details.phase: 'source-idle'`); any other failure inside a multipart upload surfaces as `STORAGE_MULTIPART_ABORTED`                                                                                                                                                                                |
 | `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: empty or over-long `id`, non-positive or non-integer `expirationDays`, bad `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |
@@ -791,6 +805,11 @@ This is the index.
 | `list`           | `(options: ListOptions) => Promise<ListResult>`               | Paginated by continuation token                              |
 | `copy`           | `(options: CopyOptions) => Promise<{ etag }>`            | Server-side; the bytes never reach this process              |
 | `checkBucket`    | `(options?) => Promise<void>`                                 | One `HeadBucket` for a readiness check; resolves when the bucket is reachable, otherwise rejects `STORAGE_BUCKET_NOT_FOUND`, `STORAGE_BUCKET_ACCESS_DENIED`, `STORAGE_BUCKET_REGION_MISMATCH` or `STORAGE_TIMEOUT`; needs `s3:ListBucket`; never called at boot |
+
+> **`exists()` returns `false` for any failure that is not a 404** (a 403, a 5xx, a timeout), after
+> logging a warning, so a transient provider error reads as "absent". Do not use it to decide whether
+> to overwrite or to create (`if (!(await exists(k))) await upload(k)` can overwrite an object
+> that is there); use `head()` and branch on the error code.
 
 **A missing bucket and `head()` / `exists()`.** A `HEAD` response has no body, so the provider cannot say which of the bucket and the key is missing: AWS documents that "if the `HEAD` request generates an error, it returns a generic code, such as `400 Bad Request`, `403 Forbidden`, `404 Not Found` ... It's not possible to retrieve the exact exception of these error codes" ([HeadObject][aws-head-object]). `head()` therefore rejects `STORAGE_OBJECT_NOT_FOUND` and `exists()` returns `false` for a missing bucket too. Call `checkBucket()` to tell the two apart, for example from a readiness endpoint.
 
