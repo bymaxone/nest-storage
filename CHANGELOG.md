@@ -15,6 +15,10 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Fixed
 
+- **With a `keyPrefix`, a post-upload scan never removed the object it rejected.** The cleanup passed
+  the already-prefixed key to `delete()`, which prefixes it again, so it deleted `prefix/prefix/key`
+  (nothing), succeeded, and the rejected object stayed stored: no error beyond the scan verdict and no
+  log line. The cleanup now targets the object's real key.
 - **A failed cleanup or abort is no longer reported as a clean outcome.** Four paths told the caller
   one thing while the provider held another:
   - A `post-upload` scan that rejected an object deleted it and rejected with the verdict; when that
@@ -35,7 +39,10 @@ note on each entry is the compatibility contract — read it, not the number.
     cache is per instance, so a delete made by another replica or outside the library still does not
     reach it.
 
-  **Apply to a derived backend:** error shapes change, not codes. Code that reads `error.details` of
+  **Apply to a derived backend:** if you use a `keyPrefix` together with a `post-upload` scanner,
+  **audit your bucket** for objects that failed a scan in an earlier version: they were never removed
+  and nothing was logged, so your logs will not list them. Re-scan the prefix, or delete what your
+  scanner flagged. Error shapes also change, not codes. Code that reads `error.details` of
   `STORAGE_SCAN_INFECTED`, `STORAGE_SCAN_INCONCLUSIVE`, `STORAGE_MULTIPART_ABORTED` or the
   source-idle `STORAGE_TIMEOUT` gains the fields above: treat `details.cleanup === 'failed'` as
   "rejected but still stored" and alert on it. A failed multipart upload now costs one more request,
