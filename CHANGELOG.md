@@ -16,8 +16,7 @@ note on each entry is the compatibility contract — read it, not the number.
 ### Fixed
 
 - **A failed scan cleanup now names the provider's cause and the key as stored, and a failed abort no
-  longer says the upload was aborted.** Three details of the 1.1.5 failure reports were too thin to
-  act on:
+  longer says the upload was aborted.** The 1.1.5 failure reports were too thin to act on:
   - `details.cleanupError` of a rejected post-upload scan whose delete failed was the generic
     "Storage Exception", which lost the provider's message. It is now the error code and the
     provider's message, for example `STORAGE_PROVIDER_ERROR: Access Denied`.
