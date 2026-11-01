@@ -63,6 +63,23 @@ describe('withIdleTimeout', () => {
     expect(await collect(wrapper)).toBe('late')
   })
 
+  it('does not run the clock for read-ahead while the consumer is paused', async () => {
+    // The source delivers its second chunk 100 ms in, longer than the 50 ms limit, but the consumer
+    // pauses for 150 ms after the first chunk, so by the time it asks again the chunk is waiting.
+    const source = new Readable({ read() {} })
+    source.push(Buffer.from('one'))
+    setTimeout(() => source.push(Buffer.from('two')), 100)
+    setTimeout(() => source.push(null), 120)
+    const seen: string[] = []
+
+    for await (const chunk of withIdleTimeout(source, 50)) {
+      seen.push(String(chunk))
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+
+    expect(seen.join('')).toBe('onetwo')
+  })
+
   it('passes a source error through to the reader', async () => {
     const source = new PassThrough()
     const failure = collect(withIdleTimeout(source, 1000))

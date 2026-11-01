@@ -52,6 +52,9 @@ export function withIdleTimeout(source: NodeJS.ReadableStream, idleMs: number): 
   const iterator = source[Symbol.asyncIterator]() as AsyncIterator<Buffer | string>
   const wrapper = new Readable({
     objectMode: false,
+    // No read-ahead: with a buffer to fill, Node calls read() while the consumer is paused, and the
+    // clock would run for bytes nobody has asked for. At 0, read() runs only on demand.
+    highWaterMark: 0,
     read() {
       // A Readable calls read() again only after the pending one has pushed, so reads never overlap.
       withinIdleTime(iterator.next(), idleMs).then(
