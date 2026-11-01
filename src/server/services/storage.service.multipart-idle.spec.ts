@@ -6,7 +6,7 @@
  * @layer server/services
  */
 import { createServer, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import type { AddressInfo, Socket } from 'node:net'
 import { Readable } from 'node:stream'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { BymaxStorageModule } from '../bymax-storage.module'
@@ -16,6 +16,14 @@ import type { StorageException } from '../errors/storage-exception'
 import { StorageService } from './storage.service'
 
 const MIB = 1024 * 1024
+
+/** Idle limit of the cases whose source goes silent; `QUIET_MS` and the single-shot case's limits derive from it. */
+const IDLE_MS = 200
+/** A paced source's gap and the limit it must stay under (ratio 5:12, as a slow-but-alive source). */
+const SLOW_GAP_MS = 125
+const SLOW_LIMIT_MS = 300
+/** Longest a case waits to show that nothing happened: three silent limits. */
+const QUIET_MS = 3 * IDLE_MS
 
 /** The `details` a `StorageException` carries in its response body. */
 function detailsOf(error: unknown): Record<string, unknown> | undefined {
@@ -59,6 +67,7 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
     let port: number
     let calls: string[] = []
     let moduleRef: TestingModule | undefined
+    const sockets = new Set<Socket>()
 
     beforeAll(async () => {
       server = createServer((req, res) => {
@@ -88,6 +97,12 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
               '<CompleteMultipartUploadResult><ETag>"done"</ETag></CompleteMultipartUploadResult>',
             )
           }
+        })
+      })
+      server.on('connection', (socket) => {
+        sockets.add(socket)
+        socket.once('close', () => {
+          sockets.delete(socket)
         })
       })
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -133,7 +148,11 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
       return moduleRef.get(StorageService)
     }
 
-    /** Runs an upload, then reports what escaped to the process while the aftermath settled. */
+    /**
+     * Runs an upload, then reports what escaped to the process while its aftermath settled. The
+     * aftermath ends when the client has closed every connection (closing the module destroys the
+     * client) and the event loop has turned enough times for what that queued to have run.
+     */
     async function settle(
       attempt: () => Promise<unknown>,
     ): Promise<{ outcome: unknown; escaped: unknown[] }> {
@@ -146,13 +165,20 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
         (value) => value,
         (err: unknown) => err,
       )
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      await moduleRef?.close()
+      moduleRef = undefined
+      while (sockets.size > 0) {
+        await new Promise((resolve) => setImmediate(resolve))
+      }
+      for (let turn = 0; turn < 20; turn += 1) {
+        await new Promise((resolve) => setImmediate(resolve))
+      }
       process.removeListener('uncaughtException', onEscape)
       return { outcome, escaped }
     }
 
     it('rejects STORAGE_TIMEOUT, destroys the source, aborts the multipart upload and leaks nothing', async () => {
-      const storage = await storageWith({ uploadIdleTimeoutMs: 400 })
+      const storage = await storageWith({ uploadIdleTimeoutMs: IDLE_MS })
       // Six chunks arrive at once, then the source goes silent without ending.
       const { stream } = pacedSource(6, 0, false)
       const started = Date.now()
@@ -162,7 +188,7 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
       )
 
       expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT' })
-      expect(detailsOf(outcome)).toMatchObject({ phase: 'source-idle', idleMs: 400, key: 'a' })
+      expect(detailsOf(outcome)).toMatchObject({ phase: 'source-idle', idleMs: IDLE_MS, key: 'a' })
       expect(Date.now() - started).toBeLessThan(4000)
       expect(stream.destroyed).toBe(true)
       expect(calls).toEqual(expect.arrayContaining(['POST uploads', 'DELETE ?uploadId=u1']))
@@ -170,9 +196,9 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
     })
 
     it('lets a slow source finish when every gap is shorter than the limit', async () => {
-      const storage = await storageWith({ uploadIdleTimeoutMs: 600 })
-      // Six chunks, 250 ms apart: the whole upload outlasts the limit, no single silence does.
-      const { stream } = pacedSource(6, 250, true)
+      const storage = await storageWith({ uploadIdleTimeoutMs: SLOW_LIMIT_MS })
+      // Six chunks, one gap apart: the whole upload outlasts the limit, no single silence does.
+      const { stream } = pacedSource(6, SLOW_GAP_MS, true)
 
       const result = await storage.upload({
         key: 'a',
@@ -184,49 +210,11 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
       expect(calls).not.toContain('DELETE ?uploadId=u1')
     })
 
-    it('does not time out a slow consumer: a source that is not being read is not idle', async () => {
-      const storage = await storageWith({ uploadIdleTimeoutMs: 300 })
-      const { stream } = pacedSource(6, 0, true)
-
-      const result = await storage.upload({
-        key: 'a',
-        body: stream,
-        contentType: 'application/octet-stream',
-      })
-
-      expect(result.multipart).toBe(true)
-    })
-
-    it('turns the guard off with 0', async () => {
-      const storage = await storageWith({ uploadIdleTimeoutMs: 0 })
-      const { stream } = pacedSource(6, 0, false)
-      const guard = jest.spyOn(idleTimeout, 'withIdleTimeout')
-
-      const pending = storage.upload({
-        key: 'a',
-        body: stream,
-        contentType: 'application/octet-stream',
-      })
-      const winner = await Promise.race([
-        pending.then(
-          () => 'settled',
-          () => 'settled',
-        ),
-        new Promise<string>((resolve) => {
-          setTimeout(() => {
-            resolve('still pending')
-          }, 1500)
-        }),
-      ])
-
-      expect(winner).toBe('still pending')
-      expect(guard).not.toHaveBeenCalled()
-      stream.destroy()
-      await pending.catch(() => undefined)
-    })
-
     it('does not wrap a single-shot body, so a stalled one is left to requestTimeoutMs', async () => {
-      const storage = await storageWith({ uploadIdleTimeoutMs: 200, requestTimeoutMs: 900 })
+      const storage = await storageWith({
+        uploadIdleTimeoutMs: IDLE_MS / 2,
+        requestTimeoutMs: IDLE_MS * 2 + 50,
+      })
       const guard = jest.spyOn(idleTimeout, 'withIdleTimeout')
       const { stream } = pacedSource(0, 0, false)
 
@@ -239,16 +227,60 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
       expect(detailsOf(outcome)?.phase).toBeUndefined()
     })
 
-    it('defaults the idle limit to requestTimeoutMs', async () => {
-      const storage = await storageWith({ requestTimeoutMs: 400 })
-      const { stream } = pacedSource(6, 0, false)
+    // These cases do not read the SDK's checksum handling, so one mode proves them.
+    if (checksumMode === 'WHEN_REQUIRED') {
+      it('does not time out a slow consumer: a source that is not being read is not idle', async () => {
+        const storage = await storageWith({ uploadIdleTimeoutMs: IDLE_MS })
+        const { stream } = pacedSource(6, 0, true)
 
-      const { outcome } = await settle(() =>
-        storage.upload({ key: 'a', body: stream, contentType: 'application/octet-stream' }),
-      )
+        const result = await storage.upload({
+          key: 'a',
+          body: stream,
+          contentType: 'application/octet-stream',
+        })
 
-      expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT' })
-      expect(detailsOf(outcome)).toMatchObject({ phase: 'source-idle', idleMs: 400 })
-    })
+        expect(result.multipart).toBe(true)
+      })
+
+      it('turns the guard off with 0', async () => {
+        const storage = await storageWith({ uploadIdleTimeoutMs: 0 })
+        const { stream } = pacedSource(6, 0, false)
+        const guard = jest.spyOn(idleTimeout, 'withIdleTimeout')
+
+        const pending = storage.upload({
+          key: 'a',
+          body: stream,
+          contentType: 'application/octet-stream',
+        })
+        const winner = await Promise.race([
+          pending.then(
+            () => 'settled',
+            () => 'settled',
+          ),
+          new Promise<string>((resolve) => {
+            setTimeout(() => {
+              resolve('still pending')
+            }, QUIET_MS)
+          }),
+        ])
+
+        expect(winner).toBe('still pending')
+        expect(guard).not.toHaveBeenCalled()
+        stream.destroy()
+        await pending.catch(() => undefined)
+      })
+
+      it('defaults the idle limit to requestTimeoutMs', async () => {
+        const storage = await storageWith({ requestTimeoutMs: IDLE_MS })
+        const { stream } = pacedSource(6, 0, false)
+
+        const { outcome } = await settle(() =>
+          storage.upload({ key: 'a', body: stream, contentType: 'application/octet-stream' }),
+        )
+
+        expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT' })
+        expect(detailsOf(outcome)).toMatchObject({ phase: 'source-idle', idleMs: IDLE_MS })
+      })
+    }
   },
 )
