@@ -25,6 +25,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 - Proof only, never released: a public member without its note.
 
+  **Apply to a derived backend:** none; this section exists only to show that a declaration change passes the gate once the note is present.
+
 ## [1.1.4] - 2026-11-01
 
 ### Changed
