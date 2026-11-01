@@ -104,6 +104,20 @@ describe('validateOptions', () => {
     })).toMatch(/5 MB/)
   })
 
+  it.each([0, 1, 30_000])('should accept an uploadIdleTimeoutMs of %s', (value) => {
+    // Integer >= 0 passes; 0 turns the guard off.
+    expect(() => {
+      validateOptions({ ...valid, uploadIdleTimeoutMs: value })
+    }).not.toThrow()
+  })
+
+  it.each([-1, 1.5, Number.NaN, '100', null])('should reject an uploadIdleTimeoutMs of %p', (value) => {
+    // Negative, fractional, NaN and non-number values are configuration errors.
+    expect(reasonOf(() => {
+      validateOptions({ ...valid, uploadIdleTimeoutMs: value })
+    })).toMatch(/uploadIdleTimeoutMs/)
+  })
+
   it('should accept aws:kms with a kmsKeyId', () => {
     // SSE `&&` right-false branch (kmsKeyId present).
     expect(() => {

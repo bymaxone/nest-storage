@@ -167,6 +167,14 @@ describe('StorageService.deleteMany', () => {
     expect(typeof result.failed[0]!.error).toBe('string')
   })
 
+  it('reports a rejection value with no usable toString instead of throwing', async () => {
+    // String(Object.create(null)) throws; the catch that reports a failure must not.
+    const { service, send } = makeService()
+    send.mockRejectedValue(Object.create(null))
+    const result = await service.deleteMany(['a.txt'])
+    expect(result.failed).toEqual([{ key: 'a.txt', error: 'non-printable rejection value' }])
+  })
+
   it('strips the global key prefix from returned keys', async () => {
     // Both deleted and failed keys come back without the tenant prefix.
     const { service, send } = makeService({ keyPrefix: 'tenant/' })

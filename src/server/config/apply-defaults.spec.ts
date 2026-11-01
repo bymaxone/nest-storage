@@ -96,6 +96,7 @@ describe('applyDefaults', () => {
     expect(r.responseChecksumValidation).toBe('WHEN_SUPPORTED')
     expect(r.maxAttempts).toBe(3)
     expect(r.requestTimeoutMs).toBe(30_000)
+    expect(r.uploadIdleTimeoutMs).toBe(30_000)
     expect(r.cdnBaseUrl).toBeUndefined()
     expect(r.validation).toBeUndefined()
     expect(r.scanner).toBeUndefined()
@@ -143,6 +144,7 @@ describe('applyDefaults', () => {
     expect(r.responseChecksumValidation).toBe('WHEN_REQUIRED')
     expect(r.maxAttempts).toBe(5)
     expect(r.requestTimeoutMs).toBe(60_000)
+    expect(r.uploadIdleTimeoutMs).toBe(60_000)
     expect(r.cdnBaseUrl).toBe('https://cdn.example.com')
     expect(r.validation).toBe(full.validation)
     expect(r.scanner).toBe(full.scanner)
@@ -239,5 +241,11 @@ describe('applyDefaults', () => {
       defaultPutTtlSeconds: 120,
       maxTtlSeconds: 604_800,
     })
+  })
+
+  it('should resolve uploadIdleTimeoutMs from its own value, including 0', () => {
+    // An explicit value wins over the requestTimeoutMs fallback, and 0 is kept, not defaulted.
+    expect(applyDefaults({ ...base, uploadIdleTimeoutMs: 5000 }).uploadIdleTimeoutMs).toBe(5000)
+    expect(applyDefaults({ ...base, uploadIdleTimeoutMs: 0 }).uploadIdleTimeoutMs).toBe(0)
   })
 })

@@ -81,6 +81,7 @@ const DEFAULTED_OPTIONS = [
   'multipart.queueSize',
   'maxAttempts',
   'requestTimeoutMs',
+  'uploadIdleTimeoutMs',
 ]
 
 describe('README configuration table', () => {
