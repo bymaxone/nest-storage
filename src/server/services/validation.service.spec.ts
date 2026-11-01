@@ -30,6 +30,7 @@ function buildOptions(validation?: ResolvedBymaxStorageOptions['validation']): R
     responseChecksumValidation: 'WHEN_SUPPORTED',
     maxAttempts: 3,
     requestTimeoutMs: 30000,
+    uploadIdleTimeoutMs: 30000,
     hasCredentials: true,
     validation,
   }

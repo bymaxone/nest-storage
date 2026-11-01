@@ -50,6 +50,7 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     options.publicBaseUrl ?? `${trimTrailingSlashes(options.endpoint)}/${options.bucket}`
 
   const credentials = { ...options.credentials }
+  const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
 
   const resolved: Omit<ResolvedBymaxStorageOptions, 'credentials'> = {
     endpoint: options.endpoint,
@@ -73,7 +74,8 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     requestChecksumCalculation: options.requestChecksumCalculation ?? DEFAULT_CHECKSUM_CALCULATION,
     responseChecksumValidation: options.responseChecksumValidation ?? DEFAULT_CHECKSUM_VALIDATION,
     maxAttempts: options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
-    requestTimeoutMs: options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+    requestTimeoutMs,
+    uploadIdleTimeoutMs: options.uploadIdleTimeoutMs ?? requestTimeoutMs,
     hasCredentials,
   }
 

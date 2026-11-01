@@ -37,6 +37,9 @@ import { ValidationService } from './validation.service'
 import { FileScannerService } from './file-scanner.service'
 import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
+import { mapMultipartError } from '../errors/multipart-error-mapper'
+import { describeError } from '../utils/describe-error'
+import { guardIdleBody } from '../utils/idle-timeout'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import {
   buildACL,
@@ -278,7 +281,7 @@ export class StorageService {
       await this.delete(finalKey, { bucket }).catch((deleteErr: unknown) => {
         this.logger.error(
           `Post-upload cleanup failed for infected/inconclusive object: ${finalKey}`,
-          (deleteErr as Error).message,
+          describeError(deleteErr),
         )
       })
       throw scanErr
@@ -326,7 +329,7 @@ export class StorageService {
       ) {
         return false
       }
-      this.logger.warn(`exists() — treating a non-404 error as "false": ${(err as Error).message}`)
+      this.logger.warn(`exists() — treating a non-404 error as "false": ${describeError(err)}`)
       return false
     }
   }
@@ -551,7 +554,7 @@ export class StorageService {
     const params: PutObjectCommandInput = {
       Bucket: bucket,
       Key: finalKey,
-      Body: options.body as NonNullable<PutObjectCommandInput['Body']>,
+      Body: guardIdleBody(options.body, this.options.uploadIdleTimeoutMs),
       ContentType: options.contentType,
       CacheControl: buildCacheControl(options.cacheControl, this.options.defaultCacheControl),
       ContentDisposition: buildContentDisposition(
@@ -587,11 +590,7 @@ export class StorageService {
         multipart: true,
       })
     } catch (err) {
-      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_MULTIPART_ABORTED, undefined, {
-        key: finalKey,
-        bucket,
-        awsMessage: (err as Error).message,
-      })
+      throw mapMultipartError(err, { key: finalKey, bucket })
     }
   }
 
@@ -790,7 +789,7 @@ export class StorageService {
     } catch (err) {
       // A non-Error throw (or an Error without a message) must still coerce to the
       // `string` that `FailedDeletion.error` declares — never `undefined`.
-      const message = err instanceof Error ? err.message : String(err)
+      const message = describeError(err)
       for (const key of chunk) {
         failed.push({ key: this.keyResolver.stripPrefix(key), error: message })
       }

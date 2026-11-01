@@ -40,6 +40,7 @@ export interface ResolvedBymaxStorageOptions {
   responseChecksumValidation: 'WHEN_SUPPORTED' | 'WHEN_REQUIRED'
   maxAttempts: number
   requestTimeoutMs: number
+  uploadIdleTimeoutMs: number
   /** True when both `accessKeyId` and `secretAccessKey` are non-empty. */
   hasCredentials: boolean
 }

@@ -13,6 +13,29 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A stream that stops delivering no longer holds a multipart upload open forever.** A multipart upload
+  waiting for the next bytes of a stream has no request in flight, so `requestTimeoutMs` never fired:
+  a client that sent a few MiB and went silent left `upload()` pending and the upload (and its parts)
+  open on the provider until a lifecycle rule reaped it. A new `uploadIdleTimeoutMs` bounds the silence.
+  Past it the library sends `AbortMultipartUpload`, destroys your stream and rejects `upload()` with
+  `STORAGE_TIMEOUT` and `details.phase: 'source-idle'`. The clock restarts on every chunk and runs only
+  while the library is waiting for data.
+
+  **Apply to a derived backend:** a behaviour change, on by default. A stream source that delivers no
+  bytes for `uploadIdleTimeoutMs` now aborts the multipart upload and rejects `STORAGE_TIMEOUT`; the
+  limit defaults to `requestTimeoutMs` (30 s). Set `uploadIdleTimeoutMs: 0` to restore the old
+  behaviour, or raise it for a source that legitimately pauses longer. It applies only to a stream that
+  takes the multipart path (no `size`, or at or above `multipart.thresholdBytes`); single-shot uploads
+  and `Buffer` bodies are unchanged. An invalid value (negative, fractional, not a number) is rejected
+  at startup as `STORAGE_INVALID_CONFIG`.
+- **Reporting a failure can no longer replace it.** `deleteMany()`, the post-upload cleanup, `exists()` and
+  the multipart error mapping built a message with `String(err)` or `err.message`; for a rejection value
+  with no usable `toString` (an object with no prototype, one whose `toString` throws) that raised from
+  inside the catch and the new error escaped in place of the one being reported. A value is now described
+  by its string `message`, else its string form, else `non-printable rejection value`, and never throws.
+
 ## [1.1.2] - 2026-10-31
 
 ### Changed
