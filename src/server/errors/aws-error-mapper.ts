@@ -19,6 +19,7 @@ interface AwsLikeError {
  * Maps an AWS SDK error to a typed `StorageException`.
  *
  * Heuristics:
+ *   - `NoSuchBucket` → `STORAGE_BUCKET_NOT_FOUND` (404)
  *   - `name === 'NotFound'` or HTTP 404 → `STORAGE_OBJECT_NOT_FOUND` (404)
  *   - HTTP 304 (`If-None-Match` matched) → `STORAGE_NOT_MODIFIED` (304)
  *   - HTTP 412 (`If-Match` failed)       → `STORAGE_PRECONDITION_FAILED` (412)
@@ -42,6 +43,13 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
     awsMessage: e.message,
   }
 
+  if (awsCode === 'NoSuchBucket') {
+    return new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_BUCKET_NOT_FOUND,
+      HttpStatus.NOT_FOUND,
+      details,
+    )
+  }
   if (e.name === 'NotFound' || httpStatus === 404) {
     return new StorageException(
       STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND,

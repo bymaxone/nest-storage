@@ -13,6 +13,29 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Changed
+
+- **A missing bucket is no longer reported as an absent object, and `delete()` no longer hides it.** When
+  the provider answers `NoSuchBucket`, `download()`, `upload()`, `list()`, `copy()` and `delete()` now
+  reject with the new `STORAGE_BUCKET_NOT_FOUND` (404) instead of `STORAGE_OBJECT_NOT_FOUND`, and
+  `delete()`, which used to resolve successfully against a bucket that does not exist, rejects it.
+
+  **Apply to a derived backend:** a behaviour change for a deployment whose bucket is missing or
+  misnamed. Code that treated `STORAGE_OBJECT_NOT_FOUND` after a failed `download()`, `upload()`, `list()`
+  or `copy()` as "the bucket or key is not there" must also handle `STORAGE_BUCKET_NOT_FOUND`, and a
+  `delete()` that used to succeed silently now fails until the bucket exists. `head()` and `exists()` are
+  unchanged: a `HEAD` response has no body, so the provider cannot say which of the bucket and the key is
+  missing, and a missing bucket still reads as an absent object there (use `checkBucket()` to tell).
+
+### Added
+
+- **`StorageService.checkBucket()`.** One `HeadBucket` that resolves when the bucket is reachable with these
+  credentials and otherwise rejects with a typed code: `STORAGE_BUCKET_NOT_FOUND` (404),
+  `STORAGE_BUCKET_ACCESS_DENIED` (403, which a provider also answers for a bucket the caller cannot list),
+  `STORAGE_BUCKET_REGION_MISMATCH` (301 or `PermanentRedirect`), `STORAGE_TIMEOUT`, or
+  `STORAGE_PROVIDER_ERROR`. Nothing calls it at boot; wire it into a readiness endpoint so a misconfigured
+  bucket keeps the instance out of rotation. It needs `s3:ListBucket`.
+
 ## [1.1.3] - 2026-11-01
 
 ### Fixed
