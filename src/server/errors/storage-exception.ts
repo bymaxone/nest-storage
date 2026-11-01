@@ -24,12 +24,14 @@ export class StorageException extends HttpException {
     /** Defaults to `STORAGE_ERROR_STATUS[code]`. Pass only to override. */
     statusCode: HttpStatus = STORAGE_ERROR_STATUS[code],
     details?: Record<string, unknown>,
+    /** Defaults to the message of `code`. Pass only when the situation is more specific than the code. */
+    message: string = STORAGE_ERROR_MESSAGES[code],
   ) {
     super(
       {
         error: {
           code,
-          message: STORAGE_ERROR_MESSAGES[code],
+          message,
           ...(details ? { details } : {}),
         },
       },

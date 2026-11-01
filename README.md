@@ -580,10 +580,12 @@ mode are not affected; `post-upload` hands the scanner no body, only the key.
 **A rejected object that could not be removed.** In `post-upload` mode the object is already
 stored when the scanner rejects it, so the library deletes it and rejects `upload()` with the
 verdict (`STORAGE_SCAN_INFECTED` or `STORAGE_SCAN_INCONCLUSIVE`). When that delete fails, the
-verdict is still the error, and `details` says so: `cleanup: 'failed'`, the `key` and the delete
-failure in `cleanupError`; the failure is also logged at error level with the code
-`STORAGE_SCAN_CLEANUP_FAILED`. No `details.cleanup` means the object was removed; `cleanup:
-'failed'` means it is **still stored** and has to be removed by other means.
+verdict is still the error, and `details` says so: `cleanup: 'failed'`, the `key` you passed, the
+`storedKey` (the key as the provider holds it, with any `keyPrefix`, which is what a bucket listing
+shows) and the delete failure in `cleanupError` (the error code and the provider's message); the
+failure is also logged at error level with the code `STORAGE_SCAN_CLEANUP_FAILED` and the stored
+key. No `details.cleanup` means the object was removed; `cleanup: 'failed'` means it is **still
+stored** and has to be removed by other means.
 
 ---
 
@@ -758,7 +760,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_PART_TOO_SMALL`         | 400  | Reserved: a `multipart.partSizeBytes` below 5 MiB is rejected at init as `STORAGE_INVALID_CONFIG`                                                                                                                                                                             |
 | `STORAGE_INVALID_PART_COUNT`     | 400  | `getMultipartUploadUrls()` with `parts` not an integer from 1 to 10 000 (`details.provided`, `details.reason`)                                                                                                                                                  |
 | `STORAGE_BUCKET_UNDEFINED`       | 400  | Operation without a bucket and no default in config                                                                                                                                                                |
-| `STORAGE_MULTIPART_ABORTED`      | 500  | A multipart upload failed. `details.abort` is `'completed'` when the library aborted it and `'failed'` (with `abortError`) when the abort itself failed: that upload stays open on the provider until a lifecycle rule removes it |
+| `STORAGE_MULTIPART_ABORTED`      | 500  | A multipart upload failed. `details.abort` is `'completed'` when the library aborted it and `'failed'` (with `abortError`) when the abort itself failed (the message then reads "Multipart upload failed and could not be aborted"): that upload stays open on the provider until a lifecycle rule removes it |
 | `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                                                                                                                    |
 | `STORAGE_TIMEOUT`                | 504  | An attempt got no response headers within `requestTimeoutMs` (the SDK's `TimeoutError`); a multipart source that stays silent for `uploadIdleTimeoutMs` also surfaces as `STORAGE_TIMEOUT` (`details.phase: 'source-idle'`); any other failure inside a multipart upload surfaces as `STORAGE_MULTIPART_ABORTED`                                                                                                                                                                                |
 | `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: empty or over-long `id`, non-positive or non-integer `expirationDays`, bad `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |

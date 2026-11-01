@@ -44,6 +44,17 @@ describe('StorageException', () => {
     expect(body.error.details?.reason).toBe('X')
   })
 
+  it('should use a given message in place of the default one of the code', () => {
+    const body = new StorageException(
+      'STORAGE_KEY_INVALID',
+      undefined,
+      undefined,
+      'A specific message',
+    ).getResponse() as StorageBody
+    expect(body.error.code).toBe('STORAGE_KEY_INVALID')
+    expect(body.error.message).toBe('A specific message')
+  })
+
   it('should omit the details key when none is provided', () => {
     // Details-absent branch of the body spread.
     const body = new StorageException('STORAGE_KEY_INVALID').getResponse() as StorageBody
