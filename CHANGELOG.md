@@ -13,6 +13,44 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **With a `keyPrefix`, a post-upload scan never removed the object it rejected.** The cleanup passed
+  the already-prefixed key to `delete()`, which prefixes it again, so it deleted `prefix/prefix/key`
+  (nothing), succeeded, and the rejected object stayed stored: no error beyond the scan verdict and no
+  log line. The cleanup now targets the object's real key.
+- **A failed cleanup or abort is no longer reported as a clean outcome.** These paths told the caller
+  one thing while the provider held another:
+  - A `post-upload` scan that rejected an object deleted it and rejected with the verdict; when that
+    delete failed, the caller saw only the verdict (`STORAGE_SCAN_INFECTED`) while the object stayed
+    stored, and the failure was a log line. The verdict is still the error, and its `details` now
+    carry `cleanup: 'failed'`, the `key` and the delete failure (`cleanupError`); the log line is at
+    error level with the code `STORAGE_SCAN_CLEANUP_FAILED`.
+  - A multipart upload whose `CompleteMultipartUpload` failed was reported as aborted but was never
+    aborted: the upload and its parts stayed open on the provider. The library now sends
+    `AbortMultipartUpload` itself.
+  - When the abort also failed, the SDK threw the abort failure in place of the failure that caused
+    it. The original failure is now the error, and `details.abort` is `'completed'` or `'failed'`
+    (with `abortError`). The same holds for the silent-source abort (`STORAGE_TIMEOUT`,
+    `details.phase: 'source-idle'`).
+  - After `delete()` or `deleteMany()` removed an object, a repeated `upload()` with the same
+    `idempotencyKey` was answered from the cache with a success (`fromIdempotencyCache: true`) for an
+    object that no longer existed. Both now drop the cache entries of the objects they delete. The
+    cache is per instance, so a delete made by another replica or outside the library still does not
+    reach it.
+
+  **Apply to a derived backend:** if you use a `keyPrefix` together with a `post-upload` scanner,
+  **audit your bucket** for objects that failed a scan in an earlier version: they were never removed
+  and nothing was logged, so your logs will not list them. Re-scan the prefix, or delete what your
+  scanner flagged. Error shapes also change, not codes. Code that reads `error.details` of
+  `STORAGE_SCAN_INFECTED`, `STORAGE_SCAN_INCONCLUSIVE`, `STORAGE_MULTIPART_ABORTED` or the
+  source-idle `STORAGE_TIMEOUT` gains the fields above: treat `details.cleanup === 'failed'` as
+  "rejected but still stored" and alert on it. A failed multipart upload now costs one more request,
+  the `AbortMultipartUpload` the SDK used to send (the credentials already needed
+  `s3:AbortMultipartUpload`). A repeated `upload()` after a `delete()` now stores the object again
+  instead of returning the earlier result. `exists()` is unchanged and still returns `false` for any
+  failure that is not a 404; the README now says so next to the method.
+
 ### Changed
 
 - **The Stryker gate is 100.** `stryker.config.json` now fails a mutation run below 100 (`thresholds.break`

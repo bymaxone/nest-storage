@@ -522,7 +522,7 @@ export class StorageService {
   /** HEAD — metadata without downloading. @throws STORAGE_OBJECT_NOT_FOUND. */
   head(key: string, options?: { bucket?: string }): Promise<ObjectMetadata>
 
-  /** False on 404; warning on non-404 errors. A missing bucket also reads as false (HEAD has no body). */
+  /** False on 404; a warning and false on any other error (403, 5xx, timeout), so a transient failure reads as absent. A missing bucket also reads as false (HEAD has no body). */
   exists(key: string, options?: { bucket?: string }): Promise<boolean>
 
   /** One HeadBucket for a readiness check. Resolves when reachable; otherwise rejects STORAGE_BUCKET_NOT_FOUND (404), STORAGE_BUCKET_ACCESS_DENIED (403), STORAGE_BUCKET_REGION_MISMATCH (301) or STORAGE_TIMEOUT. Needs s3:ListBucket. */

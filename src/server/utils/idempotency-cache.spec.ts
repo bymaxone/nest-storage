@@ -129,4 +129,33 @@ describe('IdempotencyCache', () => {
       expect(cache.size()).toBe(0)
     })
   })
+
+  describe('invalidate', () => {
+    it('should drop every entry whose result is the given object and report how many', () => {
+      // Two idempotency keys can point at one object; both go stale when it is deleted.
+      const cache = new IdempotencyCache(10, 1000)
+      cache.set('one', makeResult('a.txt'))
+      cache.set('two', makeResult('a.txt'))
+      cache.set('other', makeResult('b.txt'))
+
+      expect(cache.invalidate('b', 'a.txt')).toBe(2)
+
+      expect(cache.get('one')).toBeUndefined()
+      expect(cache.get('two')).toBeUndefined()
+      expect(cache.get('other')).toBeDefined()
+    })
+
+    it('should leave an entry for the same key in another bucket', () => {
+      const cache = new IdempotencyCache(10, 1000)
+      cache.set('here', makeResult('a.txt'))
+
+      expect(cache.invalidate('another-bucket', 'a.txt')).toBe(0)
+
+      expect(cache.get('here')).toBeDefined()
+    })
+
+    it('should report zero for an empty cache', () => {
+      expect(new IdempotencyCache(10, 1000).invalidate('b', 'a.txt')).toBe(0)
+    })
+  })
 })

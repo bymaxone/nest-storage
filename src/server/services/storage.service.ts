@@ -11,7 +11,6 @@ import {
   CopyObjectCommand,
   DeleteObjectCommand,
   HeadBucketCommand,
-  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
@@ -38,6 +37,9 @@ import { FileScannerService } from './file-scanner.service'
 import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
+import { withCleanupFailure } from '../errors/scan-cleanup-error'
+import { closeMultipartUpload } from '../utils/multipart-abort'
+import { deleteObjectsChunk } from '../utils/delete-objects'
 import { mapBucketCheckError } from '../errors/bucket-check-error-mapper'
 import { describeError } from '../utils/describe-error'
 import { toListResult } from '../utils/list-result'
@@ -198,7 +200,11 @@ export class StorageService {
    * buffered without limit. Other bodies and modes pass through unchanged.
    */
   private async bufferForPreUploadScan(body: UploadBody, finalKey: string): Promise<UploadBody> {
-    if (!this.scanner.isEnabled() || this.scanner.getMode() !== 'pre-upload' || isBufferLike(body)) {
+    if (
+      !this.scanner.isEnabled() ||
+      this.scanner.getMode() !== 'pre-upload' ||
+      isBufferLike(body)
+    ) {
       return body
     }
     const maxSizeBytes = this.options.validation?.maxSizeBytes
@@ -215,7 +221,8 @@ export class StorageService {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
         key: finalKey,
         maxSizeBytes,
-        reason: 'The stream is longer than validation.maxSizeBytes, so it cannot be scanned before upload',
+        reason:
+          'The stream is longer than validation.maxSizeBytes, so it cannot be scanned before upload',
       })
     }
     return buffered
@@ -271,12 +278,17 @@ export class StorageService {
         ...(options.size !== undefined ? { size: options.size } : {}),
       })
     } catch (scanErr) {
-      await this.delete(finalKey, { bucket }).catch((deleteErr: unknown) => {
+      // `delete()` takes the caller's key and prefixes it, so it is given the relative key.
+      const key = this.keyResolver.stripPrefix(finalKey)
+      try {
+        await this.delete(key, { bucket })
+      } catch (deleteErr) {
         this.logger.error(
-          `Post-upload cleanup failed for infected/inconclusive object: ${finalKey}`,
+          `STORAGE_SCAN_CLEANUP_FAILED: the rejected object is still stored: ${key}`,
           describeError(deleteErr),
         )
-      })
+        throw withCleanupFailure(scanErr, key, deleteErr)
+      }
       throw scanErr
     }
   }
@@ -419,12 +431,13 @@ export class StorageService {
         .send(new DeleteObjectCommand({ Bucket: bucket, Key: finalKey }))
     } catch (err) {
       const mapped = mapAwsError(err, { key: finalKey, bucket, op: 'delete' })
-      if (mapped.code === STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND) {
-        this.logger.warn(`delete() — key not found (idempotent no-op): ${finalKey}`)
-        return
+      if (mapped.code !== STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND) {
+        throw mapped
       }
-      throw mapped
+      this.logger.warn(`delete() — key not found (idempotent no-op): ${finalKey}`)
     }
+    // The object is gone, so an upload cached as having created it no longer holds.
+    this.idempotencyCache.invalidate(bucket, this.keyResolver.stripPrefix(finalKey))
   }
 
   /**
@@ -557,8 +570,10 @@ export class StorageService {
   }
 
   /**
-   * Multipart upload via `@aws-sdk/lib-storage`. `leavePartsOnError: false` makes
-   * the SDK abort and clean up parts on failure, so no manual abort is issued.
+   * Multipart upload via `@aws-sdk/lib-storage`. The SDK is told to leave the parts
+   * (`leavePartsOnError: true`) because its own abort runs inside its failure path: a failing
+   * abort replaced the failure that caused it, and a failed `CompleteMultipartUpload` was never
+   * aborted. This method aborts the upload itself and reports the outcome in the error details.
    */
   private async uploadMultipart(
     options: UploadOptions,
@@ -584,14 +599,9 @@ export class StorageService {
       params,
       queueSize: this.options.multipart.queueSize,
       partSize: this.options.multipart.partSizeBytes,
-      leavePartsOnError: false,
+      leavePartsOnError: true,
     })
-    if (options.onProgress) {
-      const onProgress = options.onProgress
-      uploader.on('httpUploadProgress', (event) => {
-        this.emitProgress(onProgress, event.loaded, event.total, event.part)
-      })
-    }
+    this.forwardProgress(uploader, options.onProgress)
     try {
       const response = await uploader.done()
       return this.buildUploadResult({
@@ -604,8 +614,32 @@ export class StorageService {
         multipart: true,
       })
     } catch (err) {
-      throw mapMultipartError(err, { key: finalKey, bucket })
+      return this.failMultipart(err, finalKey, bucket, uploader.uploadId)
     }
+  }
+
+  /** Relays the uploader's progress events to the caller's callback, when there is one. */
+  private forwardProgress(uploader: Upload, onProgress: UploadOptions['onProgress']): void {
+    if (!onProgress) return
+    uploader.on('httpUploadProgress', (event) => {
+      this.emitProgress(onProgress, event.loaded, event.total, event.part)
+    })
+  }
+
+  /** Aborts the multipart upload that failed, then throws the original failure with the outcome. */
+  private async failMultipart(
+    err: unknown,
+    finalKey: string,
+    bucket: string,
+    uploadId: string | undefined,
+  ): Promise<never> {
+    const abort = await closeMultipartUpload(
+      this.s3Provider.getClient(),
+      bucket,
+      finalKey,
+      uploadId,
+    )
+    throw mapMultipartError(err, { key: finalKey, bucket, ...abort })
   }
 
   /** Converts a `Uint8Array` body to a `Buffer` for SDK safety; passes others through. */
@@ -740,45 +774,14 @@ export class StorageService {
     const failed: FailedDeletion[] = []
     for (let i = 0; i < normalized.length; i += DELETE_BATCH_LIMIT) {
       const chunk = normalized.slice(i, i + DELETE_BATCH_LIMIT)
-      const outcome = await this.deleteChunk(bucket, chunk)
+      const outcome = await deleteObjectsChunk(this.s3Provider.getClient(), bucket, chunk, (key) =>
+        this.keyResolver.stripPrefix(key),
+      )
       deleted.push(...outcome.deleted)
       failed.push(...outcome.failed)
     }
-    return { deleted, failed }
-  }
-
-  /** Deletes one chunk (≤ 1000 keys); a whole-chunk failure fails every key. */
-  private async deleteChunk(bucket: string, chunk: string[]): Promise<DeleteManyResult> {
-    const deleted: string[] = []
-    const failed: FailedDeletion[] = []
-    try {
-      const response = await this.s3Provider.getClient().send(
-        new DeleteObjectsCommand({
-          Bucket: bucket,
-          // `Quiet: false` returns both successes and per-key errors.
-          Delete: { Objects: chunk.map((key) => ({ Key: key })), Quiet: false },
-        }),
-      )
-      for (const ok of response.Deleted ?? []) {
-        if (ok.Key !== undefined) {
-          deleted.push(this.keyResolver.stripPrefix(ok.Key))
-        }
-      }
-      for (const failure of response.Errors ?? []) {
-        if (failure.Key !== undefined) {
-          failed.push({
-            key: this.keyResolver.stripPrefix(failure.Key),
-            error: `${failure.Code ?? 'Unknown'}: ${failure.Message ?? ''}`,
-          })
-        }
-      }
-    } catch (err) {
-      // A non-Error throw (or an Error without a message) must still coerce to the
-      // `string` that `FailedDeletion.error` declares — never `undefined`.
-      const message = describeError(err)
-      for (const key of chunk) {
-        failed.push({ key: this.keyResolver.stripPrefix(key), error: message })
-      }
+    for (const key of deleted) {
+      this.idempotencyCache.invalidate(bucket, key)
     }
     return { deleted, failed }
   }

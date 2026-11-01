@@ -723,8 +723,8 @@ describe('StorageService — scan integration', () => {
     expect(send).toHaveBeenCalledTimes(2)
   })
 
-  it('still rethrows the scan error when the post-upload delete also fails', async () => {
-    // delete failure must be absorbed (logged); the original scan error propagates
+  it('keeps the scan verdict as the error and says the object is still stored when the post-upload delete fails', async () => {
+    // The delete failure is logged and reported in the error details; the verdict code is kept.
     const infected = new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED, undefined, {
       engine: 'test',
       threat: 'Virus.Y',
@@ -746,11 +746,16 @@ describe('StorageService — scan integration', () => {
       .upload({ key: 'infected2.bin', body: Buffer.from('evil'), contentType: 'application/octet-stream' })
       .catch((e: unknown) => e)
 
-    expect(err).toBe(infected)
-    // The swallowed delete failure must be logged with the specific cleanup-failed message
-    // (proving the catch body is not empty), alongside the delete error's message.
+    expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED)
+    expect(detailsOf(err)).toMatchObject({
+      engine: 'test',
+      threat: 'Virus.Y',
+      key: 'infected2.bin',
+      cleanup: 'failed',
+    })
+    // The delete failure is logged at error level with a stable code, alongside the delete error's message.
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Post-upload cleanup failed'),
+      expect.stringContaining('STORAGE_SCAN_CLEANUP_FAILED'),
       expect.anything(),
     )
     errorSpy.mockRestore()

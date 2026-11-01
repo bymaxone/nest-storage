@@ -115,7 +115,8 @@ describe('StorageService — multipart upload', () => {
     expect(result.multipart).toBe(true)
     expect(result.versionId).toBe('v1')
     expect(result.size).toBeUndefined()
-    expect(uploaderOptions().leavePartsOnError).toBe(false)
+    // The service aborts the upload itself, so the SDK is told to leave the parts to it.
+    expect(uploaderOptions().leavePartsOnError).toBe(true)
     expect(uploaderOptions().queueSize).toBe(resolved.multipart.queueSize)
     expect(uploaderOptions().partSize).toBe(resolved.multipart.partSizeBytes)
     expect(uploaderOptions().params).toMatchObject({
