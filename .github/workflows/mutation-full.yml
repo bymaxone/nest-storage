@@ -33,7 +33,10 @@ jobs:
   full:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
-      # Measured cold: 13 min. Generous on purpose — nothing blocks on this job, so an
-      # over-wide ceiling costs only the minutes it uses, while an under-tight one costs the
-      # whole run and leaves the week without a measured baseline.
-      timeout-minutes: 60
+      # Measured cold: 55 min for 1476 mutants (run 41278242161); a later run (41348204194) was at
+      # 1511 of 1525 mutants when the 60-minute ceiling cancelled it. A mutant costs the time of
+      # the tests that cover it, so the run grows with the real-time waits in those specs, not
+      # with the mutant count. Generous on purpose — nothing blocks on this job, so an over-wide
+      # ceiling costs only the minutes it uses, while an under-tight one costs the whole run and
+      # leaves the week without a measured baseline.
+      timeout-minutes: 120
