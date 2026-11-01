@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-11-01
+
 ### Fixed
 
 - **With a `keyPrefix`, a post-upload scan never removed the object it rejected.** The cleanup passed
@@ -551,4 +553,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.2]: https://github.com/bymaxone/nest-storage/compare/v1.1.1...v1.1.2
 [1.1.3]: https://github.com/bymaxone/nest-storage/compare/v1.1.2...v1.1.3
 [1.1.4]: https://github.com/bymaxone/nest-storage/compare/v1.1.3...v1.1.4
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.4...HEAD
+[1.1.5]: https://github.com/bymaxone/nest-storage/compare/v1.1.4...v1.1.5
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.5...HEAD
