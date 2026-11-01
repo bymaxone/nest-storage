@@ -7,7 +7,7 @@
 
 /** Outcome of an upload — returned to the caller. */
 export interface UploadResult {
-  /** Final key after normalization and the global key prefix. */
+  /** The object key relative to `keyPrefix`: pass it back to any method as is. */
   key: string
   bucket: string
   etag: string
