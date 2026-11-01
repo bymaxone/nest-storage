@@ -31,7 +31,11 @@ describe('withIdleTimeout', () => {
     const failure = collect(withIdleTimeout(source, 50))
 
     await expect(failure).rejects.toBeInstanceOf(SourceIdleError)
-    await expect(failure).rejects.toMatchObject({ idleMs: 50, name: 'SourceIdleError' })
+    await expect(failure).rejects.toMatchObject({
+      idleMs: 50,
+      name: 'SourceIdleError',
+      message: 'The upload source delivered no bytes for 50 ms',
+    })
     expect(source.destroyed).toBe(true)
   })
 
@@ -78,6 +82,20 @@ describe('withIdleTimeout', () => {
     }
 
     expect(seen.join('')).toBe('onetwo')
+  })
+
+  it('hands the uploader bytes even when the source emits strings', async () => {
+    // A source with an encoding set emits strings; the wrapper is a byte stream.
+    const source = Readable.from(['ab', 'cd'])
+    const chunks: unknown[] = []
+
+    for await (const chunk of withIdleTimeout(source, 1000)) {
+      chunks.push(chunk)
+    }
+
+    expect(chunks.length).toBeGreaterThan(0)
+    expect(chunks.every((chunk) => Buffer.isBuffer(chunk))).toBe(true)
+    expect(Buffer.concat(chunks as Buffer[]).toString()).toBe('abcd')
   })
 
   it('passes a source error through to the reader', async () => {
