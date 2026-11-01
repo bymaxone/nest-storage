@@ -13,8 +13,39 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-31
+
+### Changed
+
+- **Keys the library returns are relative to `keyPrefix`, so every one can be passed back.**
+  `UploadResult.key` and `ObjectMetadata.key` (from `head`, `download`, `downloadBuffer`) carried
+  the `keyPrefix`, while every method prepends it again, so with a prefix set `head(r.key)`,
+  `exists`, `download`, `delete` and a signed-URL call addressed `prefix/prefix/key`. `delete`
+  was the quiet one: it removed nothing and reported success. `list()` and `deleteMany()` already
+  returned relative keys. `UploadResult.publicUrl` is unchanged and still carries the prefix.
+
+  **Apply to a derived backend:** only a deployment with a non-empty `keyPrefix` is affected. In
+  1.0.0 to 1.1.1 the returned key is `prefix/name` and cannot be passed back; from this release it is
+  `name`. A `.key` value you stored from an earlier version carries the prefix: strip it once (for
+  example `stored.slice(prefix.length + 1)`, where `prefix` is the normalized `keyPrefix` without
+  surrounding slashes) before passing it to the library, and when you read keys from your database
+  stop adding or removing the prefix yourself.
+- **`upload()` destroys a `Readable` body it rejects.** A rejected upload (invalid key or content
+  type, a validation or scan failure, a provider error) used to leave the caller's stream open, so the
+  file handle or the connection behind it stayed held. The library now takes ownership of the stream, as
+  `stream.pipeline` does, and destroys it with the error; a cache hit destroys it unread. Destroying can
+  emit `'error'` on a stream nobody listens to (with the error given, or when the stream's own cleanup
+  fails), so the library attaches a no-op listener first.
+
+  **Apply to a derived backend:** do not reuse a stream you passed to `upload()`. A caller that
+  fixed a validation error and retried with the same, still unread, stream must open a new one.
+
 ### Added
 
+- **`STORAGE_NOT_MODIFIED` (304) and `STORAGE_PRECONDITION_FAILED` (412).** `download()` with
+  `ifNoneMatch` equal to the current ETag, or `ifMatch` that differs, used to surface as a generic
+  `STORAGE_PROVIDER_ERROR` (502); they now have their own codes, so a caller can branch on them.
+  A 304 is thrown, not returned.
 - **`BucketLifecycleService.upsert` writes multipart-abort rules.** An input with
   `abortIncompleteMultipartDays` instead of `expirationDays` adds or replaces an
   `AbortIncompleteMultipartUpload` rule, so abandoned multipart uploads stop holding storage. The
@@ -40,38 +71,6 @@ note on each entry is the compatibility contract — read it, not the number.
   lifecycle rules through the raw `S3Client` can switch to this service. Rule prefixes are relative
   to `keyPrefix`; with a `keyPrefix` set, rules outside it are returned flagged and are not changed.
   Providers other than MinIO (tested) and Cloudflare R2 (documented) are unverified; see the README.
-
-### Changed
-
-- **`upload()` destroys a `Readable` body it rejects.** A rejected upload (invalid key or content
-  type, a validation or scan failure, a provider error) used to leave the caller's stream open, so the
-  file handle or the connection behind it stayed held. The library now takes ownership of the stream, as
-  `stream.pipeline` does, and destroys it with the error; a cache hit destroys it unread. Destroying can
-  emit `'error'` on a stream nobody listens to (with the error given, or when the stream's own cleanup
-  fails), so the library attaches a no-op listener first.
-
-  **Apply to a derived backend:** do not reuse a stream you passed to `upload()`. A caller that
-  fixed a validation error and retried with the same, still unread, stream must open a new one.
-- **Keys the library returns are relative to `keyPrefix`, so every one can be passed back.**
-  `UploadResult.key` and `ObjectMetadata.key` (from `head`, `download`, `downloadBuffer`) carried
-  the `keyPrefix`, while every method prepends it again, so with a prefix set `head(r.key)`,
-  `exists`, `download`, `delete` and a signed-URL call addressed `prefix/prefix/key`. `delete`
-  was the quiet one: it removed nothing and reported success. `list()` and `deleteMany()` already
-  returned relative keys. `UploadResult.publicUrl` is unchanged and still carries the prefix.
-
-  **Apply to a derived backend:** only a deployment with a non-empty `keyPrefix` is affected. In
-  1.0.0 to 1.1.1 the returned key is `prefix/name` and cannot be passed back; from this release it is
-  `name`. A `.key` value you stored from an earlier version carries the prefix: strip it once (for
-  example `stored.slice(prefix.length + 1)`, where `prefix` is the normalized `keyPrefix` without
-  surrounding slashes) before passing it to the library, and when you read keys from your database
-  stop adding or removing the prefix yourself.
-
-### Added
-
-- **`STORAGE_NOT_MODIFIED` (304) and `STORAGE_PRECONDITION_FAILED` (412).** `download()` with
-  `ifNoneMatch` equal to the current ETag, or `ifMatch` that differs, used to surface as a generic
-  `STORAGE_PROVIDER_ERROR` (502); they now have their own codes, so a caller can branch on them.
-  A 304 is thrown, not returned.
 
 ### Fixed
 
@@ -452,4 +451,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.0.6]: https://github.com/bymaxone/nest-storage/compare/v1.0.5...v1.0.6
 [1.1.0]: https://github.com/bymaxone/nest-storage/compare/v1.0.6...v1.1.0
 [1.1.1]: https://github.com/bymaxone/nest-storage/compare/v1.1.0...v1.1.1
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.1...HEAD
+[1.1.2]: https://github.com/bymaxone/nest-storage/compare/v1.1.1...v1.1.2
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.2...HEAD
