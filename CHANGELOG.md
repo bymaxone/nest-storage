@@ -19,7 +19,7 @@ note on each entry is the compatibility contract — read it, not the number.
   the already-prefixed key to `delete()`, which prefixes it again, so it deleted `prefix/prefix/key`
   (nothing), succeeded, and the rejected object stayed stored: no error beyond the scan verdict and no
   log line. The cleanup now targets the object's real key.
-- **A failed cleanup or abort is no longer reported as a clean outcome.** Four paths told the caller
+- **A failed cleanup or abort is no longer reported as a clean outcome.** These paths told the caller
   one thing while the provider held another:
   - A `post-upload` scan that rejected an object deleted it and rejected with the verdict; when that
     delete failed, the caller saw only the verdict (`STORAGE_SCAN_INFECTED`) while the object stayed
