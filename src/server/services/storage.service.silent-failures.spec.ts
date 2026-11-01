@@ -5,7 +5,7 @@
  * idempotency entries that promise the deleted object.
  * @layer server/services
  */
-import { createServer, type Server } from 'node:http'
+import { createServer, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Readable } from 'node:stream'
 import { Logger } from '@nestjs/common'
@@ -41,70 +41,96 @@ describe('silent failures', () => {
   const objects = new Set<string>()
   let moduleRef: TestingModule | undefined
 
+  /** One request to the stand-in, with its body already read. */
+  interface Exchange {
+    method: string
+    url: URL
+    body: string
+    res: ServerResponse
+  }
+
+  const xml = (res: ServerResponse, code: number, body: string): void => {
+    res.setHeader('content-type', 'application/xml')
+    res.statusCode = code
+    res.end(body)
+  }
+  const reply = (res: ServerResponse, code: number): void => {
+    res.statusCode = code
+    res.end()
+  }
+  const has = (x: Exchange, param: string): boolean => x.url.searchParams.has(param)
+
+  const bulkDelete = ({ res, body }: Exchange): void => {
+    const keys = [...body.matchAll(/<Key>(.*?)<\/Key>/g)].map((m) => m[1] ?? '')
+    for (const key of keys) objects.delete(`/b/${key}`)
+    const deleted = keys.map((key) => `<Deleted><Key>${key}</Key></Deleted>`).join('')
+    xml(res, 200, `<DeleteResult>${deleted}</DeleteResult>`)
+  }
+  const createUpload = ({ res }: Exchange): void => {
+    xml(
+      res,
+      200,
+      '<InitiateMultipartUploadResult><UploadId>u1</UploadId></InitiateMultipartUploadResult>',
+    )
+  }
+  const putPart = ({ res }: Exchange): void => {
+    res.setHeader('ETag', '"p"')
+    reply(res, mode.partFails ? 500 : 200)
+  }
+  const completeUpload = ({ res }: Exchange): void => {
+    if (mode.completeFails) reply(res, 500)
+    else
+      xml(
+        res,
+        200,
+        '<CompleteMultipartUploadResult><ETag>"e"</ETag></CompleteMultipartUploadResult>',
+      )
+  }
+  const abortUpload = ({ res }: Exchange): void => {
+    if (mode.abortNoSuchUpload)
+      xml(res, 404, '<Error><Code>NoSuchUpload</Code><Message>gone</Message></Error>')
+    else reply(res, mode.abortFails ? 500 : 204)
+  }
+  const deleteObject = ({ res, url }: Exchange): void => {
+    if (!mode.deleteFails) objects.delete(url.pathname)
+    reply(res, mode.deleteFails ? 500 : 204)
+  }
+  const putObject = ({ res, url }: Exchange): void => {
+    objects.add(url.pathname)
+    res.setHeader('ETag', '"o"')
+    reply(res, 200)
+  }
+  const headObject = ({ res, url }: Exchange): void => {
+    reply(res, objects.has(url.pathname) ? 200 : 404)
+  }
+
+  /** The stand-in's operations, matched in order; a request that matches none is a 404. */
+  const routes: [(x: Exchange) => boolean, (x: Exchange) => void][] = [
+    [(x) => x.method === 'POST' && has(x, 'delete'), bulkDelete],
+    [(x) => x.method === 'POST' && has(x, 'uploads'), createUpload],
+    [(x) => x.method === 'PUT' && has(x, 'partNumber'), putPart],
+    [(x) => x.method === 'POST' && has(x, 'uploadId'), completeUpload],
+    [(x) => x.method === 'DELETE' && has(x, 'uploadId'), abortUpload],
+    [(x) => x.method === 'DELETE', deleteObject],
+    [(x) => x.method === 'PUT', putObject],
+    [(x) => x.method === 'HEAD', headObject],
+  ]
+
+  const respond = (x: Exchange): void => {
+    const kind = has(x, 'uploads') ? '?uploads' : has(x, 'uploadId') ? '?uploadId' : ''
+    calls.push(`${x.method} ${x.url.pathname}${kind}`)
+    const route = routes.find(([matches]) => matches(x))
+    if (route) route[1](x)
+    else reply(x.res, 404)
+  }
+
   beforeAll(async () => {
     server = createServer((req, res) => {
-      const url = new URL(req.url ?? '/', 'http://stand-in')
       const chunks: Buffer[] = []
       req.on('data', (chunk: Buffer) => chunks.push(chunk))
       req.on('end', () => {
-        const kind = url.searchParams.has('uploads')
-          ? '?uploads'
-          : url.searchParams.has('uploadId')
-            ? '?uploadId'
-            : ''
-        calls.push(`${req.method ?? ''} ${url.pathname}${kind}`)
-        const xml = (code: number, body: string): void => {
-          res.setHeader('content-type', 'application/xml')
-          res.statusCode = code
-          res.end(body)
-        }
-        const reply = (code: number): void => {
-          res.statusCode = code
-          res.end()
-        }
-        const method = req.method ?? ''
-        if (method === 'POST' && url.searchParams.has('delete')) {
-          const keys = [
-            ...Buffer.concat(chunks)
-              .toString()
-              .matchAll(/<Key>(.*?)<\/Key>/g),
-          ].map((m) => m[1] ?? '')
-          for (const key of keys) objects.delete(`/b/${key}`)
-          xml(
-            200,
-            `<DeleteResult>${keys.map((key) => `<Deleted><Key>${key}</Key></Deleted>`).join('')}</DeleteResult>`,
-          )
-        } else if (method === 'POST' && url.searchParams.has('uploads')) {
-          xml(
-            200,
-            '<InitiateMultipartUploadResult><UploadId>u1</UploadId></InitiateMultipartUploadResult>',
-          )
-        } else if (method === 'PUT' && url.searchParams.has('partNumber')) {
-          res.setHeader('ETag', '"p"')
-          reply(mode.partFails ? 500 : 200)
-        } else if (method === 'POST' && url.searchParams.has('uploadId')) {
-          if (mode.completeFails) reply(500)
-          else
-            xml(
-              200,
-              '<CompleteMultipartUploadResult><ETag>"e"</ETag></CompleteMultipartUploadResult>',
-            )
-        } else if (method === 'DELETE' && url.searchParams.has('uploadId')) {
-          if (mode.abortNoSuchUpload)
-            xml(404, '<Error><Code>NoSuchUpload</Code><Message>gone</Message></Error>')
-          else reply(mode.abortFails ? 500 : 204)
-        } else if (method === 'DELETE') {
-          if (!mode.deleteFails) objects.delete(url.pathname)
-          reply(mode.deleteFails ? 500 : 204)
-        } else if (method === 'PUT') {
-          objects.add(url.pathname)
-          res.setHeader('ETag', '"o"')
-          reply(200)
-        } else if (method === 'HEAD') {
-          reply(objects.has(url.pathname) ? 200 : 404)
-        } else {
-          reply(404)
-        }
+        const url = new URL(req.url ?? '/', 'http://stand-in')
+        respond({ method: req.method ?? '', url, body: Buffer.concat(chunks).toString(), res })
       })
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))

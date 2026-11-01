@@ -2,6 +2,7 @@
  * @fileoverview The error for an object a post-upload scan rejected and that could not be removed.
  * @layer server/errors
  */
+import { HttpStatus } from '@nestjs/common'
 import { StorageException } from './storage-exception'
 import { withCleanupFailure } from './scan-cleanup-error'
 
@@ -30,6 +31,24 @@ describe('withCleanupFailure', () => {
       cleanup: 'failed',
       cleanupError: 'delete refused',
     })
+  })
+
+  it('keeps an HTTP status the scanner chose for its verdict', () => {
+    const verdict = new StorageException('STORAGE_SCAN_INFECTED', HttpStatus.SERVICE_UNAVAILABLE)
+
+    const error = withCleanupFailure(verdict, 'k', new Error('delete refused')) as StorageException
+
+    expect(error.getStatus()).toBe(503)
+    expect(error.code).toBe('STORAGE_SCAN_INFECTED')
+  })
+
+  it("falls back to the code's own status for a status outside the HTTP enum", () => {
+    const verdict = new StorageException('STORAGE_SCAN_INFECTED')
+    jest.spyOn(verdict, 'getStatus').mockReturnValue(599)
+
+    const error = withCleanupFailure(verdict, 'k', new Error('delete refused')) as StorageException
+
+    expect(error.getStatus()).toBe(422)
   })
 
   it('adds the cleanup details to a verdict that had none', () => {
