@@ -41,4 +41,9 @@ export const STORAGE_ERROR_MESSAGES: Record<StorageErrorCode, string> = {
     'The storage provider rejected the lifecycle configuration',
   [STORAGE_ERROR_CODES.STORAGE_NOT_MODIFIED]: 'The object has not changed since the supplied ETag',
   [STORAGE_ERROR_CODES.STORAGE_PRECONDITION_FAILED]: 'The object does not satisfy the supplied precondition',
+  [STORAGE_ERROR_CODES.STORAGE_BUCKET_NOT_FOUND]: 'The bucket does not exist',
+  [STORAGE_ERROR_CODES.STORAGE_BUCKET_ACCESS_DENIED]:
+    'The bucket cannot be accessed with these credentials (it may also not exist)',
+  [STORAGE_ERROR_CODES.STORAGE_BUCKET_REGION_MISMATCH]:
+    'The bucket belongs to a different region than the configured one',
 }

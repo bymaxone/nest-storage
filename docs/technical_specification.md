@@ -522,8 +522,11 @@ export class StorageService {
   /** HEAD — metadata without downloading. @throws STORAGE_OBJECT_NOT_FOUND. */
   head(key: string, options?: { bucket?: string }): Promise<ObjectMetadata>
 
-  /** False on 404; warning on non-404 errors. */
+  /** False on 404; warning on non-404 errors. A missing bucket also reads as false (HEAD has no body). */
   exists(key: string, options?: { bucket?: string }): Promise<boolean>
+
+  /** One HeadBucket for a readiness check. Resolves when reachable; otherwise rejects STORAGE_BUCKET_NOT_FOUND (404), STORAGE_BUCKET_ACCESS_DENIED (403), STORAGE_BUCKET_REGION_MISMATCH (301) or STORAGE_TIMEOUT. Needs s3:ListBucket. */
+  checkBucket(options?: { bucket?: string }): Promise<void>
 
   /** Server-side copy (same bucket or cross-bucket); does not transfer bytes through the client. @throws STORAGE_OBJECT_NOT_FOUND when the source key does not exist. */
   copy(options: {
@@ -997,6 +1000,9 @@ export class StorageException extends HttpException {
 | `STORAGE_SIGNED_URL_TTL_INVALID`  | 400  | Per-request `ttlSeconds` ≤ 0. (A `ttlSeconds` above `maxTtlSeconds` is silently clamped, not rejected; the configured `maxTtlSeconds` is itself clamped to the 604800s SigV4 cap at init.) |
 | `STORAGE_PART_TOO_SMALL`          | 400  | Reserved; not thrown today (a `multipart.partSizeBytes` under 5 MB fails at init as `STORAGE_INVALID_CONFIG`) |
 | `STORAGE_INVALID_PART_COUNT`      | 400  | `getMultipartUploadUrls()` called with `parts` not an integer from 1 to 10 000             |
+| `STORAGE_BUCKET_NOT_FOUND`        | 404  | `NoSuchBucket` from any operation that gets an error body, or a 404 from `checkBucket()`    |
+| `STORAGE_BUCKET_ACCESS_DENIED`    | 403  | `checkBucket()` got a 403 (no access, or a missing bucket the caller cannot list)           |
+| `STORAGE_BUCKET_REGION_MISMATCH`  | 500  | `checkBucket()` got a 301 / `PermanentRedirect` (the bucket is in another region)           |
 | `STORAGE_NOT_MODIFIED`            | 304  | `download()` with `ifNoneMatch` equal to the current ETag                                  |
 | `STORAGE_PRECONDITION_FAILED`     | 412  | `download()` with `ifMatch` different from the current ETag                                |
 | `STORAGE_BUCKET_UNDEFINED`        | 400  | Operation without a bucket and no default bucket in the config                                 |
@@ -1006,8 +1012,9 @@ export class StorageException extends HttpException {
 
 ### 12.3 AWS SDK → `StorageException` mapping
 
-- `NotFound` / 404 → `STORAGE_OBJECT_NOT_FOUND`
-- `NoSuchBucket`, `AccessDenied` (403) → `STORAGE_PROVIDER_ERROR`
+- `NoSuchBucket` → `STORAGE_BUCKET_NOT_FOUND`
+- `NotFound` / 404 → `STORAGE_OBJECT_NOT_FOUND` (a `HEAD` 404 carries no body, so a missing bucket reads as a missing object there)
+- `AccessDenied` (403) → `STORAGE_PROVIDER_ERROR`
 - `AccessControlListNotSupported` (400) → `STORAGE_PROVIDER_ERROR` (bucket has ACLs disabled — see §16.1; surface a clear hint that `publicRead` requires a bucket policy / CDN / signed URL)
 - `SlowDown` (503) → `STORAGE_PROVIDER_ERROR` + retry
 - `TimeoutError` → `STORAGE_TIMEOUT`

@@ -285,6 +285,7 @@ The full configuration reference lives in `docs/technical_specification.md` §4.
 
 [aws-presigned-expiry]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html
 [aws-get-object]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html
+[aws-head-object]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html
 [aws-mpu-limits]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
 [aws-mpu-abort-rule]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpu-abort-incomplete-mpu-lifecycle-config.html
 [sdk-request-timeout]: https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/node-configuring-maxsockets.html
@@ -749,6 +750,9 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: empty or over-long `id`, non-positive or non-integer `expirationDays`, bad `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |
 | `STORAGE_LIFECYCLE_UNSUPPORTED` | 501  | The provider does not implement the lifecycle API |
 | `STORAGE_LIFECYCLE_REJECTED` | 422  | The provider refused the lifecycle configuration |
+| `STORAGE_BUCKET_NOT_FOUND`       | 404  | The provider answered `NoSuchBucket` (any operation that gets an error body: `download()`, `upload()`, `list()`, `copy()`, `delete()`), or `checkBucket()` got a 404 |
+| `STORAGE_BUCKET_ACCESS_DENIED`   | 403  | `checkBucket()` got a 403: the credentials cannot use the bucket, or it does not exist and the credentials cannot list (S3 answers 403 to a caller without `s3:ListBucket`) |
+| `STORAGE_BUCKET_REGION_MISMATCH` | 500  | `checkBucket()` got a 301 or `PermanentRedirect`: the bucket lives in another region than the configured one |
 | `STORAGE_NOT_MODIFIED`           | 304  | `download()` with `ifNoneMatch` equal to the current ETag |
 | `STORAGE_PRECONDITION_FAILED`    | 412  | `download()` with `ifMatch` different from the current ETag |
 
@@ -782,10 +786,13 @@ This is the index.
 | `head`           | `(key, options?) => Promise<ObjectMetadata>`                  | Metadata without transferring the body                       |
 | `exists`         | `(key, options?) => Promise<boolean>`                         | `head` reduced to a boolean; any non-404 failure is logged and returns `false`                                  |
 | `getPublicUrl`   | `(key, options?) => string`                                   | Composed, not signed — for buckets that are public by policy |
-| `delete`         | `(key, options?) => Promise<void>`                            | Idempotent, as S3 delete is                                  |
+| `delete`         | `(key, options?) => Promise<void>`                            | Idempotent for a missing object, as S3 delete is; a missing bucket rejects `STORAGE_BUCKET_NOT_FOUND` |
 | `deleteMany`     | `(keys: string[], options?) => Promise<DeleteManyResult>`     | Partial failures are reported, not thrown                    |
 | `list`           | `(options: ListOptions) => Promise<ListResult>`               | Paginated by continuation token                              |
 | `copy`           | `(options: CopyOptions) => Promise<{ etag }>`            | Server-side; the bytes never reach this process              |
+| `checkBucket`    | `(options?) => Promise<void>`                                 | One `HeadBucket` for a readiness check; resolves when the bucket is reachable, otherwise rejects `STORAGE_BUCKET_NOT_FOUND`, `STORAGE_BUCKET_ACCESS_DENIED`, `STORAGE_BUCKET_REGION_MISMATCH` or `STORAGE_TIMEOUT`; needs `s3:ListBucket`; never called at boot |
+
+**A missing bucket and `head()` / `exists()`.** A `HEAD` response has no body, so the provider cannot say which of the bucket and the key is missing: AWS documents that "if the `HEAD` request generates an error, it returns a generic code, such as `400 Bad Request`, `403 Forbidden`, `404 Not Found` ... It's not possible to retrieve the exact exception of these error codes" ([HeadObject][aws-head-object]). `head()` therefore rejects `STORAGE_OBJECT_NOT_FOUND` and `exists()` returns `false` for a missing bucket too. Call `checkBucket()` to tell the two apart, for example from a readiness endpoint.
 
 ### `SignedUrlService`
 

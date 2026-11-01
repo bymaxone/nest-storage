@@ -29,6 +29,17 @@ describe('mapMultipartError', () => {
     },
   )
 
+  it('maps NoSuchBucket to STORAGE_BUCKET_NOT_FOUND, as a single-request upload does', () => {
+    // The multipart upload starts with CreateMultipartUpload, which gets the same error body.
+    const error = mapMultipartError(
+      { name: 'NoSuchBucket', Code: 'NoSuchBucket', $metadata: { httpStatusCode: 404 } },
+      { key: 'k', bucket: 'b' },
+    )
+
+    expect(error.code).toBe('STORAGE_BUCKET_NOT_FOUND')
+    expect(error.getStatus()).toBe(404)
+  })
+
   it('maps any other failure to STORAGE_MULTIPART_ABORTED with the provider message', () => {
     const error = mapMultipartError(new Error('part 2 failed'), { key: 'k', bucket: 'b' })
 

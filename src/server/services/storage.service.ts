@@ -10,11 +10,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
+  HeadBucketCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
-  type ListObjectsV2CommandOutput,
   PutObjectCommand,
   type PutObjectCommandInput,
 } from '@aws-sdk/client-s3'
@@ -30,7 +30,7 @@ import type {
   DeleteManyResult,
   FailedDeletion,
 } from '../interfaces/delete-many-options.interface'
-import type { ListedObject, ObjectMetadata, UploadResult } from '../../shared/types/storage-types'
+import type { ObjectMetadata, UploadResult } from '../../shared/types/storage-types'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { ValidationService } from './validation.service'
@@ -38,7 +38,9 @@ import { FileScannerService } from './file-scanner.service'
 import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
+import { mapBucketCheckError } from '../errors/bucket-check-error-mapper'
 import { describeError } from '../utils/describe-error'
+import { toListResult } from '../utils/list-result'
 import { guardIdleBody } from '../utils/idle-timeout'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import {
@@ -79,15 +81,6 @@ interface BucketScopedOptions {
 /** The Node `GetObject` body carries the sdk-stream-mixin's byte materializer. */
 interface SdkByteStream {
   transformToByteArray(): Promise<Uint8Array>
-}
-
-/** Minimal shape of a `ListObjectsV2` `Contents` entry consumed by the mapper. */
-interface S3ListEntry {
-  Key?: string | undefined
-  Size?: number | undefined
-  ETag?: string | undefined
-  LastModified?: Date | undefined
-  StorageClass?: string | undefined
 }
 
 /** S3's hard cap on the number of keys returned by one `ListObjectsV2` request. */
@@ -434,6 +427,27 @@ export class StorageService {
     }
   }
 
+  /**
+   * Probes the bucket with one `HeadBucket`, for a readiness check: it resolves when the bucket
+   * is reachable with these credentials and otherwise rejects with a typed code. Nothing in the
+   * module calls it on its own, so booting costs no request. Needs `s3:ListBucket`.
+   *
+   * @param options - Optional per-call bucket override.
+   * @throws StorageException `STORAGE_BUCKET_NOT_FOUND` (404), `STORAGE_BUCKET_ACCESS_DENIED` (403,
+   *   which a provider also answers for a bucket the caller cannot see), `STORAGE_BUCKET_REGION_MISMATCH`
+   *   (301), `STORAGE_TIMEOUT`, or `STORAGE_PROVIDER_ERROR`; `STORAGE_NOT_CONFIGURED` and
+   *   `STORAGE_BUCKET_UNDEFINED` before any request.
+   */
+  async checkBucket(options?: BucketScopedOptions): Promise<void> {
+    this.assertConfigured()
+    const bucket = this.resolveBucket(options?.bucket)
+    try {
+      await this.s3Provider.getClient().send(new HeadBucketCommand({ Bucket: bucket }))
+    } catch (err) {
+      throw mapBucketCheckError(err, { bucket, op: 'checkBucket' })
+    }
+  }
+
   /** Throws when the S3 client was never built (missing credentials). */
   private assertConfigured(): void {
     if (!this.s3Provider.isConfigured()) {
@@ -665,37 +679,9 @@ export class StorageService {
           Delimiter: options.delimiter,
         }),
       )
-      return this.toListResult(response)
+      return toListResult(response, (key) => this.keyResolver.stripPrefix(key))
     } catch (err) {
       throw mapAwsError(err, { bucket, prefix, op: 'list' })
-    }
-  }
-
-  /** Maps a `ListObjectsV2` response onto the public `ListResult` shape. */
-  private toListResult(response: ListObjectsV2CommandOutput): ListResult {
-    const objects = (response.Contents ?? []).map((obj) => this.toListedObject(obj))
-    const commonPrefixes = (response.CommonPrefixes ?? [])
-      .map((cp) => cp.Prefix ?? '')
-      .filter((cp) => cp.length > 0)
-      .map((cp) => this.keyResolver.stripPrefix(cp))
-    return {
-      objects,
-      commonPrefixes,
-      isTruncated: response.IsTruncated ?? false,
-      ...(response.NextContinuationToken !== undefined
-        ? { nextContinuationToken: response.NextContinuationToken }
-        : {}),
-    }
-  }
-
-  /** Maps one `Contents` entry onto `ListedObject`, stripping the global prefix. */
-  private toListedObject(obj: S3ListEntry): ListedObject {
-    return {
-      key: this.keyResolver.stripPrefix(obj.Key ?? ''),
-      size: obj.Size ?? 0,
-      etag: obj.ETag ?? '',
-      lastModified: obj.LastModified ?? new Date(0),
-      ...(obj.StorageClass !== undefined ? { storageClass: obj.StorageClass } : {}),
     }
   }
 

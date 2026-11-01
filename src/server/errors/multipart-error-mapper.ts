@@ -7,12 +7,14 @@ import { HttpStatus } from '@nestjs/common'
 import { StorageException } from './storage-exception'
 import { describeError } from '../utils/describe-error'
 import { SourceIdleError } from '../utils/idle-timeout'
+import { mapAwsError } from './aws-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
 /**
  * @param err - What the uploader rejected with.
  * @param context - Non-sensitive context merged into `details`.
- * @returns `STORAGE_TIMEOUT` (504, `phase: 'source-idle'`) for an idle source, else
+ * @returns `STORAGE_TIMEOUT` (504, `phase: 'source-idle'`) for an idle source,
+ *   `STORAGE_BUCKET_NOT_FOUND` when the provider answered `NoSuchBucket`, else
  *   `STORAGE_MULTIPART_ABORTED`.
  */
 export function mapMultipartError(
@@ -25,6 +27,10 @@ export function mapMultipartError(
       phase: 'source-idle',
       idleMs: err.idleMs,
     })
+  }
+  const bucketMissing = mapAwsError(err, context)
+  if (bucketMissing.code === STORAGE_ERROR_CODES.STORAGE_BUCKET_NOT_FOUND) {
+    return bucketMissing
   }
   return new StorageException(STORAGE_ERROR_CODES.STORAGE_MULTIPART_ABORTED, undefined, {
     ...context,

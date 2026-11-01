@@ -28,6 +28,22 @@ describe('mapAwsError', () => {
     expect(e.code).toBe('STORAGE_OBJECT_NOT_FOUND')
   })
 
+  it.each([
+    ['name', { name: 'NoSuchBucket', $metadata: { httpStatusCode: 404 } }],
+    ['Code', { name: 'Unknown', Code: 'NoSuchBucket', $metadata: { httpStatusCode: 404 } }],
+  ])('should map NoSuchBucket (by %s) to STORAGE_BUCKET_NOT_FOUND, not to an absent object', (_how, failure) => {
+    // A 404 alone means "absent object"; the bucket code is the more specific fact.
+    const e = mapAwsError(failure)
+    expect(e.code).toBe('STORAGE_BUCKET_NOT_FOUND')
+    expect(e.getStatus()).toBe(HttpStatus.NOT_FOUND)
+  })
+
+  it('should keep NoSuchKey as STORAGE_OBJECT_NOT_FOUND', () => {
+    expect(mapAwsError({ name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } }).code).toBe(
+      'STORAGE_OBJECT_NOT_FOUND',
+    )
+  })
+
   it('should map HTTP 304 to STORAGE_NOT_MODIFIED', () => {
     // A matching If-None-Match: the provider answers 304 and the SDK names it NotModified.
     const e = mapAwsError({ name: 'NotModified', $metadata: { httpStatusCode: 304 } })
