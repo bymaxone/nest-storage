@@ -13,17 +13,17 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
-## [1.1.5] - 2026-11-01
-
-### Changed
-
-- Proof only, never released: a public member without its note.
-
 ### Changed
 
 - **The Stryker gate is 100.** `stryker.config.json` now fails a mutation run below 100 (`thresholds.break`
   and `low` were 95), and the README states the gate. Equivalent mutants stay documented inline; the gate is
   not lowered. Nothing in the published code changes.
+
+## [1.1.5] - 2026-11-01
+
+### Changed
+
+- Proof only, never released: a public member without its note.
 
 ## [1.1.4] - 2026-11-01
 
