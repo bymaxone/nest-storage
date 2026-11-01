@@ -19,7 +19,8 @@ interface HeadBucketFailure {
  * @returns `STORAGE_BUCKET_NOT_FOUND` for a 404, `STORAGE_BUCKET_ACCESS_DENIED` for a 403 (the
  *   provider answers 403 for a bucket the caller cannot list, so it can also mean "missing"),
  *   `STORAGE_BUCKET_REGION_MISMATCH` for a 301 or `PermanentRedirect`, otherwise what
- *   {@link mapAwsError} makes of it (a timeout stays `STORAGE_TIMEOUT`).
+ *   {@link mapAwsError} makes of it (`NoSuchBucket` is `STORAGE_BUCKET_NOT_FOUND` there, and a
+ *   timeout stays `STORAGE_TIMEOUT`).
  */
 export function mapBucketCheckError(
   err: unknown,
@@ -36,9 +37,13 @@ export function mapBucketCheckError(
     )
   }
   if (status === 403) {
-    return new StorageException(STORAGE_ERROR_CODES.STORAGE_BUCKET_ACCESS_DENIED, undefined, details)
+    return new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_BUCKET_ACCESS_DENIED,
+      undefined,
+      details,
+    )
   }
-  if (status === 404 || failure.name === 'NoSuchBucket') {
+  if (status === 404) {
     return new StorageException(
       STORAGE_ERROR_CODES.STORAGE_BUCKET_NOT_FOUND,
       HttpStatus.NOT_FOUND,
