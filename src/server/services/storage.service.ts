@@ -273,10 +273,11 @@ export class StorageService {
         ...(options.size !== undefined ? { size: options.size } : {}),
       })
     } catch (scanErr) {
+      // `delete()` takes the caller's key and prefixes it, so it is given the relative key.
+      const key = this.keyResolver.stripPrefix(finalKey)
       try {
-        await this.delete(finalKey, { bucket })
+        await this.delete(key, { bucket })
       } catch (deleteErr) {
-        const key = this.keyResolver.stripPrefix(finalKey)
         this.logger.error(
           `STORAGE_SCAN_CLEANUP_FAILED: the rejected object is still stored: ${key}`,
           describeError(deleteErr),

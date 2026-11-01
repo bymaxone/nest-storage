@@ -177,6 +177,19 @@ describe('silent failures', () => {
       expect(objects.size).toBe(0)
     })
 
+    it('removes the rejected object from under the key prefix', async () => {
+      const storage = await storageWith({ keyPrefix: 'tenant-x', scanner: postUploadScan })
+
+      const error = await rejection(
+        storage.upload({ key: 'bad.bin', body: Buffer.from('x'), contentType: 'x/y' }),
+      )
+
+      expect(error).toMatchObject({ code: 'STORAGE_SCAN_INFECTED' })
+      expect(detailsOf(error).cleanup).toBeUndefined()
+      expect(objects.size).toBe(0)
+      expect(calls.filter((c) => c.startsWith('DELETE'))).toEqual(['DELETE /b/tenant-x/bad.bin'])
+    })
+
     it('keeps the verdict but says the object is STILL STORED when the delete failed, and logs it', async () => {
       mode = { deleteFails: true }
       const logged = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
