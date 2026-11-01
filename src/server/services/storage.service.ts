@@ -116,8 +116,9 @@ export class StorageService {
    *
    * The library takes ownership of a `Readable` body, as `stream.pipeline` does: when the
    * upload is rejected for any reason (configuration, validation, scan, provider failure)
-   * the stream is destroyed with the error, which releases the file handle or socket behind
-   * it; a cache hit destroys it unread. A stream consumed by a successful upload ends on its own.
+   * the stream is destroyed (without an error: the SDK forwards a stream's error to wrappers
+   * that nothing listens to), which releases the file handle or socket behind it; a cache hit
+   * destroys it unread. A stream consumed by a successful upload ends on its own.
    *
    * @param options - The upload request.
    * @returns The upload result.
@@ -127,7 +128,7 @@ export class StorageService {
     try {
       return await this.uploadOwningBody(options)
     } catch (err) {
-      destroyStream(options.body as NodeJS.ReadableStream, err as Error)
+      destroyStream(options.body as NodeJS.ReadableStream)
       throw err
     }
   }

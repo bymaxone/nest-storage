@@ -102,10 +102,7 @@ describe('stream-utils', () => {
 
     it('returns the whole body as the head when shorter than maxBytes', async () => {
       // The under-maxBytes path never closes the peek early.
-      const { head, replacementBody } = await peekFirstBytes(
-        Readable.from([Buffer.from('hi')]),
-        10,
-      )
+      const { head, replacementBody } = await peekFirstBytes(Readable.from([Buffer.from('hi')]), 10)
       expect(head.toString()).toBe('hi')
       expect(await collect(replacementBody as NodeJS.ReadableStream)).toBe('hi')
     })
@@ -240,7 +237,7 @@ describe('stream-utils', () => {
   })
 
   describe('destroyStream', () => {
-    it('keeps an error from crashing the process, whether it is given or comes from the stream cleanup', async () => {
+    it('keeps an error from crashing the process when the stream cleanup fails', async () => {
       // A stream's own _destroy can fail even when destroy() was called without an error.
       const failingCleanup = new Readable({
         read() {},
@@ -248,24 +245,34 @@ describe('stream-utils', () => {
           callback(new Error('resource close failed'))
         },
       })
-      const withError = new Readable({ read() {} })
       const crashed = jest.fn()
       process.once('uncaughtException', crashed)
 
       destroyStream(failingCleanup)
-      destroyStream(withError, new Error('rejected'))
       await new Promise((resolve) => setImmediate(resolve))
       process.removeListener('uncaughtException', crashed)
 
       expect(crashed).not.toHaveBeenCalled()
       expect(failingCleanup.destroyed).toBe(true)
-      expect(withError.destroyed).toBe(true)
+    })
+
+    it('destroys without an error, so nothing is forwarded to a stream wrapping the source', async () => {
+      // A wrapper that re-emits its source's error (the SDK's does) must receive none.
+      const source = new Readable({ read() {} })
+      const forwarded = jest.fn()
+      source.on('error', forwarded)
+
+      destroyStream(source)
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(source.destroyed).toBe(true)
+      expect(forwarded).not.toHaveBeenCalled()
     })
 
     it('ignores an absent body and a body that cannot be destroyed', () => {
       expect(() => {
-        destroyStream(undefined as unknown as NodeJS.ReadableStream, new Error('x'))
-        destroyStream(Buffer.from('abc') as unknown as NodeJS.ReadableStream, new Error('x'))
+        destroyStream(undefined as unknown as NodeJS.ReadableStream)
+        destroyStream(Buffer.from('abc') as unknown as NodeJS.ReadableStream)
       }).not.toThrow()
     })
   })

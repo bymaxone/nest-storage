@@ -362,7 +362,7 @@ await storage.upload({
 
 Uploads are automatically routed to multipart when `size >= multipart.thresholdBytes` (default 5 MiB). A `Readable` without a `size` always uses multipart. Multipart aborts automatically on failure (`leavePartsOnError: false`).
 
-**The library owns a `Readable` once you pass it to `upload()`**, the convention of `stream.pipeline`. When the upload is rejected for any reason (invalid key or content type, a validation or scan failure, a provider error), the stream is destroyed with that error, which releases the file handle or the socket behind it. A call answered from the idempotency cache destroys the stream unread. A stream consumed by a successful upload ends on its own. Do not reuse a stream after passing it in: if you retry an upload, open a new stream. The error reaches you as the rejection of `upload()`; a listener on the stream itself is not needed to avoid an unhandled `'error'` event.
+**The library owns a `Readable` once you pass it to `upload()`**, the convention of `stream.pipeline`. When the upload is rejected for any reason (invalid key or content type, a validation or scan failure, a provider error), the stream is destroyed, which releases the file handle or the socket behind it. It is destroyed without an error, so a listener on the stream sees `'close'` and not the failure; the failure is the rejection of `upload()`. A call answered from the idempotency cache destroys the stream unread. A stream consumed by a successful upload ends on its own. Do not reuse a stream after passing it in: if you retry an upload, open a new stream. A listener on the stream itself is not needed to avoid an unhandled `'error'` event.
 
 ### Idempotency
 
