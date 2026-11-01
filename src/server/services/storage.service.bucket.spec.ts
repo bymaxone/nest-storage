@@ -1,8 +1,7 @@
 /**
  * @fileoverview A missing bucket is its own failure, not an absent object: `NoSuchBucket` maps to
- * `STORAGE_BUCKET_NOT_FOUND` on every operation that carries an error body, `delete()` no longer
- * reports success for it, and `checkBucket()` probes the bucket with one `HeadBucket`. The S3
- * client is a `send` spy.
+ * `STORAGE_BUCKET_NOT_FOUND` on every operation that carries an error body, `delete()` rejects it,
+ * and `checkBucket()` probes the bucket with one `HeadBucket`. The S3 client is a `send` spy.
  * @layer server/services
  */
 import { Logger } from '@nestjs/common'

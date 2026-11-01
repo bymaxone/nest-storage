@@ -1,9 +1,8 @@
 /**
  * @fileoverview End-to-end behaviour for a bucket that does not exist, against a live
  * MinIO-compatible container: operations that receive an error body report
- * `STORAGE_BUCKET_NOT_FOUND`, `delete()` no longer succeeds silently, `head()` and `exists()`
- * still read it as an absent object (a HEAD response has no body), and `checkBucket()` tells the
- * two apart.
+ * `STORAGE_BUCKET_NOT_FOUND`, `delete()` rejects it, `head()` and `exists()` read it
+ * as an absent object (a HEAD response has no body), and `checkBucket()` tells the two apart.
  * @layer test/e2e
  */
 import { Readable } from 'node:stream'
