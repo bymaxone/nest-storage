@@ -9,6 +9,12 @@ const config: Config = {
   ...base,
   collectCoverage: false,
   coverageThreshold: undefined,
+  // `check-api-surface.spec.ts` runs a repository script on fixture directories and touches no code
+  // in `src`, so it kills no mutant; `pnpm test` still runs it.
+  testPathIgnorePatterns: [
+    ...(base.testPathIgnorePatterns ?? ['/node_modules/']),
+    '/check-api-surface\\.spec\\.ts$',
+  ],
 }
 
 export default config
