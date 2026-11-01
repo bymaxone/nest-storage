@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-11-01
+
 ### Changed
 
 - **A missing bucket is no longer reported as an absent object, and `delete()` no longer hides it.** When
@@ -504,4 +506,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.1]: https://github.com/bymaxone/nest-storage/compare/v1.1.0...v1.1.1
 [1.1.2]: https://github.com/bymaxone/nest-storage/compare/v1.1.1...v1.1.2
 [1.1.3]: https://github.com/bymaxone/nest-storage/compare/v1.1.2...v1.1.3
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.3...HEAD
+[1.1.4]: https://github.com/bymaxone/nest-storage/compare/v1.1.3...v1.1.4
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.4...HEAD
