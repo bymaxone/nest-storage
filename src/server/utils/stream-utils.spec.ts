@@ -176,6 +176,23 @@ describe('stream-utils', () => {
       source.destroy(new Error('boom'))
       await expect(collected).rejects.toThrow('boom')
     })
+
+    it('keeps a source error from crashing the process when nothing reads the replacement', async () => {
+      // A validator can reject, or the request can fail, before anyone attaches to the replacement.
+      const source = new PassThrough()
+      const promise = peekFirstBytes(source, 3)
+      source.write(Buffer.from('hello'))
+      const { replacementBody } = await promise
+      const crashed = jest.fn()
+      process.once('uncaughtException', crashed)
+
+      source.destroy(new Error('boom'))
+      await new Promise((resolve) => setImmediate(resolve))
+      process.removeListener('uncaughtException', crashed)
+
+      expect(crashed).not.toHaveBeenCalled()
+      expect((replacementBody as PassThrough).destroyed).toBe(true)
+    })
   })
 
   describe('bufferToReadable', () => {
