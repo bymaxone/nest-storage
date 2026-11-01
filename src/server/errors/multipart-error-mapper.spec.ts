@@ -6,6 +6,10 @@
 import { SourceIdleError } from '../utils/idle-timeout'
 import { mapMultipartError } from './multipart-error-mapper'
 
+function messageOf(error: { getResponse(): unknown }): string | undefined {
+  return (error.getResponse() as { error?: { message?: string } }).error?.message
+}
+
 function detailsOf(error: { getResponse(): unknown }): Record<string, unknown> | undefined {
   return (error.getResponse() as { error?: { details?: Record<string, unknown> } }).error?.details
 }
@@ -38,6 +42,25 @@ describe('mapMultipartError', () => {
 
     expect(error.code).toBe('STORAGE_BUCKET_NOT_FOUND')
     expect(error.getStatus()).toBe(404)
+  })
+
+  it('keeps the aborted message when the abort completed or was not needed', () => {
+    for (const context of [{ abort: 'completed' }, {}]) {
+      const error = mapMultipartError(new Error('part 2 failed'), { key: 'k', ...context })
+
+      expect(messageOf(error)).toBe('Multipart upload was aborted')
+    }
+  })
+
+  it('says the abort did not complete when it failed', () => {
+    const error = mapMultipartError(new Error('part 2 failed'), {
+      key: 'k',
+      abort: 'failed',
+      abortError: 'denied',
+    })
+
+    expect(error.code).toBe('STORAGE_MULTIPART_ABORTED')
+    expect(messageOf(error)).toBe('Multipart upload failed and could not be aborted')
   })
 
   it('maps any other failure to STORAGE_MULTIPART_ABORTED with the provider message', () => {

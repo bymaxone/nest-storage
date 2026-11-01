@@ -26,6 +26,12 @@ interface Mode {
 const MIB = 1024 * 1024
 const infected = { status: 'infected' as const, engine: 'test', threat: 'EICAR' }
 
+/** The `message` a `StorageException` carries in its response body. */
+function messageOf(error: unknown): string | undefined {
+  const body = (error as StorageException).getResponse() as { error?: { message?: string } }
+  return body.error?.message
+}
+
 function detailsOf(error: unknown): Record<string, unknown> {
   const body = (error as StorageException).getResponse() as {
     error?: { details?: Record<string, unknown> }
@@ -226,11 +232,37 @@ describe('silent failures', () => {
       )
 
       expect(error).toMatchObject({ code: 'STORAGE_SCAN_INFECTED' })
-      expect(detailsOf(error)).toMatchObject({ cleanup: 'failed', key: 'bad.bin' })
-      expect(typeof detailsOf(error).cleanupError).toBe('string')
+      expect(detailsOf(error)).toMatchObject({
+        cleanup: 'failed',
+        key: 'bad.bin',
+        storedKey: 'bad.bin',
+        // The provider's own message, not the generic one of the exception that wrapped it.
+        cleanupError: 'STORAGE_PROVIDER_ERROR: UnknownError',
+      })
       expect(await storage.exists('bad.bin')).toBe(true)
       expect(logged).toHaveBeenCalledWith(
         expect.stringContaining('STORAGE_SCAN_CLEANUP_FAILED'),
+        expect.anything(),
+      )
+    })
+
+    it('names the stored key, with the prefix, in the details and the log when the delete failed', async () => {
+      mode = { deleteFails: true }
+      const logged = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+      const storage = await storageWith({ keyPrefix: 'tenant-x', scanner: postUploadScan })
+
+      const error = await rejection(
+        storage.upload({ key: 'bad.bin', body: Buffer.from('x'), contentType: 'x/y' }),
+      )
+
+      // An operator audits by listing the bucket, so the key as stored is the one to search for.
+      expect(detailsOf(error)).toMatchObject({
+        cleanup: 'failed',
+        key: 'bad.bin',
+        storedKey: 'tenant-x/bad.bin',
+      })
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining('tenant-x/bad.bin'),
         expect.anything(),
       )
     })
@@ -248,6 +280,7 @@ describe('silent failures', () => {
 
       expect(error).toMatchObject({ code: 'STORAGE_MULTIPART_ABORTED' })
       expect(detailsOf(error)).toMatchObject({ abort: 'completed' })
+      expect(messageOf(error)).toBe('Multipart upload was aborted')
       expect(aborts()).toHaveLength(1)
     })
 
@@ -263,6 +296,8 @@ describe('silent failures', () => {
       expect(error).toMatchObject({ code: 'STORAGE_MULTIPART_ABORTED' })
       expect(detailsOf(error)).toMatchObject({ abort: 'failed' })
       expect(typeof detailsOf(error).abortError).toBe('string')
+      // The message must not claim an abort the provider never carried out.
+      expect(messageOf(error)).toBe('Multipart upload failed and could not be aborted')
       // The original failure is the part upload, not the abort that came after it.
       expect(String(detailsOf(error).awsMessage)).toBe('UnknownError')
       expect(

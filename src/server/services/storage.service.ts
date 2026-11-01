@@ -284,10 +284,10 @@ export class StorageService {
         await this.delete(key, { bucket })
       } catch (deleteErr) {
         this.logger.error(
-          `STORAGE_SCAN_CLEANUP_FAILED: the rejected object is still stored: ${key}`,
+          `STORAGE_SCAN_CLEANUP_FAILED: the rejected object is still stored: ${finalKey}`,
           describeError(deleteErr),
         )
-        throw withCleanupFailure(scanErr, key, deleteErr)
+        throw withCleanupFailure(scanErr, { key, storedKey: finalKey }, deleteErr)
       }
       throw scanErr
     }

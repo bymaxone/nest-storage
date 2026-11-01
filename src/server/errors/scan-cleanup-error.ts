@@ -15,16 +15,31 @@ function knownStatus(error: StorageException): HttpStatus | undefined {
 }
 
 /**
+ * Describes why a delete failed. A `StorageException`'s own `message` is the generic
+ * 'Storage Exception', so its code and the provider's message (kept in its details) are used.
+ */
+function describeCleanupError(error: unknown): string {
+  if (!(error instanceof StorageException)) {
+    return describeError(error)
+  }
+  const body = error.getResponse() as { error?: { details?: { awsMessage?: unknown } } }
+  const awsMessage = body.error?.details?.awsMessage
+  return typeof awsMessage === 'string' ? `${error.code}: ${awsMessage}` : error.code
+}
+
+/**
  * @param scanError - What the scan rejected with (a `StorageException` carrying the verdict).
- * @param key - The relative key of the object that should have been removed.
+ * @param keys - The object that should have been removed: `key` is the caller's relative key and
+ *   `storedKey` the key as the provider holds it (with any `keyPrefix`), which is what a bucket
+ *   listing shows.
  * @param cleanupError - Why the delete failed.
- * @returns The same verdict (code, and status when it is an `HttpStatus` value) with `cleanup: 'failed'`, the key and the delete
+ * @returns The same verdict (code, and status when it is an `HttpStatus` value) with `cleanup: 'failed'`, both keys and the delete
  *   failure added to its details, so a caller can tell "rejected and removed" from "rejected but
  *   still stored". Anything that is not a `StorageException` is returned unchanged.
  */
 export function withCleanupFailure(
   scanError: unknown,
-  key: string,
+  keys: { key: string; storedKey: string },
   cleanupError: unknown,
 ): unknown {
   if (!(scanError instanceof StorageException)) {
@@ -33,8 +48,9 @@ export function withCleanupFailure(
   const body = scanError.getResponse() as { error?: { details?: Record<string, unknown> } }
   return new StorageException(scanError.code, knownStatus(scanError), {
     ...(body.error?.details ?? {}),
-    key,
+    key: keys.key,
+    storedKey: keys.storedKey,
     cleanup: 'failed',
-    cleanupError: describeError(cleanupError),
+    cleanupError: describeCleanupError(cleanupError),
   })
 }
