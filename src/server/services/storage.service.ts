@@ -448,6 +448,11 @@ export class StorageService {
     }
   }
 
+  /** Proof only: a public member that the declarations gate must report. */
+  plantedProof(): number {
+    return 1
+  }
+
   /** Throws when the S3 client was never built (missing credentials). */
   private assertConfigured(): void {
     if (!this.s3Provider.isConfigured()) {
