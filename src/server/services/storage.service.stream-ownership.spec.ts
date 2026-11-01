@@ -6,13 +6,16 @@
  * @layer server/services
  */
 import { createServer, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import type { AddressInfo, Socket } from 'node:net'
 import { Readable } from 'node:stream'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { BymaxStorageModule } from '../bymax-storage.module'
 import type { IFileScanner } from '../interfaces/file-scanner.interface'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 import { StorageService } from './storage.service'
+
+/** The request timeout of the cases whose server never answers; long enough for one round trip. */
+const STALL_TIMEOUT_MS = 200
 
 /** A readable that never ends on its own, so only a destroy can close it. */
 function openStream(bytes = 64): Readable {
@@ -41,6 +44,7 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
     /** When set, the server reads the request and never answers, so only the client timeout ends it. */
     let stall = false
     let moduleRef: TestingModule | undefined
+    const sockets = new Set<Socket>()
 
     beforeAll(async () => {
       server = createServer((req, res) => {
@@ -52,6 +56,12 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
           res.statusCode = status
           res.setHeader('ETag', '"abc"')
           res.end()
+        })
+      })
+      server.on('connection', (socket) => {
+        sockets.add(socket)
+        socket.once('close', () => {
+          sockets.delete(socket)
         })
       })
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -342,7 +352,11 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
       expect(bufferResult.key).toBe('b')
     })
 
-    /** Runs an upload that is expected to reject and reports every error that escaped to the process. */
+    /**
+     * Runs an upload that is expected to reject and reports every error that escaped to the process.
+     * The aftermath ends when the client has closed every connection (closing the module destroys
+     * the client) and the event loop has turned enough times for what that queued to have run.
+     */
     async function escapedErrors(
       attempt: () => Promise<unknown>,
     ): Promise<{ error: unknown; escaped: unknown[] }> {
@@ -352,14 +366,21 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
       }
       process.on('uncaughtException', onEscape)
       const error = await reject(attempt())
-      await new Promise((resolve) => setTimeout(resolve, 300))
+      await moduleRef?.close()
+      moduleRef = undefined
+      while (sockets.size > 0) {
+        await new Promise((resolve) => setImmediate(resolve))
+      }
+      for (let turn = 0; turn < 20; turn += 1) {
+        await new Promise((resolve) => setImmediate(resolve))
+      }
       process.removeListener('uncaughtException', onEscape)
       return { error, escaped }
     }
 
     it('does not let a request timeout re-emit on the SDK wrapper of an endless stream', async () => {
       stall = true
-      const storage = await storageWith({ requestTimeoutMs: 400 })
+      const storage = await storageWith({ requestTimeoutMs: STALL_TIMEOUT_MS })
       const source = new Readable({ read() {} })
 
       const { error, escaped } = await escapedErrors(() =>
@@ -402,7 +423,7 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
     it('does not let a timeout crash after a validator read the head of the stream', async () => {
       stall = true
       const storage = await storageWith({
-        requestTimeoutMs: 400,
+        requestTimeoutMs: STALL_TIMEOUT_MS,
         validation: {
           customValidators: [
             {
