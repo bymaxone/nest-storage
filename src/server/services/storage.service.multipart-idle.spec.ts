@@ -17,7 +17,7 @@ import { StorageService } from './storage.service'
 
 const MIB = 1024 * 1024
 
-/** Idle limit of the cases whose source goes silent; every other timing below is a multiple of it. */
+/** Idle limit of the cases whose source goes silent; `QUIET_MS` and the single-shot case's limits derive from it. */
 const IDLE_MS = 200
 /** A paced source's gap and the limit it must stay under (ratio 5:12, as a slow-but-alive source). */
 const SLOW_GAP_MS = 125
