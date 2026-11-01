@@ -36,7 +36,7 @@ The implementation follows the **TDD red-green-refactor** protocol with vertical
 - Each phase delivers **usable functionality** (not just "ready code") — at the end of each phase, the lib can be installed in a NestJS fixture app and exercised against local MinIO
 - **Tests precede implementation** in every file with non-trivial logic (services, utils, validators, scanners, providers)
 - **Per-phase coverage gate**: **100% line/branch on every file implemented in the phase** (Bymax lib floor), with extra mutation focus on critical paths (key resolver, validation pipeline, AWS SDK → `StorageException` error mapping, TTL clamp). The published artifact is gated at 100% global by `jest.coverage.config.ts` (`prepublishOnly`)
-- **Mutation testing** runs as a **pre-release** gate only (not on per-commit CI — Stryker takes 10-20 min); release gate is mutation score **≥ 95% (break 95)**
+- **Mutation testing** runs as a **pre-release** gate only (not on per-commit CI — Stryker takes 10-20 min); release gate is mutation score **100 (break 100)**: equivalent mutants are documented, never a lowered gate
 - **Refactor pass** at the end of each phase, with `/bymax-quality:code-review` before marking the phase as done
 - **Real E2E (Testcontainers + MinIO)** only kicks in at Phase 4 — before that, `S3Client` mocks are used
 
@@ -118,7 +118,7 @@ A phase is only marked **Done** (✅) when, **cumulatively**:
 - [ ] `git status` clean (commits made with Conventional Commits, no `Co-Authored-By` trailer)
 - [ ] `/bymax-quality:code-review` executed and findings applied
 
-> The published artifact is additionally gated at **100% global** coverage by `jest.coverage.config.ts` (run via `prepublishOnly`) and **mutation score ≥ 95% (break 95)** at release. The per-phase 100%-per-file gate above is the development-time floor; both must hold before v0.1.0 ships.
+> The published artifact is additionally gated at **100% global** coverage by `jest.coverage.config.ts` (run via `prepublishOnly`) and **mutation score 100 (break 100)** at release; equivalent mutants are documented, never a lowered gate. The per-phase 100%-per-file gate above is the development-time floor; both must hold before v0.1.0 ships.
 
 ### 1.8 Expected end file structure (after Phase 5)
 
@@ -216,7 +216,7 @@ Copy from `../nest-auth/` (`/Users/maximiliano/Documents/MyApps/bymax-one/nest-a
 | `jest.coverage.config.ts` | `jest.coverage.config.ts` | Threshold 100% global (release gate) — see §6.5 |
 | `jest.e2e.config.ts` | `jest.e2e.config.ts` | `rootDir: test/e2e`; `testTimeout: 60_000` (Testcontainers takes 10-30s to spin up MinIO) |
 | `jest.stryker.config.ts` | `jest.stryker.config.ts` | Identical |
-| `stryker.config.json` | `stryker.config.json` | Swap `tsconfig.json`; thresholds: high 100, low 95, break 95 (Bymax floor) — document inherent equivalent mutants of the I/O surface via `// Stryker disable next-line` rather than lowering the gate |
+| `stryker.config.json` | `stryker.config.json` | Swap `tsconfig.json`; thresholds: high 100, low 100, break 100 — document inherent equivalent mutants of the I/O surface via `// Stryker disable next-line` rather than lowering the gate |
 | `tsup.config.ts` | `tsup.config.ts` | **Rewrite** — 2 entries (`server`, `shared`); externals: peer deps from package.json (see §2.1.3 below) |
 | `eslint.config.mjs` | `eslint.config.mjs` | Copy; remove rules specific to `oauth/`, `crypto/`; keep `eslint-plugin-security`, `eslint-plugin-import` |
 | `.prettierrc` | `.prettierrc` | Identical |
@@ -4768,7 +4768,7 @@ pnpm mutation            # full run, ~15-25 min for this lib
 
 **Acceptance criteria:**
 
-- [ ] Mutation score ≥ 95% (Stryker break 95)
+- [ ] Mutation score 100 (Stryker break 100)
 - [ ] Mutation score ≥ 95% on identified critical paths (key-resolver, validate-options, ttl-clamp, mime-match, idempotency-cache, header-utils)
 - [ ] Equivalent mutants documented inline with `// Stryker disable next-line <Mutator>: <reason>` (especially in try/catch that maps AWS errors — some mutants on messages are equivalent)
 
@@ -4792,7 +4792,7 @@ pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm test:e2e && pnpm build 
 
 - [ ] Coverage 100% (release gate via `jest.coverage.config.ts`)
 - [ ] Bundle within the budgets (see §6.5)
-- [ ] Mutation score ≥ 95% (Stryker break 95)
+- [ ] Mutation score 100 (Stryker break 100)
 - [ ] E2E suite passes (all 5 specs)
 - [ ] PR `phase-4` aprovado
 
@@ -4922,7 +4922,7 @@ const BUDGETS = [
 pnpm mutation
 ```
 
-- [ ] Mutation score ≥ 95% global (Stryker break 95)
+- [ ] Mutation score 100 global (Stryker break 100)
 - [ ] Update `docs/mutation_testing_results.md` with timestamp and score
 
 ### 6.7 Tag + publish

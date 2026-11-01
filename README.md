@@ -1030,7 +1030,7 @@ place stays there — so the suite is held to a bar beyond "the tests pass".
 
 - ✅ **100% line coverage** — statements, branches, functions and lines, enforced as a gate
 - ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at
-  `break: 95`; every survivor was killed by a strengthened assertion, and the eight provable
+  `break: 100`; every survivor was killed by a strengthened assertion, and the provable
   equivalents are documented inline
 - ✅ **Real object storage in e2e** — MinIO through Testcontainers, so multipart, presigning
   and listing are exercised against an actual S3 API rather than a mock
@@ -1047,7 +1047,7 @@ place stays there — so the suite is held to a bar beyond "the tests pass".
 pnpm test          # unit tests (Jest)
 pnpm test:cov      # unit tests with the 100% coverage gate
 pnpm test:e2e      # end-to-end against MinIO (requires Docker)
-pnpm mutation      # Stryker mutation testing (break: 95)
+pnpm mutation      # Stryker mutation testing (break: 100)
 pnpm typecheck     # tsc strict check
 pnpm lint          # ESLint
 ```

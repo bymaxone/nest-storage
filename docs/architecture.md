@@ -281,7 +281,7 @@ src/
 
 ### 11.3 Mutation testing
 
-- Stryker with thresholds `high: 100 / low: 95 / break: 95`.
+- Stryker with thresholds `high: 100 / low: 100 / break: 100`: the score is 100, equivalent mutants are documented inline, and the gate is never lowered.
 - Runs automatically post-merge on `main` via the shared reusable CI (`bymaxone/.github` → node-lib-ci), never per-PR; also runnable on demand with `pnpm mutation` (takes 10–20 min).
 - Equivalent mutants are annotated inline with `// Stryker disable next-line <Mutator>: <reason>`.
 - Results documented in `docs/mutation_testing_results.md`.
