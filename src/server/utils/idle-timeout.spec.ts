@@ -85,7 +85,7 @@ describe('withIdleTimeout', () => {
   })
 
   it('hands the uploader bytes even when the source emits strings', async () => {
-    // A source with an encoding set emits strings; the wrapper is a byte stream.
+    // A source that emits strings (this one is object-mode) must still reach the uploader as bytes.
     const source = Readable.from(['ab', 'cd'])
     const chunks: unknown[] = []
 

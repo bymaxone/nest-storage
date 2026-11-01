@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-01
+
 ### Fixed
 
 - **A stream that stops delivering no longer holds a multipart upload open forever.** A multipart upload
@@ -478,4 +480,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.0]: https://github.com/bymaxone/nest-storage/compare/v1.0.6...v1.1.0
 [1.1.1]: https://github.com/bymaxone/nest-storage/compare/v1.1.0...v1.1.1
 [1.1.2]: https://github.com/bymaxone/nest-storage/compare/v1.1.1...v1.1.2
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.2...HEAD
+[1.1.3]: https://github.com/bymaxone/nest-storage/compare/v1.1.2...v1.1.3
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.3...HEAD
