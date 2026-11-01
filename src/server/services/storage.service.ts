@@ -200,7 +200,11 @@ export class StorageService {
    * buffered without limit. Other bodies and modes pass through unchanged.
    */
   private async bufferForPreUploadScan(body: UploadBody, finalKey: string): Promise<UploadBody> {
-    if (!this.scanner.isEnabled() || this.scanner.getMode() !== 'pre-upload' || isBufferLike(body)) {
+    if (
+      !this.scanner.isEnabled() ||
+      this.scanner.getMode() !== 'pre-upload' ||
+      isBufferLike(body)
+    ) {
       return body
     }
     const maxSizeBytes = this.options.validation?.maxSizeBytes
@@ -217,7 +221,8 @@ export class StorageService {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
         key: finalKey,
         maxSizeBytes,
-        reason: 'The stream is longer than validation.maxSizeBytes, so it cannot be scanned before upload',
+        reason:
+          'The stream is longer than validation.maxSizeBytes, so it cannot be scanned before upload',
       })
     }
     return buffered
@@ -596,12 +601,7 @@ export class StorageService {
       partSize: this.options.multipart.partSizeBytes,
       leavePartsOnError: true,
     })
-    if (options.onProgress) {
-      const onProgress = options.onProgress
-      uploader.on('httpUploadProgress', (event) => {
-        this.emitProgress(onProgress, event.loaded, event.total, event.part)
-      })
-    }
+    this.forwardProgress(uploader, options.onProgress)
     try {
       const response = await uploader.done()
       return this.buildUploadResult({
@@ -614,14 +614,32 @@ export class StorageService {
         multipart: true,
       })
     } catch (err) {
-      const abort = await closeMultipartUpload(
-        this.s3Provider.getClient(),
-        bucket,
-        finalKey,
-        uploader.uploadId,
-      )
-      throw mapMultipartError(err, { key: finalKey, bucket, ...abort })
+      return this.failMultipart(err, finalKey, bucket, uploader.uploadId)
     }
+  }
+
+  /** Relays the uploader's progress events to the caller's callback, when there is one. */
+  private forwardProgress(uploader: Upload, onProgress: UploadOptions['onProgress']): void {
+    if (!onProgress) return
+    uploader.on('httpUploadProgress', (event) => {
+      this.emitProgress(onProgress, event.loaded, event.total, event.part)
+    })
+  }
+
+  /** Aborts the multipart upload that failed, then throws the original failure with the outcome. */
+  private async failMultipart(
+    err: unknown,
+    finalKey: string,
+    bucket: string,
+    uploadId: string | undefined,
+  ): Promise<never> {
+    const abort = await closeMultipartUpload(
+      this.s3Provider.getClient(),
+      bucket,
+      finalKey,
+      uploadId,
+    )
+    throw mapMultipartError(err, { key: finalKey, bucket, ...abort })
   }
 
   /** Converts a `Uint8Array` body to a `Buffer` for SDK safety; passes others through. */
@@ -756,11 +774,8 @@ export class StorageService {
     const failed: FailedDeletion[] = []
     for (let i = 0; i < normalized.length; i += DELETE_BATCH_LIMIT) {
       const chunk = normalized.slice(i, i + DELETE_BATCH_LIMIT)
-      const outcome = await deleteObjectsChunk(
-        this.s3Provider.getClient(),
-        bucket,
-        chunk,
-        (key) => this.keyResolver.stripPrefix(key),
+      const outcome = await deleteObjectsChunk(this.s3Provider.getClient(), bucket, chunk, (key) =>
+        this.keyResolver.stripPrefix(key),
       )
       deleted.push(...outcome.deleted)
       failed.push(...outcome.failed)
