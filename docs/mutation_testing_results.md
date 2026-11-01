@@ -1,5 +1,7 @@
 # Mutation Testing Results — @bymax-one/nest-storage
 
+**Current gate:** `break: 100`. The sections below record the threshold in force when each run was made.
+
 **Date:** 2026-07-01
 **Tool:** StrykerJS (`pnpm mutation`)
 **Scope:** `src/server/**` unit test suite (Jest)

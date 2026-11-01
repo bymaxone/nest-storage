@@ -8,12 +8,12 @@ Mutation testing uses [StrykerJS](https://stryker-mutator.io/) configured in `st
 
 ```
 high:  100   (target — alert when the score drops below 100%)
-low:    95   (warning zone)
-break:  95   (the run fails below this score; a CI job or release gate that uses
+low:   100   (warning zone)
+break: 100   (the run fails below this score; a CI job or release gate that uses
               this threshold will exit non-zero, blocking the release)
 ```
 
-A mutation score of 100% means every mutant is either killed by an assertion or documented as a provable equivalent. The `break: 95` floor prevents a regression from shipping undetected.
+A mutation score of 100% means every mutant is either killed by an assertion or documented as a provable equivalent. The `break: 100` gate prevents a regression from shipping undetected; an equivalent mutant is documented inline, and the gate is never lowered.
 
 ### When to run
 
@@ -61,7 +61,7 @@ Suppressing a non-equivalent mutant to raise the score artificially is a critica
 
 ## Critical Paths
 
-The following files are held at the highest scrutiny and are verified at or above the `break: 95` threshold:
+The following files are held at the highest scrutiny and are verified at the `break: 100` threshold:
 
 | File | Security / correctness concern |
 |---|---|
@@ -94,7 +94,7 @@ These files target 100% mutation score. Survivors in these files block a release
     "!src/server/errors/storage-error-messages.ts",
     "!src/server/errors/storage-error-status.ts"
   ],
-  "thresholds": { "high": 100, "low": 95, "break": 95 },
+  "thresholds": { "high": 100, "low": 100, "break": 100 },
   "reporters": ["clear-text", "progress", "json"],
   "concurrency": 1,
   "incremental": true
