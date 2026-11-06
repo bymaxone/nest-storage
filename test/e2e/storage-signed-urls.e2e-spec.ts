@@ -60,6 +60,75 @@ describe('Storage E2E — signed URLs', () => {
     expect(buffer.toString('utf-8')).toBe('signed-put-body')
   })
 
+  describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
+    'the stored Content-Type is bound to the signature (%s)',
+    (mode) => {
+      let bound: TestingModule
+      let boundSigned: SignedUrlService
+      let boundStorage: StorageService
+
+      beforeAll(async () => {
+        bound = await Test.createTestingModule({
+          imports: [
+            BymaxStorageModule.forRoot({
+              ...providerRecipes.minio({
+                endpoint: minio.endpoint,
+                bucket: minio.bucket,
+                accessKeyId: minio.accessKeyId,
+                secretAccessKey: minio.secretAccessKey,
+              }),
+              requestChecksumCalculation: mode,
+            }),
+          ],
+        }).compile()
+        await bound.init()
+        boundSigned = bound.get(SignedUrlService)
+        boundStorage = bound.get(StorageService)
+      })
+
+      afterAll(async () => {
+        await bound.close()
+      })
+
+      const signedHeaders = (url: string): string[] =>
+        (new URL(url).searchParams.get('X-Amz-SignedHeaders') ?? '').split(';')
+
+      it('lists content-type among the signed headers', async () => {
+        // The URL holder must not be free to choose the type: the approved one is signed.
+        const { url } = await boundSigned.getUploadUrl({
+          key: `e2e/bound-${mode}-signed.png`,
+          contentType: 'image/png',
+          ttlSeconds: 60,
+        })
+        expect(signedHeaders(url)).toEqual(expect.arrayContaining(['content-type', 'host']))
+      })
+
+      it('stores an upload sent with the approved type', async () => {
+        const key = `e2e/bound-${mode}-ok.png`
+        const { url, requiredHeaders } = await boundSigned.getUploadUrl({
+          key,
+          contentType: 'image/png',
+          ttlSeconds: 60,
+        })
+        const response = await fetch(url, { method: 'PUT', headers: requiredHeaders, body: 'png-bytes' })
+        expect(response.status).toBe(200)
+        expect((await boundStorage.head(key)).contentType).toBe('image/png')
+      })
+
+      it('refuses an upload sent with another type, and stores nothing', async () => {
+        const key = `e2e/bound-${mode}-other.png`
+        const { url } = await boundSigned.getUploadUrl({ key, contentType: 'image/png', ttlSeconds: 60 })
+        const response = await fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'text/html' },
+          body: '<script>1</script>',
+        })
+        expect(response.status).toBe(403)
+        await expect(boundStorage.head(key)).rejects.toMatchObject({ code: 'STORAGE_OBJECT_NOT_FOUND' })
+      })
+    },
+  )
+
   it('rejects a PUT whose signature has been tampered with', async () => {
     // A signed URL is a real credential: corrupting the SigV4 signature fails.
     const { url, requiredHeaders } = await signedUrls.getUploadUrl({

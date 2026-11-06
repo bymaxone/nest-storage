@@ -80,7 +80,7 @@ minimal.
 
 ### 🔗 Access & URLs
 
-- ✅ **Presigned GET / PUT** — the PUT signs the `Content-Type` (and ACL and metadata, when set) as required headers
+- ✅ **Presigned GET / PUT** — the PUT signs the `Content-Type` (and ACL and metadata, when set) as required headers; a PUT that sends another type is refused and stores nothing
 - ✅ **Presigned multipart** — one signed URL per part plus the upload id, so a browser can
   upload directly without the bytes passing through your process
 - ✅ **TTL clamping** — a requested TTL above `signedUrls.maxTtlSeconds` (default 604 800 s, the
@@ -468,7 +468,7 @@ async getSignedPut(@Body() body: { folder: string; contentType: string }) {
 }
 ```
 
-> **Caveat:** a signed PUT bypasses the library's local MIME/size validation. No size limit is bound into the signature — `maxSizeBytes` is advisory — so verify the size with a `HEAD` check after upload and add an `IFileScanner` post-upload hook.
+> **Caveat:** a signed PUT bypasses the library's local size validation and custom validators. The `contentType` you pass is signed, so it is the type that gets stored and a PUT with another type is refused. When `validation.mimeWhitelist` is set, `getUploadUrl` and `getMultipartUploadUrls` refuse a `contentType` outside it with `STORAGE_MIME_NOT_ALLOWED`, so a type taken from the client cannot get a URL the whitelist forbids. No size limit is bound into the signature — `maxSizeBytes` is advisory — so verify the size with a `HEAD` check after upload and add an `IFileScanner` post-upload hook.
 
 ```typescript
 // Frontend
@@ -749,7 +749,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_KEY_INVALID`            | 400  | Empty key, null byte, path traversal (`..`), or key starts with `/`                                                                                                                                           |
 | `STORAGE_BODY_MISSING`           | 400  | `upload()` called without a body                                                                                                                                                                                   |
 | `STORAGE_CONTENT_TYPE_REQUIRED`  | 400  | `upload()` called without `contentType`                                                                                                                                                                            |
-| `STORAGE_MIME_NOT_ALLOWED`       | 415  | `contentType` outside `mimeWhitelist`                                                                                                                                                                              |
+| `STORAGE_MIME_NOT_ALLOWED`       | 415  | `contentType` outside `mimeWhitelist`, at upload or at presign                                                                                                                                                                            |
 | `STORAGE_SIZE_EXCEEDED`          | 413  | `size > maxSizeBytes`                                                                                                                                                                                              |
 | `STORAGE_VALIDATION_FAILED`      | 400  | `IUploadValidator` rejected the file (`details.reason`)                                                                                                                                                            |
 | `STORAGE_SCAN_INFECTED`          | 422  | Scanner returned `'infected'` (`details.threat`); `details.cleanup: 'failed'` means the object is still stored                                                                                                    |

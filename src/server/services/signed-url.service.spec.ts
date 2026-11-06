@@ -240,9 +240,23 @@ describe('SignedUrlService', () => {
       expect(result.expiresAt.getTime()).toBeGreaterThanOrEqual(before + 300 * 1000 - 100)
       expect(result.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 300 * 1000 + 100)
       // The presigner receives the effective TTL, and Metadata is omitted when absent.
-      expect(mockedGetSignedUrl.mock.calls[0]?.[2]).toEqual({ expiresIn: 300 })
+      expect(mockedGetSignedUrl.mock.calls[0]?.[2]).toEqual({
+        expiresIn: 300,
+        signableHeaders: new Set(['content-type']),
+      })
       const input = (mockedGetSignedUrl.mock.calls[0]?.[1] as PutObjectCommand).input
       expect('Metadata' in input).toBe(false)
+    })
+
+    it('binds the approved Content-Type into the signature', async () => {
+      // The presigner leaves content-type unsigned unless it is named, which would let the URL
+      // holder store any type; the PUT must name it, and a GET or a part URL must not need it.
+      const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+
+      await service.getUploadUrl({ key: KEY, contentType: 'image/png' })
+
+      const opts = mockedGetSignedUrl.mock.calls[0]?.[2] as { signableHeaders?: Set<string> }
+      expect([...(opts.signableHeaders ?? [])]).toEqual(['content-type'])
     })
 
     it('applies ACL public-read when publicRead: true', async () => {
@@ -338,6 +352,58 @@ describe('SignedUrlService', () => {
 
       const err = await service.getUploadUrl({ key: KEY, contentType: 'image/png' }).catch((e: unknown) => e)
       expect(err).toBe(original)
+    })
+  })
+
+  describe('mimeWhitelist', () => {
+    const whitelisted = (): ResolvedBymaxStorageOptions => ({
+      ...buildOptions(),
+      validation: { mimeWhitelist: ['image/png', 'application/*'] },
+    })
+
+    it('refuses to presign an upload whose contentType is outside the whitelist', async () => {
+      // A client-chosen type passed straight through must not get a URL for a type the host forbids.
+      const service = await buildService(whitelisted(), buildMockS3Provider(), buildMockKeyResolver())
+
+      const err = await service.getUploadUrl({ key: KEY, contentType: 'text/html' }).catch((e: unknown) => e)
+
+      expect(err).toMatchObject({ code: 'STORAGE_MIME_NOT_ALLOWED' })
+      expect((err as StorageException).getResponse()).toMatchObject({
+        error: { details: { contentType: 'text/html', whitelist: ['image/png', 'application/*'] } },
+      })
+      expect(mockedGetSignedUrl).not.toHaveBeenCalled()
+    })
+
+    it('presigns an upload whose contentType matches an exact entry or a wildcard', async () => {
+      const service = await buildService(whitelisted(), buildMockS3Provider(), buildMockKeyResolver())
+
+      await service.getUploadUrl({ key: KEY, contentType: 'image/png' })
+      await service.getUploadUrl({ key: KEY, contentType: 'application/pdf' })
+
+      expect(mockedGetSignedUrl).toHaveBeenCalledTimes(2)
+    })
+
+    it('presigns any contentType when no whitelist is configured, or it is empty', async () => {
+      const empty = { ...buildOptions(), validation: { mimeWhitelist: [] } }
+      for (const options of [buildOptions(), empty]) {
+        const service = await buildService(options, buildMockS3Provider(), buildMockKeyResolver())
+        await service.getUploadUrl({ key: KEY, contentType: 'text/html' })
+      }
+
+      expect(mockedGetSignedUrl).toHaveBeenCalledTimes(2)
+    })
+
+    it('refuses a multipart presign outside the whitelist before the upload is created', async () => {
+      // CreateMultipartUpload opens an upload on the provider, so the check has to come first.
+      const s3Provider = buildMockS3Provider(true, { UploadId: MOCK_UPLOAD_ID })
+      const service = await buildService(whitelisted(), s3Provider, buildMockKeyResolver())
+
+      const err = await service
+        .getMultipartUploadUrls({ key: KEY, contentType: 'text/html', parts: 2 })
+        .catch((e: unknown) => e)
+
+      expect(err).toMatchObject({ code: 'STORAGE_MIME_NOT_ALLOWED' })
+      expect((s3Provider.getClient() as unknown as { send: jest.Mock }).send).not.toHaveBeenCalled()
     })
   })
 
