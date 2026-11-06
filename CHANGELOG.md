@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.6] - 2026-11-06
+
 ### Fixed
 
 - **A failed scan cleanup now names the provider's cause and the key as stored, and a failed abort no
@@ -575,4 +577,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.3]: https://github.com/bymaxone/nest-storage/compare/v1.1.2...v1.1.3
 [1.1.4]: https://github.com/bymaxone/nest-storage/compare/v1.1.3...v1.1.4
 [1.1.5]: https://github.com/bymaxone/nest-storage/compare/v1.1.4...v1.1.5
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.5...HEAD
+[1.1.6]: https://github.com/bymaxone/nest-storage/compare/v1.1.5...v1.1.6
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.6...HEAD
