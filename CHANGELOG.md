@@ -13,6 +13,23 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A presigned upload URL now fixes the stored `Content-Type`, and the presign applies the MIME whitelist.** `getUploadUrl` signed only the
+  `host` header, so whoever held the URL could upload with any `Content-Type` and the object was
+  stored with that type, for example `text/html` under a key approved for `image/png`. The
+  `Content-Type` is now part of the signature, and the provider refuses a
+  PUT that sends another type.
+
+  **Apply to a derived backend:** a client must send the `Content-Type` from `requiredHeaders`
+  exactly; a PUT with a different type now fails with HTTP 403.
+  The presign also now applies `validation.mimeWhitelist`: when it is set, `getUploadUrl` and
+  `getMultipartUploadUrls` throw `STORAGE_MIME_NOT_ALLOWED` for a `contentType` outside it, where
+  they used to issue a URL for any type. Code that presigns a type its own whitelist excludes now
+  gets that error, and must either add the type to the whitelist or stop requesting it. The
+  multipart part URLs are unchanged: the type of a multipart object is set when the upload is
+  created, not by the part requests.
+
 ### Changed
 
 - **The package is built with tsup 9.** The JavaScript bundles are byte-identical to the previous
