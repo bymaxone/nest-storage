@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.7] - 2026-11-06
+
 ### Fixed
 
 - **A presigned upload URL now fixes the stored `Content-Type`, and the presign applies the MIME whitelist.** `getUploadUrl` signed only the
@@ -602,4 +604,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.4]: https://github.com/bymaxone/nest-storage/compare/v1.1.3...v1.1.4
 [1.1.5]: https://github.com/bymaxone/nest-storage/compare/v1.1.4...v1.1.5
 [1.1.6]: https://github.com/bymaxone/nest-storage/compare/v1.1.5...v1.1.6
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.6...HEAD
+[1.1.7]: https://github.com/bymaxone/nest-storage/compare/v1.1.6...v1.1.7
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.7...HEAD
