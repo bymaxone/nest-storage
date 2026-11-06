@@ -13,6 +13,13 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Changed
+
+- **The package is built with tsup 9.** The JavaScript bundles are byte-identical to the previous
+  build. The declaration files differ only in how their last export statement is written: values and
+  types are exported in two statements, `export { … }` and `export type { … }`, with the same names.
+  The public type surface is unchanged.
+
 ## [1.1.6] - 2026-11-06
 
 ### Fixed
