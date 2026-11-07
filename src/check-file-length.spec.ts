@@ -46,6 +46,20 @@ function run(root: string, ...args: string[]): Result {
   return { status: result.status, output: `${result.stdout}${result.stderr}` }
 }
 
+/** Commits the index as the base revision of `root`, so `--base HEAD` can read the baseline from it. */
+function commitBase(root: string): void {
+  spawnSync(
+    'git',
+    ['-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'base'],
+    { cwd: root },
+  )
+}
+
+/** Rewrites the working-tree baseline of `root` without committing it. */
+function setBaseline(root: string, baseline: unknown): void {
+  writeFileSync(join(root, 'scripts', 'file-length-baseline.json'), JSON.stringify(baseline))
+}
+
 afterAll(() => {
   for (const root of roots) rmSync(root, { recursive: true, force: true })
 })
@@ -170,5 +184,103 @@ describe('check-file-length', () => {
     writeFileSync(other, JSON.stringify({ files: { 'src/big.ts': 900 } }))
 
     expect(run(root, '--baseline', other).status).toBe(0)
+  })
+
+  describe('against a base revision', () => {
+    // The baseline in a pull request is the pull request's own file, so on its own it can be edited to
+    // admit a new offender; the base revision's baseline is the one that cannot be argued with.
+    const big = (count: number): Record<string, string> => ({ 'src/big.ts': lines(count) })
+
+    it('passes when the baseline is unchanged from the base', () => {
+      const root = repo(big(950), { files: { 'src/big.ts': 950 } })
+      commitBase(root)
+
+      expect(run(root, '--base', 'HEAD').status).toBe(0)
+    })
+
+    it('fails an entry the base did not have', () => {
+      const root = repo({ 'src/a.ts': lines(3) })
+      commitBase(root)
+      writeFileSync(join(root, 'src', 'new.ts'), lines(900))
+      setBaseline(root, { files: { 'src/new.ts': 900 } })
+      spawnSync('git', ['add', '-A'], { cwd: root })
+
+      const result = run(root, '--base', 'HEAD')
+
+      expect(result.status).toBe(1)
+      expect(result.output).toContain(
+        'src/new.ts is on the baseline but the base revision does not have it',
+      )
+    })
+
+    it('fails an entry raised above the base', () => {
+      const root = repo(big(950), { files: { 'src/big.ts': 950 } })
+      commitBase(root)
+      writeFileSync(join(root, 'src', 'big.ts'), lines(1000))
+      setBaseline(root, { files: { 'src/big.ts': 1000 } })
+      spawnSync('git', ['add', '-A'], { cwd: root })
+
+      const result = run(root, '--base', 'HEAD')
+
+      expect(result.status).toBe(1)
+      expect(result.output).toContain(
+        'src/big.ts is recorded at 1000 lines, above 950 on the base revision',
+      )
+    })
+
+    it('passes an entry lowered below the base', () => {
+      const root = repo(big(950), { files: { 'src/big.ts': 950 } })
+      commitBase(root)
+      writeFileSync(join(root, 'src', 'big.ts'), lines(900))
+      setBaseline(root, { files: { 'src/big.ts': 900 } })
+
+      expect(run(root, '--base', 'HEAD').status).toBe(0)
+    })
+
+    it('passes an entry removed because the file is now within the limit', () => {
+      const root = repo(big(950), { files: { 'src/big.ts': 950 } })
+      commitBase(root)
+      writeFileSync(join(root, 'src', 'big.ts'), lines(10))
+      setBaseline(root, { files: {} })
+
+      expect(run(root, '--base', 'HEAD').status).toBe(0)
+    })
+
+    it('accepts any baseline when the base revision has none yet', () => {
+      // The pull request that introduces the baseline has nothing to compare with.
+      const root = mkdtempSync(join(tmpdir(), 'file-length-spec-'))
+      roots.push(root)
+      spawnSync('git', ['init', '-q'], { cwd: root })
+      writeFileSync(join(root, 'a.ts'), lines(3))
+      spawnSync('git', ['add', '-A'], { cwd: root })
+      commitBase(root)
+      mkdirSync(join(root, 'scripts'))
+      setBaseline(root, { files: { 'src/old.ts': 900 } })
+      mkdirSync(join(root, 'src'))
+      writeFileSync(join(root, 'src', 'old.ts'), lines(900))
+      spawnSync('git', ['add', '-A'], { cwd: root })
+
+      expect(run(root, '--base', 'HEAD').status).toBe(0)
+    })
+
+    it('fails when the base revision does not exist', () => {
+      const root = repo({ 'src/a.ts': lines(3) })
+      commitBase(root)
+
+      const result = run(root, '--base', 'no-such-ref')
+
+      expect(result.status).not.toBe(0)
+      expect(result.output).toContain('no-such-ref')
+    })
+
+    it('does not compare with any base when none is given', () => {
+      const root = repo(big(950), { files: { 'src/big.ts': 950 } })
+      commitBase(root)
+      writeFileSync(join(root, 'src', 'big.ts'), lines(1000))
+      setBaseline(root, { files: { 'src/big.ts': 1000 } })
+      spawnSync('git', ['add', '-A'], { cwd: root })
+
+      expect(run(root).status).toBe(0)
+    })
   })
 })

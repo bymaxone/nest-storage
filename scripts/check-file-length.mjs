@@ -14,16 +14,22 @@
  * - a baselined file that is now at or under the limit, or no longer tracked, fails until its
  *   entry is removed, so a fixed file cannot quietly regress later.
  *
+ * With `--base <ref>` the baseline is also compared with the one at that revision, because the
+ * baseline in a change is the change's own file and could otherwise admit the offender it adds: an
+ * entry the base did not have, or one above the base's length, fails. A base revision without a
+ * baseline file imposes nothing, which is the change that introduces it.
+ *
  * Plain Node with no dependencies: copy this file and `file-length-baseline.json` as they are.
  *
- * Usage: node scripts/check-file-length.mjs [--root <dir>] [--baseline <file>]
+ * Usage: node scripts/check-file-length.mjs [--root <dir>] [--baseline <file>] [--base <ref>]
  *   --root      repository root (default: the current directory)
  *   --baseline  JSON `{ "files": { "<path>": <length>, ... } }` (default: scripts/file-length-baseline.json)
+ *   --base      a git revision whose baseline the current one may not widen (default: none)
  */
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 
 /** The most lines a source file may have. */
 const LIMIT = 800
@@ -60,9 +66,9 @@ function oversize(root) {
   return lengths
 }
 
-/** Reads the baseline's `files` table, failing loudly on a file that is not one. */
-function readBaseline(path) {
-  const parsed = JSON.parse(readFileSync(path, 'utf8'))
+/** Reads the baseline's `files` table from JSON text, failing loudly on a file that is not one. */
+function parseBaseline(text, path) {
+  const parsed = JSON.parse(text)
   const files = parsed?.files
   if (files === null || typeof files !== 'object' || Array.isArray(files)) {
     throw new Error(`${path}: expected { "files": { "<path>": <length> } }`)
@@ -73,6 +79,35 @@ function readBaseline(path) {
     }
   }
   return files
+}
+
+/** The baseline table at a git revision, or `null` when that revision has no baseline file. */
+function baselineAt(root, ref, path) {
+  try {
+    execFileSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: root, stdio: 'ignore' })
+  } catch {
+    throw new Error(`${ref}: not a revision in this repository`)
+  }
+  const spec = `${ref}:${relative(root, path).split('\\').join('/')}`
+  try {
+    execFileSync('git', ['cat-file', '-e', spec], { cwd: root, stdio: 'ignore' })
+  } catch {
+    return null
+  }
+  return parseBaseline(execFileSync('git', ['show', spec], { cwd: root, encoding: 'utf8' }), spec)
+}
+
+/** Problems with how the baseline differs from the base revision's: it may only lose or lower entries. */
+function widening(baseline, base) {
+  const problems = []
+  for (const [file, length] of Object.entries(baseline)) {
+    if (base[file] === undefined) {
+      problems.push(`${file} is on the baseline but the base revision does not have it. A new offender is split, not listed.`)
+    } else if (length > base[file]) {
+      problems.push(`${file} is recorded at ${length} lines, above ${base[file]} on the base revision.`)
+    }
+  }
+  return problems
 }
 
 /** Compares the files over the limit with the baseline and returns one message per problem. */
@@ -99,7 +134,11 @@ function problemsOf(over, baseline) {
 const root = resolve(option('--root', process.cwd()))
 const baselinePath = resolve(option('--baseline', join(root, 'scripts', 'file-length-baseline.json')))
 
-const problems = problemsOf(oversize(root), readBaseline(baselinePath))
+const baseline = parseBaseline(readFileSync(baselinePath, 'utf8'), baselinePath)
+const baseRef = option('--base', undefined)
+const base = baseRef === undefined ? null : baselineAt(root, baseRef, baselinePath)
+
+const problems = [...problemsOf(oversize(root), baseline), ...(base === null ? [] : widening(baseline, base))]
 
 if (problems.length > 0) {
   for (const problem of problems) console.error(`✖ ${problem}`)

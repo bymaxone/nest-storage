@@ -46,11 +46,22 @@ jobs:
           # The install step below runs the pull request's own scripts; the read-only token must
           # not stay in the repository's git configuration for them to read.
           persist-credentials: false
+          # The length check compares a pull request's baseline with its base branch's.
+          fetch-depth: 0
       - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
       - name: Mutation directives parse and carry their reason
         run: pnpm check:mutants
       - name: Source files stay within the length limit
-        run: pnpm check:file-length
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # A pull request is also checked against the baseline on its base branch, so the
+          # baseline it carries cannot admit the offender it adds.
+          if [ -n "$BASE_REF" ]; then
+            pnpm check:file-length --base "origin/$BASE_REF"
+          else
+            pnpm check:file-length
+          fi
       - name: Build all subpaths
         run: pnpm build
       - name: Verify build output integrity
