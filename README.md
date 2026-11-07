@@ -274,7 +274,7 @@ The full configuration reference lives in `docs/technical_specification.md` §4.
 | `multipart.thresholdBytes`     | `number`                                          | `5 MiB`           | Switch to multipart at or above this size      |
 | `multipart.partSizeBytes`      | `number`                                          | `5 MiB`           | Part size (S3 minimum: 5 MiB)                  |
 | `multipart.queueSize`          | `number`                                          | `4`               | Concurrent parts                               |
-| `validation.mimeWhitelist`     | `string[]`                                        | —                 | No MIME check when absent. Wildcards: `'image/*'` |
+| `validation.mimeWhitelist`     | `string[]`                                        | —                 | No MIME check when absent. Wildcards: `'image/*'`. A value that lists several types never matches |
 | `validation.maxSizeBytes`      | `number`                                          | —                 | Maximum upload size in bytes                   |
 
 > **Do not use `maxRetries` or `signatureVersion`** — these are AWS SDK v2 options that do not exist in v3. The v3 SDK is SigV4-only. Use `maxAttempts` (default `3`) for retry configuration.

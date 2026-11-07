@@ -105,4 +105,44 @@ describe('mimeMatches', () => {
     // the slash-present guard uses -1 as the sentinel, not 1 — a slash at index 1 counts
     expect(mimeMatches('a/b', ['a/*'])).toBe(true)
   })
+
+  describe('a value that is more than one type', () => {
+    // A header read as a list is parsed by a browser with the LAST valid type winning, so a value that
+    // passes on its first type but ends in another is served as the other.
+    it.each([
+      ['image/png;,text/html', ['image/png']],
+      ['image/png; charset=x, text/html', ['image/png']],
+      ['image/png,text/html', ['image/*']],
+      ['text/html, image/png', ['image/png', 'text/html']],
+      ['image/png,text/html', ['*/*']],
+      ['image/png; a="x,y"', ['image/png']],
+    ])('never matches %j', (mime, whitelist) => {
+      expect(mimeMatches(mime, whitelist)).toBe(false)
+    })
+
+    it('never matches a value with a line break', () => {
+      expect(mimeMatches('image/png;\r\nx-evil: 1', ['image/png'])).toBe(false)
+    })
+  })
+
+  describe('a malformed type', () => {
+    it.each(['image/', '/png', 'image//png', 'image/p ng', 'image png/x', 'im(age/png', 'image/png x'])(
+      'never matches %j',
+      (mime) => {
+        expect(mimeMatches(mime, ['*/*'])).toBe(false)
+      },
+    )
+  })
+
+  describe('a single type with parameters', () => {
+    it.each([
+      ['image/png; charset=utf-8', ['image/png']],
+      ['IMAGE/PNG ;charset=utf-8', ['image/*']],
+      ['  image/svg+xml  ', ['image/svg+xml']],
+      ['application/vnd.api+json;profile=x', ['application/*']],
+      ['text/plain;', ['text/plain']],
+    ])('still matches %j', (mime, whitelist) => {
+      expect(mimeMatches(mime, whitelist)).toBe(true)
+    })
+  })
 })
