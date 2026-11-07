@@ -3,9 +3,9 @@
  * unless the file is on a frozen baseline that can only shrink.
  * @layer scripts
  *
- * The 800-line rule is otherwise enforced by a reviewer, which sees only what a change
- * introduces. This makes it a red check. A file that already exceeds the limit is listed in the
- * baseline with its length, and the list is kept honest from both sides:
+ * A file that already exceeds the limit is listed in the baseline with its length, so the check
+ * can be red for what a change introduces without failing on what the repository inherits. The
+ * list is kept honest from both sides:
  *
  * - a file over the limit that is not on the baseline fails (a new or grown offender);
  * - a baselined file that grew past its recorded length fails (the baseline cannot widen);
