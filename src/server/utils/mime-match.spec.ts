@@ -125,6 +125,20 @@ describe('mimeMatches', () => {
     })
   })
 
+  it('does not treat a pattern that merely starts with the type as a wildcard', () => {
+    // 'imagexy' minus its last two characters is the type 'image', but it has no '/*' suffix.
+    expect(mimeMatches('image/png', ['imagexy'])).toBe(false)
+    expect(mimeMatches('image/png', ['image/x*'])).toBe(false)
+  })
+
+  it('never matches a non-string whose text form is a valid type', () => {
+    // An array or object is coerced by a regex test, so `['image/png']` would read as 'image/png'.
+    expect(mimeMatches(['image/png'] as unknown as string, ['image/png'])).toBe(false)
+    expect(mimeMatches({ toString: () => 'image/png' } as unknown as string, ['image/*'])).toBe(
+      false,
+    )
+  })
+
   describe('a malformed type', () => {
     it.each([
       'image/',

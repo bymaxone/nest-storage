@@ -12,7 +12,8 @@
  * takes the last valid type, so a value that matches on its first type would be served as another.
  * Such a value is not a type to compare, whatever the whitelist holds.
  */
-const SINGLE_MEDIA_TYPE = /^[ \t]*[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+[ \t]*(?:;[^,\r\n]*)?$/
+const SINGLE_MEDIA_TYPE =
+  /^[ \t]*[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+[ \t]*(?:;[^,\r\n]*)?$/
 
 /**
  * Returns `true` when `mime` matches at least one pattern in `whitelist`.
@@ -54,14 +55,9 @@ export function mimeMatches(mime: string, whitelist: readonly string[]): boolean
     if (pattern === '*/*') {
       return true
     }
-    const patSlash = pattern.indexOf('/')
-    if (patSlash !== -1) {
-      const patType = pattern.slice(0, patSlash)
-      const patSubtype = pattern.slice(patSlash + 1)
-      // Subtype wildcard: same type, any subtype
-      if (patSubtype === '*' && patType === type) {
-        return true
-      }
+    // Subtype wildcard: same type, any subtype
+    if (pattern.endsWith('/*') && pattern.slice(0, -2) === type) {
+      return true
     }
   }
   return false
