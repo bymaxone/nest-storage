@@ -159,6 +159,29 @@ describe('mimeMatches', () => {
     })
   })
 
+  describe('a parameter part outside the field-value characters', () => {
+    // A header value holds HTAB, space and printable ASCII; anything else makes the request unusable.
+    it.each([
+      ['a NUL', 'text/plain; charset=\u0000utf-8'],
+      ['a control character', 'text/plain; charset=utf-8\u0001'],
+      ['DEL', 'text/plain; charset=\u007Futf-8'],
+      ['a vertical tab', 'text/plain;\u000Bcharset=utf-8'],
+      ['a form feed', 'text/plain;\u000Ccharset=utf-8'],
+      ['a Latin-1 character', 'text/plain; charset=caf\u00E9'],
+      ['a character beyond Latin-1', 'text/plain; name=\u65E5\u672C'],
+      ['a no-break space', 'text/plain;\u00A0charset=utf-8'],
+      ['a line separator', 'text/plain; a=\u2028b'],
+    ])('never matches %s', (_label, mime) => {
+      expect(mimeMatches(mime, ['text/plain'])).toBe(false)
+    })
+
+    it('still matches the whole printable ASCII range, a space and a tab, minus the comma', () => {
+      expect(
+        mimeMatches('text/plain; a=!"#$%&\'()*+-./:;<=>?@[\\]^_`{|}~ \t', ['text/plain']),
+      ).toBe(true)
+    })
+  })
+
   describe('a single type with parameters', () => {
     it.each([
       ['image/png; charset=utf-8', ['image/png']],

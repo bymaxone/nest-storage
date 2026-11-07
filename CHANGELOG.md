@@ -13,6 +13,19 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The MIME whitelist now refuses control and non-ASCII characters in the parameter part of a
+  content type.** The parameters after `;` were accepted if they held no comma and no line break, so
+  a value such as `text/plain; charset=café` or one with a NUL passed the whitelist, although
+  RFC 9110 field values are tab, space and printable ASCII (obsolete text aside). The parameter part
+  may now hold only tab, space and printable ASCII other than the comma.
+
+  **Apply to a derived backend:** with `validation.mimeWhitelist` set, a `contentType` whose
+  parameters hold any other character now fails with `STORAGE_MIME_NOT_ALLOWED`. A type with
+  ordinary parameters, such as `text/plain; charset=utf-8`, is unaffected. Without a whitelist
+  nothing changes: the value is passed on as given.
+
 ## [1.1.8] - 2026-11-06
 
 ### Fixed

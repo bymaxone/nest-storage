@@ -8,12 +8,13 @@
 
 /**
  * One media type: `type/subtype` (RFC 9110 token characters), then optionally `;` and parameters
- * with no comma and no line break. A comma makes the value a list, and a browser reading a list
+ * made of tab, space and printable ASCII except the comma, which is what a header value can hold
+ * without a control or non-ASCII character that makes the request unusable. A comma makes the value a list, and a browser reading a list
  * takes the last valid type, so a value that matches on its first type would be served as another.
  * Such a value is not a type to compare, whatever the whitelist holds.
  */
 const SINGLE_MEDIA_TYPE =
-  /^[ \t]*[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+[ \t]*(?:;[^,\r\n]*)?$/
+  /^[ \t]*[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+[ \t]*(?:;[\t \x21-\x2B\x2D-\x7E]*)?$/
 
 /**
  * Returns `true` when `mime` matches at least one pattern in `whitelist`.
