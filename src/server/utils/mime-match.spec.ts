@@ -126,12 +126,23 @@ describe('mimeMatches', () => {
   })
 
   describe('a malformed type', () => {
-    it.each(['image/', '/png', 'image//png', 'image/p ng', 'image png/x', 'im(age/png', 'image/png x'])(
-      'never matches %j',
-      (mime) => {
-        expect(mimeMatches(mime, ['*/*'])).toBe(false)
-      },
-    )
+    it.each([
+      'image/',
+      '/png',
+      'image//png',
+      'image/p ng',
+      'image png/x',
+      'im(age/png',
+      'image/png x',
+      '   ',
+      '\t',
+      'image/png\t,\ttext/html',
+      'image/\npng',
+      'image/png\n',
+      'image\t/png',
+    ])('never matches %j', (mime) => {
+      expect(mimeMatches(mime, ['*/*'])).toBe(false)
+    })
   })
 
   describe('a single type with parameters', () => {
@@ -141,6 +152,10 @@ describe('mimeMatches', () => {
       ['  image/svg+xml  ', ['image/svg+xml']],
       ['application/vnd.api+json;profile=x', ['application/*']],
       ['text/plain;', ['text/plain']],
+      ['image/png ;', ['image/png']],
+      ['text/plain; charset="utf-8"', ['text/plain']],
+      ['text/plain;\tcharset=utf-8', ['text/plain']],
+      ['\timage/png\t', ['image/png']],
     ])('still matches %j', (mime, whitelist) => {
       expect(mimeMatches(mime, whitelist)).toBe(true)
     })
