@@ -106,6 +106,31 @@ describe('providerRecipes.wasabi', () => {
   })
 })
 
+describe('providerRecipes table', () => {
+  it('holds exactly the six published recipes', () => {
+    // The table is `as const`, which Stryker does not mutate: a recipe added or dropped shows here.
+    expect(Object.keys(providerRecipes).sort()).toStrictEqual(
+      ['awsS3', 'backblazeB2', 'cloudflareR2', 'digitalOceanSpaces', 'minio', 'wasabi'].sort(),
+    )
+  })
+
+  it('gives every non-AWS recipe exactly the checksum opt-out pair, and AWS none', () => {
+    // The shared opt-out table is `as const` too; compare the checksum keys whole, not one at a time.
+    const checksumKeys = (config: object): Record<string, unknown> =>
+      Object.fromEntries(Object.entries(config).filter(([key]) => key.toLowerCase().includes('checksum')))
+    const optOut = { requestChecksumCalculation: 'WHEN_REQUIRED', responseChecksumValidation: 'WHEN_REQUIRED' }
+    const base = { region: 'r', bucket: 'b', ...CREDS }
+    const r2 = { accountId: 'a', bucket: 'b', customDomain: 'https://c.example', ...CREDS }
+    const mi = { endpoint: 'http://m:9000', bucket: 'b', ...CREDS }
+    expect(checksumKeys(providerRecipes.awsS3(base))).toStrictEqual({})
+    expect(checksumKeys(providerRecipes.digitalOceanSpaces(base))).toStrictEqual(optOut)
+    expect(checksumKeys(providerRecipes.wasabi(base))).toStrictEqual(optOut)
+    expect(checksumKeys(providerRecipes.cloudflareR2(r2))).toStrictEqual(optOut)
+    expect(checksumKeys(providerRecipes.backblazeB2({ ...base, endpointHost: 'h' }))).toStrictEqual(optOut)
+    expect(checksumKeys(providerRecipes.minio(mi))).toStrictEqual(optOut)
+  })
+})
+
 describe('providerRecipes determinism', () => {
   it('returns deep-equal output for the same input across every recipe', () => {
     // Recipes are pure references — no hidden state between calls.
