@@ -13,6 +13,21 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The MIME whitelist no longer accepts a value that lists several types.** The check compared only
+  the text before the first `;`, while the whole value was signed or stored, so with a whitelist of
+  `image/png`, `image/png;,text/html`, `image/png; charset=x, text/html` and, under `image/*`,
+  `image/png,text/html` all passed. A browser reads such a header as a list and takes the last valid
+  type, so the object could be served as `text/html`. The check now accepts only one `type/subtype`
+  (RFC 9110 token characters) with optional parameters, and no comma or line break anywhere in the
+  value.
+
+  **Apply to a derived backend:** a `contentType` that is a list, or is not a plain `type/subtype`,
+  now fails with `STORAGE_MIME_NOT_ALLOWED` when `validation.mimeWhitelist` is set, including under
+  `*/*`. A single type with parameters, such as `text/plain; charset=utf-8`, is unaffected. Without
+  a whitelist nothing changes: the value is stored as given.
+
 ## [1.1.7] - 2026-11-06
 
 ### Fixed

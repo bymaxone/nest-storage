@@ -7,6 +7,15 @@
  */
 
 /**
+ * One media type: `type/subtype` (RFC 9110 token characters), then optionally `;` and parameters
+ * with no comma and no line break. A comma makes the value a list, and a browser reading a list
+ * takes the last valid type, so a value that matches on its first type would be served as another.
+ * Such a value is not a type to compare, whatever the whitelist holds.
+ */
+const SINGLE_MEDIA_TYPE =
+  /^[ \t]*[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+[ \t]*(?:;[^,\r\n]*)?$/
+
+/**
  * Returns `true` when `mime` matches at least one pattern in `whitelist`.
  *
  * Three match modes are supported:
@@ -17,25 +26,23 @@
  *    pair.
  *
  * RFC 2045 parameters after `;` (e.g. `charset=utf-8`) are stripped before
- * comparison. An input with no `/` is treated as an invalid MIME type and
- * never matches.
+ * comparison. An input that is not a single well-formed `type/subtype` never matches.
  *
- * @param mime - The content type to test. Parameters are stripped internally.
+ * @param mime - The content type to test. Parameters are stripped internally. A value that is
+ *   not a single `type/subtype` (a comma-separated list, a missing part, a character outside the
+ *   token set) never matches.
  * @param whitelist - The list of allowed patterns. Whitespace around each
  *   pattern is ignored.
  * @returns `true` when any pattern in the whitelist matches.
  */
 export function mimeMatches(mime: string, whitelist: readonly string[]): boolean {
-  if (typeof mime !== 'string') {
+  if (typeof mime !== 'string' || !SINGLE_MEDIA_TYPE.test(mime)) {
     return false
   }
   // Strip RFC 2045 parameters (text after the first semicolon) without optional chaining
+  // The pattern above guarantees a '/' with a non-empty type and subtype before any ';'.
   const mimeBase = mime.includes(';') ? mime.slice(0, mime.indexOf(';')) : mime
   const normalized = mimeBase.trim().toLowerCase()
-  // Stryker disable next-line ConditionalExpression: an empty `normalized` can never contain '/', so `!normalized.includes('/')` already covers the length===0 case — forcing the first operand to false is behaviourally identical (equivalent mutant).
-  if (normalized.length === 0 || !normalized.includes('/')) {
-    return false
-  }
   const slashIdx = normalized.indexOf('/')
   const type = normalized.slice(0, slashIdx)
 
@@ -48,14 +55,9 @@ export function mimeMatches(mime: string, whitelist: readonly string[]): boolean
     if (pattern === '*/*') {
       return true
     }
-    const patSlash = pattern.indexOf('/')
-    if (patSlash !== -1) {
-      const patType = pattern.slice(0, patSlash)
-      const patSubtype = pattern.slice(patSlash + 1)
-      // Subtype wildcard: same type, any subtype
-      if (patSubtype === '*' && patType === type) {
-        return true
-      }
+    // Subtype wildcard: same type, any subtype
+    if (pattern.endsWith('/*') && pattern.slice(0, -2) === type) {
+      return true
     }
   }
   return false

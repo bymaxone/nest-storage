@@ -374,6 +374,24 @@ describe('SignedUrlService', () => {
       expect(mockedGetSignedUrl).not.toHaveBeenCalled()
     })
 
+    it.each([
+      ['image/png;,text/html', ['image/png']],
+      ['image/png; charset=x, text/html', ['image/png']],
+      ['image/png,text/html', ['image/*']],
+    ])('refuses to presign %j, which a browser would read as its last type', async (contentType, mimeWhitelist) => {
+      // The signed value is stored verbatim, so a list that passes on its first type must not get a URL.
+      const service = await buildService(
+        { ...buildOptions(), validation: { mimeWhitelist } },
+        buildMockS3Provider(),
+        buildMockKeyResolver(),
+      )
+
+      const err = await service.getUploadUrl({ key: KEY, contentType }).catch((e: unknown) => e)
+
+      expect(err).toMatchObject({ code: 'STORAGE_MIME_NOT_ALLOWED' })
+      expect(mockedGetSignedUrl).not.toHaveBeenCalled()
+    })
+
     it('presigns an upload whose contentType matches an exact entry or a wildcard', async () => {
       const service = await buildService(whitelisted(), buildMockS3Provider(), buildMockKeyResolver())
 

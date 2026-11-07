@@ -59,6 +59,17 @@ describe('ValidationService', () => {
       expect(result.body).toBeDefined()
     })
 
+    it.each([
+      ['image/png;,text/html', ['image/png']],
+      ['image/png; charset=x, text/html', ['image/png']],
+      ['image/png,text/html', ['image/*']],
+    ])('refuses %j, which a browser would read as its last type', async (contentType, mimeWhitelist) => {
+      // The upload is stored with the value as given, so a list that passes on its first type must not pass.
+      const service = await buildService(buildOptions({ mimeWhitelist }))
+      const err = await service.validate({ key: 'k', body: Buffer.from('x'), contentType }).catch((e: unknown) => e)
+      expect(err).toMatchObject({ code: STORAGE_ERROR_CODES.STORAGE_MIME_NOT_ALLOWED })
+    })
+
     it('throws STORAGE_MIME_NOT_ALLOWED when MIME is outside the whitelist', async () => {
       // disallowed MIME must be rejected before any S3 call
       const service = await buildService(buildOptions({ mimeWhitelist: ['image/png'] }))
