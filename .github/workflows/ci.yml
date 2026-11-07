@@ -49,6 +49,8 @@ jobs:
       - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
       - name: Mutation directives parse and carry their reason
         run: pnpm check:mutants
+      - name: Source files stay within the length limit
+        run: pnpm check:file-length
       - name: Build all subpaths
         run: pnpm build
       - name: Verify build output integrity
