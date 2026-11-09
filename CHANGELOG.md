@@ -13,6 +13,31 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A caller string bound for an HTTP header is now checked, whether or not a MIME whitelist is set.**
+  `contentType`, `cacheControl`, `contentDisposition`, `kmsKeyId`, the keys and values of `metadata`,
+  `range`, `ifMatch`, `ifNoneMatch`, and `responseContentDisposition` and `responseContentType` of a
+  signed download URL passed through unchecked: with no whitelist, `getUploadUrl` signed a content
+  type holding a CR, LF, NUL or DEL, or a non-ASCII character, and the other options reached the
+  request or a signed URL the same way. Each of them may now hold only tab, space and printable
+  ASCII, and a `metadata` key must be a non-empty header name. Anything else fails with
+  `STORAGE_VALIDATION_FAILED` and `details: { field, reason }` before any request, from `upload()`,
+  `copy()`, `download()`, `getUploadUrl()`, `getMultipartUploadUrls()` and `getDownloadUrl()`. The
+  error never repeats the value. `defaultCacheControl` and `kmsKeyId` in the module options are
+  checked at bootstrap and fail with `STORAGE_INVALID_CONFIG`. An idempotent repeat of an `upload()`
+  is checked too, so it is not answered from the cache when a header-bound value is bad. With a
+  whitelist set, a bad `contentType` is still refused by the whitelist first, as
+  `STORAGE_MIME_NOT_ALLOWED`; that error no longer shows a `contentType` that is not a header value,
+  only the whitelist.
+
+  **Apply to a derived backend:** a value with a control or non-ASCII character that used to reach the
+  provider now fails with `STORAGE_VALIDATION_FAILED`. To send a non-ASCII filename, percent-encode it
+  as RFC 6266 `filename*`: `contentDisposition: "attachment; filename*=UTF-8''caf%C3%A9.pdf"`.
+  Percent-encode non-ASCII `metadata` values yourself with `encodeURIComponent`. A `metadata` key
+  with a colon, a space, a slash or a non-ASCII character is refused; use letters, digits and
+  `-`, `_` or `.`.
+
 ## [1.1.9] - 2026-11-09
 
 ### Fixed

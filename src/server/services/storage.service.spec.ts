@@ -17,13 +17,14 @@ import { IdempotencyCache } from '../utils/idempotency-cache'
 import { applyDefaults } from '../config/apply-defaults'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
-import type { ValidationService } from './validation.service'
+import { ValidationService } from './validation.service'
 import type { FileScannerService } from './file-scanner.service'
 
 /** Stub ValidationService that passes everything through unchanged. */
 function makePassthroughValidation(): ValidationService {
   return {
     validate: jest.fn().mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
+    checkHeaders: jest.fn(),
   } as unknown as ValidationService
 }
 
@@ -46,7 +47,7 @@ interface Harness {
 
 function makeService(
   overrides: Partial<BymaxStorageModuleOptions> = {},
-  opts: { configured?: boolean; bucket?: string } = {},
+  opts: { configured?: boolean; bucket?: string; realValidation?: boolean } = {},
 ): Harness {
   const resolved = applyDefaults({
     endpoint: 'https://s3.example.com',
@@ -70,7 +71,7 @@ function makeService(
     s3Provider,
     keyResolver,
     cache,
-    makePassthroughValidation(),
+    opts.realValidation === true ? new ValidationService(effective, []) : makePassthroughValidation(),
     makeDisabledScanner(),
   )
   return { service, send }
@@ -249,6 +250,23 @@ describe('StorageService — single-shot upload', () => {
     const second = await service.upload(uploadOf({ idempotencyKey: 'req-1' }))
     expect(first.fromIdempotencyCache).toBe(false)
     expect(second.fromIdempotencyCache).toBe(true)
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['contentType', { contentType: 'text/plain\r\nX-Injected: 1' }],
+    ['cacheControl', { cacheControl: 'no-cache\r\nX-Injected: 1' }],
+    ['contentDisposition', { contentDisposition: 'attachment; filename="caf\u00e9"' }],
+    ['metadata', { metadata: { owner: 'a\u0000b' } }],
+  ] as const)('refuses a bad %s on an idempotent repeat instead of returning the cached result', async (_name, bad) => {
+    // A cache hit sends nothing, but a value that is not a header value is refused whatever the cache holds.
+    const { service, send } = makeService({}, { realValidation: true })
+    send.mockResolvedValue({ ETag: '"abc"' })
+    await service.upload(uploadOf({ idempotencyKey: 'req-2' }))
+
+    const err = await service.upload(uploadOf({ idempotencyKey: 'req-2', ...bad })).catch((e: unknown) => e)
+
+    expect((err as StorageException).code).toBe('STORAGE_VALIDATION_FAILED')
     expect(send).toHaveBeenCalledTimes(1)
   })
 

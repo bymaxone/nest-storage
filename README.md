@@ -350,6 +350,19 @@ const result = await storage.upload({
 console.log(result.publicUrl) // https://...
 ```
 
+**Header values.** Anything you pass that becomes an HTTP header or a signed query value —
+`contentType`, `cacheControl`, `contentDisposition`, `kmsKeyId`, the keys and values of `metadata`,
+`range`, `ifMatch`, `ifNoneMatch`, and `responseContentDisposition` / `responseContentType` on a
+signed GET — may hold only tab, space and printable ASCII. A control character (a line break
+included) or a non-ASCII character is refused with `STORAGE_VALIDATION_FAILED` before any request
+is made, whether or not `validation.mimeWhitelist` is set; the error names the field and the
+reason, never the value. When a whitelist is set it is consulted first, so a `contentType` it does
+not allow, a malformed one included, fails as `STORAGE_MIME_NOT_ALLOWED`; a value that passes the
+whitelist, or any value when there is none, is then checked as a header value. A `metadata` key must also be a non-empty header name: letters, digits and
+the characters ``!#$%&'*+-.^_`|~``. To send a non-ASCII filename, percent-encode it as RFC 6266
+`filename*`: `contentDisposition: "attachment; filename*=UTF-8''caf%C3%A9.pdf"`. Percent-encode
+non-ASCII `metadata` values yourself (`encodeURIComponent`) and decode them when you read them.
+
 ### Stream with Progress
 
 ```typescript
@@ -751,7 +764,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_CONTENT_TYPE_REQUIRED`  | 400  | `upload()` called without `contentType`                                                                                                                                                                            |
 | `STORAGE_MIME_NOT_ALLOWED`       | 415  | `contentType` outside `mimeWhitelist`, at upload or at presign                                                                                                                                                                            |
 | `STORAGE_SIZE_EXCEEDED`          | 413  | `size > maxSizeBytes`                                                                                                                                                                                              |
-| `STORAGE_VALIDATION_FAILED`      | 400  | `IUploadValidator` rejected the file (`details.reason`)                                                                                                                                                            |
+| `STORAGE_VALIDATION_FAILED`      | 400  | `IUploadValidator` rejected the file, or a header-bound value is not a header value (`details.field`, `details.reason`)                                                                                                                                                            |
 | `STORAGE_SCAN_INFECTED`          | 422  | Scanner returned `'infected'` (`details.threat`); `details.cleanup: 'failed'` means the object is still stored                                                                                                    |
 | `STORAGE_SCAN_INCONCLUSIVE`      | 422  | Scanner returned `'unknown'` and `rejectOnUnknown: true`                                                                                                                                                           |
 | `STORAGE_OBJECT_NOT_FOUND`       | 404  | `head()`, `download()`, or `copy()` on a nonexistent key                                                                                                                                                           |
