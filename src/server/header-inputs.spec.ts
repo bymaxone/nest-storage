@@ -228,3 +228,146 @@ describe('public API: caller strings bound for a header', () => {
     )
   })
 })
+
+/** Option interfaces whose header-bound properties are listed in HEADER_BOUND. */
+const HEADER_BOUND_INTERFACES = new Set(
+  Object.keys(HEADER_BOUND).map((name) => name.slice(0, name.indexOf('.'))),
+)
+
+/** Calls that run the whitelist or a header-value check. */
+const GUARDS = [
+  'assertHeaderValues',
+  'assertMetadata',
+  'assertMimeAllowed',
+  'checkHeaders',
+  'validate',
+]
+
+/** Methods that check header-bound options themselves: no `return` may come before the first guard. */
+const GUARDED = [
+  'StorageService.uploadOwningBody',
+  'StorageService.download',
+  'StorageService.copy',
+  'SignedUrlService.getDownloadUrl',
+  'SignedUrlService.getUploadUrl',
+  'SignedUrlService.getMultipartUploadUrls',
+]
+
+/** Methods that only hand their options to a guarded method. */
+const DELEGATING: Record<string, string> = {
+  'StorageService.upload': 'uploadOwningBody',
+  'StorageService.downloadBuffer': 'download',
+}
+
+/** A `return` allowed before the guard, with the reason it cannot skip a header-bound value. */
+const EARLY_RETURNS: Record<string, string> = {}
+
+const SERVICES = join(__dirname, 'services')
+
+/** Every method of `className` in `file`, by name. */
+function methodsOf(file: string, className: string): Map<string, ts.MethodDeclaration> {
+  const source = ts.createSourceFile(
+    file,
+    readFileSync(join(SERVICES, file), 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+  )
+  const found = new Map<string, ts.MethodDeclaration>()
+  source.forEachChild((node) => {
+    if (ts.isClassDeclaration(node) && node.name?.text === className) {
+      for (const member of node.members) {
+        if (ts.isMethodDeclaration(member)) {
+          found.set(member.name.getText(source), member)
+        }
+      }
+    }
+  })
+  return found
+}
+
+/** Return statements of `method` itself, not of the functions declared inside it. */
+function ownReturns(method: ts.MethodDeclaration): ts.ReturnStatement[] {
+  const found: ts.ReturnStatement[] = []
+  const visit = (node: ts.Node): void => {
+    if (ts.isFunctionLike(node)) {
+      return
+    }
+    if (ts.isReturnStatement(node)) {
+      found.push(node)
+    }
+    node.forEachChild(visit)
+  }
+  method.body?.forEachChild(visit)
+  return found
+}
+
+/** Source position of the first call to a guard inside `method`, or `undefined` when there is none. */
+function firstGuard(method: ts.MethodDeclaration): number | undefined {
+  let first: number | undefined
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression.getText().split('.').pop() ?? ''
+      if (GUARDS.includes(callee) && (first === undefined || node.getStart() < first)) {
+        first = node.getStart()
+      }
+    }
+    node.forEachChild(visit)
+  }
+  method.body?.forEachChild(visit)
+  return first
+}
+
+describe('public API: no early return skips the header check', () => {
+  const classes = {
+    StorageService: methodsOf('storage.service.ts', 'StorageService'),
+    SignedUrlService: methodsOf('signed-url.service.ts', 'SignedUrlService'),
+  }
+  const lookup = (id: string): ts.MethodDeclaration | undefined => {
+    const [className, name] = id.split('.') as [keyof typeof classes, string]
+    return classes[className].get(name)
+  }
+
+  it('classifies every public method that takes a header-bound options interface', () => {
+    // A new method taking one of these options has to be guarded here, or listed as delegating to one that is.
+    const takers: string[] = []
+    for (const [className, methods] of Object.entries(classes)) {
+      for (const [name, method] of methods) {
+        const isPrivate =
+          method.modifiers?.some((m) => m.kind === ts.SyntaxKind.PrivateKeyword) ?? false
+        const types = method.parameters.map((parameter) => parameter.type?.getText() ?? '')
+        if (!isPrivate && types.some((type) => HEADER_BOUND_INTERFACES.has(type))) {
+          takers.push(`${className}.${name}`)
+        }
+      }
+    }
+
+    const classified = [...GUARDED, ...Object.keys(DELEGATING)].filter(
+      (id) => !id.endsWith('uploadOwningBody'),
+    )
+    expect(takers.sort()).toStrictEqual(classified.sort())
+  })
+
+  it.each(GUARDED)('%s runs a guard before any return', (id) => {
+    const method = lookup(id)
+    expect(method).toBeDefined()
+    if (method === undefined) {
+      return
+    }
+    const guard = firstGuard(method)
+    expect(guard).toBeDefined()
+    if (id in EARLY_RETURNS) {
+      return
+    }
+    const early = ownReturns(method).filter((statement) => statement.getStart() < (guard ?? 0))
+    expect(early.map((statement) => statement.getText())).toStrictEqual([])
+  })
+
+  it.each(Object.entries(DELEGATING))('%s only delegates to %s', (id, target) => {
+    const method = lookup(id)
+    expect(method?.body?.getText()).toContain(`this.${target}(`)
+  })
+
+  it('lists no early return without a reason', () => {
+    expect(Object.values(EARLY_RETURNS).every((reason) => reason.length > 0)).toBe(true)
+  })
+})
