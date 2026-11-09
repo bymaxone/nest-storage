@@ -26,10 +26,7 @@
     "!src/**/*.spec.ts",
     "!src/**/index.ts",
     "!src/server/interfaces/**",
-    "!src/server/constants/**",
-    "!src/server/bymax-storage.constants.ts",
-    "!src/server/errors/storage-error-messages.ts",
-    "!src/server/errors/storage-error-status.ts"
+    "!src/server/constants/**"
   ],
   "thresholds": {
     "high": 100,
