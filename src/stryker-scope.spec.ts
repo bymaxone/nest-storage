@@ -167,6 +167,10 @@ const LOGIC_NODES = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.FunctionDeclaration,
   ts.SyntaxKind.FunctionExpression,
   ts.SyntaxKind.ArrowFunction,
+  ts.SyntaxKind.MethodDeclaration,
+  ts.SyntaxKind.GetAccessor,
+  ts.SyntaxKind.SetAccessor,
+  ts.SyntaxKind.TaggedTemplateExpression,
   ts.SyntaxKind.ClassDeclaration,
   ts.SyntaxKind.ClassExpression,
   ts.SyntaxKind.ConditionalExpression,
@@ -290,5 +294,9 @@ describe('mutation scope', () => {
     expect(logicIn("export const A = typeof 'a'")).toEqual(['TypeOfExpression'])
     expect(logicIn('export const A = void 0')).toEqual(['VoidExpression'])
     expect(logicIn('export const A = delete b.c')).toEqual(['DeleteExpression'])
+    expect(logicIn('export const A = { value() { return 1 } }')).toEqual(['MethodDeclaration'])
+    expect(logicIn('export const A = { get value() { return 1 } }')).toEqual(['GetAccessor'])
+    expect(logicIn('export const A = { set value(v: number) {} }')).toEqual(['SetAccessor'])
+    expect(logicIn('export const A = tag`x`')).toEqual(['TaggedTemplateExpression'])
   })
 })
