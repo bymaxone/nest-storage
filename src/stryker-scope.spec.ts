@@ -171,6 +171,11 @@ const LOGIC_NODES = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.ClassExpression,
   ts.SyntaxKind.ConditionalExpression,
   ts.SyntaxKind.BinaryExpression,
+  ts.SyntaxKind.PrefixUnaryExpression,
+  ts.SyntaxKind.PostfixUnaryExpression,
+  ts.SyntaxKind.TypeOfExpression,
+  ts.SyntaxKind.VoidExpression,
+  ts.SyntaxKind.DeleteExpression,
   ts.SyntaxKind.IfStatement,
   ts.SyntaxKind.NewExpression,
   ts.SyntaxKind.TemplateExpression,
@@ -279,5 +284,11 @@ describe('mutation scope', () => {
     expect(logicIn('export const A = b ? 1 : 2')).toEqual(['ConditionalExpression'])
     expect(logicIn('export const A = load()')).toEqual(['call load'])
     expect(logicIn('export class A {}')).toEqual(['ClassDeclaration'])
+    expect(logicIn('export const A = !true')).toEqual(['PrefixUnaryExpression'])
+    expect(logicIn('export const A = -1')).toEqual(['PrefixUnaryExpression'])
+    expect(logicIn('let n = 0\nexport const A = n++')).toEqual(['PostfixUnaryExpression'])
+    expect(logicIn("export const A = typeof 'a'")).toEqual(['TypeOfExpression'])
+    expect(logicIn('export const A = void 0')).toEqual(['VoidExpression'])
+    expect(logicIn('export const A = delete b.c')).toEqual(['DeleteExpression'])
   })
 })
