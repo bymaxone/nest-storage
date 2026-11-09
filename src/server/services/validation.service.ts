@@ -10,7 +10,7 @@ import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { IUploadValidator } from '../interfaces/upload-validator.interface'
 import type { UploadBody } from '../utils/stream-utils'
 import { peekFirstBytes } from '../utils/stream-utils'
-import { mimeMatches } from '../utils/mime-match'
+import { assertMimeAllowed } from '../utils/mime-allowed'
 import { assertHeaderValues, assertMetadata } from '../utils/header-value'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
@@ -50,7 +50,23 @@ export class ValidationService {
    * @throws StorageException `STORAGE_VALIDATION_FAILED` on a custom validator rejection.
    */
   async validate(input: ValidationInput): Promise<{ body: UploadBody }> {
-    this.checkMime(input.contentType)
+    this.checkHeaders(input)
+    this.checkSize(input.size)
+    const body = await this.runCustomValidators(input)
+    return { body }
+  }
+
+  /**
+   * The whitelist, then the header-bound values: the part of the pipeline that needs no body, run
+   * alone when an idempotent repeat is answered from the cache.
+   *
+   * @param input - The upload options subset holding the header-bound values.
+   * @throws StorageException `STORAGE_MIME_NOT_ALLOWED` or `STORAGE_VALIDATION_FAILED`.
+   */
+  checkHeaders(
+    input: Pick<ValidationInput, 'contentType' | 'cacheControl' | 'contentDisposition' | 'kmsKeyId' | 'metadata'>,
+  ): void {
+    assertMimeAllowed(this.options.validation?.mimeWhitelist, input.contentType)
     assertHeaderValues({
       contentType: input.contentType,
       cacheControl: input.cacheControl,
@@ -58,23 +74,6 @@ export class ValidationService {
       kmsKeyId: input.kmsKeyId,
     })
     assertMetadata(input.metadata)
-    this.checkSize(input.size)
-    const body = await this.runCustomValidators(input)
-    return { body }
-  }
-
-  /** Checks the MIME against the configured whitelist (no-op when absent or empty). */
-  private checkMime(contentType: string): void {
-    const whitelist = this.options.validation?.mimeWhitelist
-    if (!whitelist || whitelist.length === 0) {
-      return
-    }
-    if (!mimeMatches(contentType, whitelist)) {
-      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_MIME_NOT_ALLOWED, undefined, {
-        contentType,
-        whitelist,
-      })
-    }
   }
 
   /** Best-effort size check — skipped when size is undefined. */

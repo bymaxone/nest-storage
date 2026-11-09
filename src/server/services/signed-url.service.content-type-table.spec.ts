@@ -104,7 +104,37 @@ async function outcomeOf(service: SignedUrlService, contentType: string): Promis
   }
 }
 
+/** The details of the error `getUploadUrl` throws for `contentType`, or `undefined` when it signs. */
+async function detailsOf(
+  service: SignedUrlService,
+  contentType: string,
+): Promise<Record<string, unknown> | undefined> {
+  try {
+    await service.getUploadUrl({ key: 'g70/object.txt', contentType })
+    return undefined
+  } catch (error) {
+    return (
+      error as { getResponse: () => { error: { details?: Record<string, unknown> } } }
+    ).getResponse().error.details
+  }
+}
+
 describe('getUploadUrl content-type table', () => {
+  it.each(ROWS.filter(([, , withWhitelist]) => withWhitelist === 'STORAGE_MIME_NOT_ALLOWED'))(
+    'does not repeat a value that is not a header value in the whitelist error: %s',
+    async (_label, contentType) => {
+      const service = await signerWith(['text/plain', 'image/*'])
+
+      const details = await detailsOf(service, contentType)
+
+      // A type made of header characters is shown so the caller can see what was refused; any other is not.
+      const printable = /^[\t \x21-\x7E]*$/.test(contentType)
+      expect(details?.contentType).toBe(printable ? contentType : undefined)
+      expect(details?.whitelist).toStrictEqual(['text/plain', 'image/*'])
+      expect(JSON.stringify(details)).toContain(printable ? contentType.slice(0, 4) : 'whitelist')
+    },
+  )
+
   it.each(ROWS)('with a whitelist: %s', async (_label, contentType, withWhitelist) => {
     const service = await signerWith(['text/plain', 'image/*'])
 

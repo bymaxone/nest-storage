@@ -151,6 +151,7 @@ export class StorageService {
       const cacheKey = this.idempotencyCache.computeKey(options.idempotencyKey, finalKey)
       const cached = this.idempotencyCache.get(cacheKey)
       if (cached) {
+        this.validation.checkHeaders(options)
         destroyStream(options.body as NodeJS.ReadableStream)
         return { ...cached, fromIdempotencyCache: true }
       }

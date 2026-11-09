@@ -25,8 +25,11 @@ note on each entry is the compatibility contract — read it, not the number.
   `STORAGE_VALIDATION_FAILED` and `details: { field, reason }` before any request, from `upload()`,
   `copy()`, `download()`, `getUploadUrl()`, `getMultipartUploadUrls()` and `getDownloadUrl()`. The
   error never repeats the value. `defaultCacheControl` and `kmsKeyId` in the module options are
-  checked at bootstrap and fail with `STORAGE_INVALID_CONFIG`. With a whitelist set, a bad
-  `contentType` is still refused by the whitelist first, as `STORAGE_MIME_NOT_ALLOWED`.
+  checked at bootstrap and fail with `STORAGE_INVALID_CONFIG`. An idempotent repeat of an `upload()`
+  is checked too, so it is not answered from the cache when a header-bound value is bad. With a
+  whitelist set, a bad `contentType` is still refused by the whitelist first, as
+  `STORAGE_MIME_NOT_ALLOWED`; that error no longer shows a `contentType` that is not a header value,
+  only the whitelist.
 
   **Apply to a derived backend:** a value with a control or non-ASCII character that used to reach the
   provider now fails with `STORAGE_VALIDATION_FAILED`. To send a non-ASCII filename, percent-encode it
