@@ -131,4 +131,16 @@ describe('validateOptions', () => {
       validateOptions({ ...valid, serverSideEncryption: 'aws:kms' })
     })).toMatch(/kmsKeyId/)
   })
+
+  it.each(['defaultCacheControl', 'kmsKeyId'] as const)('should reject a %s that cannot be a header value', (name) => {
+    // The module defaults reach every request, so a line break or a non-ASCII character fails at bootstrap.
+    for (const bad of ['a\r\nX-Injected: 1', 'caf\u00e9', 'a\u0000b']) {
+      expect(reasonOf(() => {
+        validateOptions({ ...valid, [name]: bad })
+      })).toBe(`options.${name} must be a string of tab, space and printable ASCII characters`)
+    }
+    expect(() => {
+      validateOptions({ ...valid, [name]: 'public, max-age=60' })
+    }).not.toThrow()
+  })
 })

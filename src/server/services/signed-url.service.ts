@@ -26,6 +26,7 @@ import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constant
 import { buildACL } from '../utils/header-utils'
 import { clampTtl } from '../utils/ttl-clamp'
 import { mimeMatches } from '../utils/mime-match'
+import { assertHeaderValues, assertMetadata } from '../utils/header-value'
 
 /** S3 allows part numbers 1 to 10 000 in one multipart upload. */
 const MAX_MULTIPART_PARTS = 10_000
@@ -51,6 +52,10 @@ export class SignedUrlService {
    */
   async getDownloadUrl(options: SignedGetUrlOptions): Promise<SignedUrlResult> {
     this.assertConfigured()
+    assertHeaderValues({
+      responseContentDisposition: options.responseContentDisposition,
+      responseContentType: options.responseContentType,
+    })
     const finalKey = this.keyResolver.normalize(options.key)
     const bucket = this.resolveBucket(options.bucket)
     const ttl = clampTtl(
@@ -107,6 +112,8 @@ export class SignedUrlService {
   async getUploadUrl(options: SignedPutUrlOptions): Promise<SignedUrlResult> {
     this.assertConfigured()
     this.assertMimeAllowed(options.contentType)
+    assertHeaderValues({ contentType: options.contentType })
+    assertMetadata(options.metadata)
     const finalKey = this.keyResolver.normalize(options.key)
     const bucket = this.resolveBucket(options.bucket)
     const ttl = clampTtl(
@@ -181,6 +188,7 @@ export class SignedUrlService {
   async getMultipartUploadUrls(options: MultipartUploadUrlsOptions): Promise<MultipartUploadUrlsResult> {
     this.assertConfigured()
     this.assertMimeAllowed(options.contentType)
+    assertHeaderValues({ contentType: options.contentType })
     if (!Number.isInteger(options.parts) || options.parts < 1 || options.parts > MAX_MULTIPART_PARTS) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT, undefined, {
         reason: `parts must be an integer from 1 to ${String(MAX_MULTIPART_PARTS)}`,

@@ -8,6 +8,7 @@
 import { HttpStatus } from '@nestjs/common'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { isHeaderValue } from '../utils/header-value'
 
 const MIN_PART_SIZE_BYTES = 5 * 1024 * 1024
 
@@ -68,5 +69,10 @@ export function validateOptions(options: unknown): void {
   }
   if (options.serverSideEncryption === 'aws:kms' && !options.kmsKeyId) {
     throw invalid('kmsKeyId is required when serverSideEncryption === "aws:kms"')
+  }
+  for (const name of ['defaultCacheControl', 'kmsKeyId'] as const) {
+    if (options[name] !== undefined && !isHeaderValue(options[name])) {
+      throw invalid(`options.${name} must be a string of tab, space and printable ASCII characters`)
+    }
   }
 }

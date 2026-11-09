@@ -1,5 +1,5 @@
 /**
- * @fileoverview Upload validation pipeline: MIME whitelist → size → custom
+ * @fileoverview Upload validation pipeline: MIME whitelist → header values → size → custom
  * `IUploadValidator` chain. Returns the (possibly tee'd) body that MUST be used
  * for the actual upload when a validator peeked bytes via `readBytes`.
  * @layer server/services
@@ -11,6 +11,7 @@ import type { IUploadValidator } from '../interfaces/upload-validator.interface'
 import type { UploadBody } from '../utils/stream-utils'
 import { peekFirstBytes } from '../utils/stream-utils'
 import { mimeMatches } from '../utils/mime-match'
+import { assertHeaderValues, assertMetadata } from '../utils/header-value'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -21,6 +22,9 @@ interface ValidationInput {
   contentType: string
   size?: number
   metadata?: Record<string, string>
+  cacheControl?: string | undefined
+  contentDisposition?: string | undefined
+  kmsKeyId?: string | undefined
 }
 
 @Injectable()
@@ -33,17 +37,27 @@ export class ValidationService {
   /**
    * Runs the upload validation pipeline in the canonical order:
    * 1. MIME whitelist (when configured)
-   * 2. Size check (best-effort — skipped when `size` is absent)
-   * 3. Custom `IUploadValidator` chain (first rejection short-circuits)
+   * 2. Header values: `contentType`, `cacheControl`, `contentDisposition`, `kmsKeyId` and `metadata`
+   *    hold only tab, space and printable ASCII (metadata keys are header names), whitelist or not
+   * 3. Size check (best-effort — skipped when `size` is absent)
+   * 4. Custom `IUploadValidator` chain (first rejection short-circuits)
    *
    * @param input - The upload options subset used for validation.
    * @returns The validated body (possibly replaced via a tee'd stream).
    * @throws StorageException `STORAGE_MIME_NOT_ALLOWED` on a MIME violation.
+   * @throws StorageException `STORAGE_VALIDATION_FAILED` when a header-bound value is not a header value.
    * @throws StorageException `STORAGE_SIZE_EXCEEDED` when `size > maxSizeBytes`.
    * @throws StorageException `STORAGE_VALIDATION_FAILED` on a custom validator rejection.
    */
   async validate(input: ValidationInput): Promise<{ body: UploadBody }> {
     this.checkMime(input.contentType)
+    assertHeaderValues({
+      contentType: input.contentType,
+      cacheControl: input.cacheControl,
+      contentDisposition: input.contentDisposition,
+      kmsKeyId: input.kmsKeyId,
+    })
+    assertMetadata(input.metadata)
     this.checkSize(input.size)
     const body = await this.runCustomValidators(input)
     return { body }

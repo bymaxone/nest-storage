@@ -43,6 +43,7 @@ import { deleteObjectsChunk } from '../utils/delete-objects'
 import { mapBucketCheckError } from '../errors/bucket-check-error-mapper'
 import { describeError } from '../utils/describe-error'
 import { toListResult } from '../utils/list-result'
+import { assertHeaderValues } from '../utils/header-value'
 import { guardIdleBody } from '../utils/idle-timeout'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import {
@@ -162,6 +163,9 @@ export class StorageService {
       contentType: options.contentType,
       ...(options.size !== undefined ? { size: options.size } : {}),
       ...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
+      cacheControl: options.cacheControl,
+      contentDisposition: options.contentDisposition,
+      kmsKeyId: options.kmsKeyId,
     })
     // A stream cannot be read by the scanner and then sent: buffer it first, bounded.
     const body = await this.bufferForPreUploadScan(validated.body, finalKey)
@@ -366,6 +370,7 @@ export class StorageService {
     options: DownloadOptions,
   ): Promise<{ stream: NodeJS.ReadableStream; metadata: ObjectMetadata }> {
     this.assertConfigured()
+    assertHeaderValues({ range: options.range, ifNoneMatch: options.ifNoneMatch, ifMatch: options.ifMatch })
     const finalKey = this.keyResolver.normalize(options.key)
     const bucket = this.resolveBucket(options.bucket)
     try {
@@ -729,6 +734,7 @@ export class StorageService {
    */
   async copy(options: CopyOptions): Promise<{ etag: string }> {
     this.assertConfigured()
+    assertHeaderValues({ cacheControl: options.cacheControl })
     const sourceKey = this.keyResolver.normalize(options.sourceKey)
     const destKey = this.keyResolver.normalize(options.destinationKey)
     const sourceBucket = this.resolveBucket(options.sourceBucket)
