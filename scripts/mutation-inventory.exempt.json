@@ -1,0 +1,18 @@
+[
+  {
+    "file": "src/check-api-surface.spec.ts",
+    "reason": "Tests scripts/check-api-surface.mjs, a CI tool outside the mutate list. It is a plain .mjs script with no import from src/, so the mutation run has no mutant that relates to this spec."
+  },
+  {
+    "file": "src/check-file-length.spec.ts",
+    "reason": "Tests scripts/check-file-length.mjs, a CI tool outside the mutate list. It is a plain .mjs script with no import from src/, so the mutation run has no mutant that relates to this spec."
+  },
+  {
+    "file": "src/shared/constants/constant-tables.spec.ts",
+    "reason": "Pins the shared error-code, MIME-whitelist and default-option tables whole. Stryker generated 0 mutants for src/shared/constants/*.constants.ts and src/server/constants/*.constants.ts (measured: 'Instrumented 5 source file(s) with 0 mutant(s)'), because they hold only 'as const' data, so no mutant can select this spec."
+  },
+  {
+    "file": "src/server/constants/default-mime-whitelist.constants.spec.ts",
+    "reason": "Checks that the server whitelist constants are the shared arrays. The source is a re-export that yields 0 mutants (measured), so no mutant can select this spec."
+  }
+]
