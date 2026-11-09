@@ -6,7 +6,7 @@
  */
 import { Test } from '@nestjs/testing'
 import { BYMAX_STORAGE_OPTIONS } from '../bymax-storage.constants'
-import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
+import { applyDefaults } from '../config/apply-defaults'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { SignedUrlService } from './signed-url.service'
@@ -79,11 +79,13 @@ const ROWS: readonly (readonly [string, string, Outcome, Outcome])[] = [
 ]
 
 async function signerWith(mimeWhitelist?: string[]): Promise<SignedUrlService> {
-  const options = {
+  const options = applyDefaults({
+    endpoint: 'http://localhost:9000',
+    region: 'us-east-1',
     bucket: 'b',
-    signedUrls: { defaultGetTtlSeconds: 300, defaultPutTtlSeconds: 300, maxTtlSeconds: 604800 },
+    credentials: { accessKeyId: 'key', secretAccessKey: 'secret' },
     ...(mimeWhitelist === undefined ? {} : { validation: { mimeWhitelist } }),
-  } as unknown as ResolvedBymaxStorageOptions
+  })
   const moduleRef = await Test.createTestingModule({
     providers: [
       SignedUrlService,

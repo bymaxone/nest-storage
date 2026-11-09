@@ -23,7 +23,7 @@ type Call = (bad: string) => Promise<unknown>
 
 interface Bound {
   readonly call: Call
-  /** Whether the whitelist is consulted first, so a refused type keeps its 1.1.9 code. */
+  /** Whether the whitelist is consulted first, so a refused type is reported as STORAGE_MIME_NOT_ALLOWED. */
   readonly whitelisted?: boolean
 }
 
