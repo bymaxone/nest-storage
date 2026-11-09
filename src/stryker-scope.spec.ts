@@ -14,7 +14,7 @@ import * as ts from 'typescript'
 const ROOT = resolve(__dirname, '..')
 
 /** Why shipped files are not mutated, and the property that justifies it, checked against the files. */
-type ExclusionKind = 'barrel' | 'types' | 'data'
+type ExclusionKind = 'barrel' | 'types' | 'const-table'
 
 interface Exclusion {
   readonly kind: ExclusionKind
@@ -37,17 +37,14 @@ const EXCLUSIONS: readonly Exclusion[] = [
     files: ['src/server/interfaces/*.interface.ts', 'src/shared/types/*.ts'],
   },
   {
-    kind: 'data',
+    kind: 'const-table',
     reason:
-      'Constant tables and tokens: literals, enum members and Symbol() calls with no function, branch or ' +
-      'operator, so Stryker generates 0 mutants for them (measured on the constants files). Their values are ' +
-      'pinned whole by constant-tables.spec.ts, default-options usage in apply-defaults.spec.ts, and ' +
-      'readme-tables.spec.ts for the error messages and statuses. Logic added to one fails this spec.',
+      'Frozen `as const` value tables and their derived types: Stryker generates 0 mutants for an `as const` ' +
+      'literal (measured on these files), so there is nothing to judge, and `src/shared/constants/constant-tables.spec.ts` and `src/server/constants/default-options.constants.spec.ts` ' +
+      'pins every value by exact equality. A function, a computed key or a non-`as const` declaration added to one ' +
+      'fails this spec.',
     files: [
-      'src/server/bymax-storage.constants.ts',
       'src/server/constants/default-options.constants.ts',
-      'src/server/errors/storage-error-messages.ts',
-      'src/server/errors/storage-error-status.ts',
       'src/shared/constants/*.constants.ts',
     ],
   },
@@ -162,42 +159,52 @@ function withoutComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 }
 
-/** Kinds of node that make a constants file logic: a function, a class, a branch or an operator. */
-const LOGIC_NODES = new Set<ts.SyntaxKind>([
-  ts.SyntaxKind.FunctionDeclaration,
-  ts.SyntaxKind.FunctionExpression,
-  ts.SyntaxKind.ArrowFunction,
-  ts.SyntaxKind.MethodDeclaration,
-  ts.SyntaxKind.GetAccessor,
-  ts.SyntaxKind.SetAccessor,
-  ts.SyntaxKind.TaggedTemplateExpression,
-  ts.SyntaxKind.ClassDeclaration,
-  ts.SyntaxKind.ClassExpression,
-  ts.SyntaxKind.ConditionalExpression,
-  ts.SyntaxKind.BinaryExpression,
-  ts.SyntaxKind.PrefixUnaryExpression,
-  ts.SyntaxKind.PostfixUnaryExpression,
-  ts.SyntaxKind.TypeOfExpression,
-  ts.SyntaxKind.VoidExpression,
-  ts.SyntaxKind.DeleteExpression,
-  ts.SyntaxKind.IfStatement,
-  ts.SyntaxKind.NewExpression,
-  ts.SyntaxKind.TemplateExpression,
-])
-
-/** What makes the text more than data, by the compiler's own tree; empty when it is only data. */
-function logicIn(text: string): string[] {
-  const source = ts.createSourceFile('data.ts', text, ts.ScriptTarget.ES2022, true)
-  const found: string[] = []
-  const visit = (node: ts.Node): void => {
-    if (LOGIC_NODES.has(node.kind)) found.push(ts.SyntaxKind[node.kind])
-    if (ts.isCallExpression(node) && node.expression.getText(source) !== 'Symbol') {
-      found.push(`call ${node.expression.getText(source)}`)
-    }
-    ts.forEachChild(node, visit)
+/** Whether an expression is a literal of strings, numbers, booleans, names and nested arrays or objects with plain keys. */
+function isPlainValue(node: ts.Expression): boolean {
+  if (ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) || ts.isIdentifier(node))
+    return true
+  if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword)
+    return true
+  if (ts.isArrayLiteralExpression(node)) return node.elements.every(isPlainValue)
+  if (ts.isObjectLiteralExpression(node)) {
+    return node.properties.every(
+      (property) =>
+        ts.isPropertyAssignment(property) &&
+        !ts.isComputedPropertyName(property.name) &&
+        isPlainValue(property.initializer),
+    )
   }
-  visit(source)
-  return found
+  return false
+}
+
+/** Whether a variable declaration is `<plain value> as const`, with or without a type annotation. */
+function isConstTable(declaration: ts.VariableDeclaration, file: ts.SourceFile): boolean {
+  const init = declaration.initializer
+  return (
+    init !== undefined &&
+    ts.isAsExpression(init) &&
+    ts.isTypeReferenceNode(init.type) &&
+    init.type.typeName.getText(file) === 'const' &&
+    isPlainValue(init.expression)
+  )
+}
+
+/** The top-level statements of a file that are neither an import, a type declaration nor an exported `as const` table. */
+function nonTableStatements(text: string): string[] {
+  const file = ts.createSourceFile('table.ts', text, ts.ScriptTarget.ES2022, true)
+  return file.statements
+    .filter((statement) => {
+      if (ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement)) return false
+      if (ts.isImportDeclaration(statement)) return false
+      if (ts.isVariableStatement(statement)) {
+        const isConst = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
+        return !(
+          isConst && statement.declarationList.declarations.every((d) => isConstTable(d, file))
+        )
+      }
+      return true
+    })
+    .map((statement) => statement.getText(file))
 }
 
 const mutateList = (JSON.parse(read('stryker.config.json')) as { mutate: string[] }).mutate
@@ -268,35 +275,33 @@ describe('mutation scope', () => {
     expect(emittedStatements('Object.freeze({})')).not.toEqual([])
   })
 
-  it('keeps every listed data file free of functions, branches and operators', () => {
-    // A constants file that gains logic has to leave the list and be mutated.
+  it('keeps every listed const-table file to as-const tables and types', () => {
+    // Any other statement is code the exclusion would hide.
     for (const [path, exclusion] of listed) {
-      if (exclusion.kind !== 'data') continue
-      expect({ path, logic: logicIn(read(path)) }).toEqual({ path, logic: [] })
+      if (exclusion.kind !== 'const-table') continue
+      expect({ path, other: nonTableStatements(read(path)) }).toEqual({ path, other: [] })
     }
   })
 
-  it('detects logic in a data file', () => {
-    // Literals, enum members and Symbol() are data; anything computed is not.
+  it('detects a statement that is not an as-const table', () => {
+    // The check rejects a function, a mutable literal, a call, a computed key and a spread, and accepts the real shapes.
     expect(
-      logicIn(
-        "export const A = { b: 'c' } as const\nexport const S = Symbol('s')\nexport const N = Http.OK",
+      nonTableStatements(
+        "import { X } from './x'\nexport const A = { a: 'x', b: X, c: [1, true] } as const\nexport type B = (typeof A)[keyof typeof A]",
       ),
     ).toEqual([])
-    expect(logicIn('export const A = 5 * 1024')).toEqual(['BinaryExpression'])
-    expect(logicIn('export const A = () => 1')).toEqual(['ArrowFunction'])
-    expect(logicIn('export const A = b ? 1 : 2')).toEqual(['ConditionalExpression'])
-    expect(logicIn('export const A = load()')).toEqual(['call load'])
-    expect(logicIn('export class A {}')).toEqual(['ClassDeclaration'])
-    expect(logicIn('export const A = !true')).toEqual(['PrefixUnaryExpression'])
-    expect(logicIn('export const A = -1')).toEqual(['PrefixUnaryExpression'])
-    expect(logicIn('let n = 0\nexport const A = n++')).toEqual(['PostfixUnaryExpression'])
-    expect(logicIn("export const A = typeof 'a'")).toEqual(['TypeOfExpression'])
-    expect(logicIn('export const A = void 0')).toEqual(['VoidExpression'])
-    expect(logicIn('export const A = delete b.c')).toEqual(['DeleteExpression'])
-    expect(logicIn('export const A = { value() { return 1 } }')).toEqual(['MethodDeclaration'])
-    expect(logicIn('export const A = { get value() { return 1 } }')).toEqual(['GetAccessor'])
-    expect(logicIn('export const A = { set value(v: number) {} }')).toEqual(['SetAccessor'])
-    expect(logicIn('export const A = tag`x`')).toEqual(['TaggedTemplateExpression'])
+    expect(nonTableStatements("export const A: readonly string[] = ['a'] as const")).toEqual([])
+    expect(nonTableStatements("export const A = { a: 'x' }")).toHaveLength(1)
+    expect(nonTableStatements('export function f() { return 1 }')).toHaveLength(1)
+    expect(nonTableStatements('export const A = f() as const')).toHaveLength(1)
+    expect(nonTableStatements('export const A = { a: g() } as const')).toHaveLength(1)
+    expect(nonTableStatements('export const A = 5 * 1024 as const')).toHaveLength(1)
+    expect(nonTableStatements("export const A = { [K]: 'x' } as const")).toHaveLength(1)
+    expect(nonTableStatements("export const A = { ['a']: 'x' } as const")).toHaveLength(1)
+    expect(nonTableStatements('export const A = { ...B } as const')).toHaveLength(1)
+    expect(nonTableStatements('export const A = { value() { return 1 } } as const')).toHaveLength(1)
+    expect(nonTableStatements("export const A = { a: 'x' } as const\nA.a")).toHaveLength(1)
+    expect(nonTableStatements("export let A = 'x' as const")).toHaveLength(1)
+    expect(nonTableStatements("export const A = Symbol('s')")).toHaveLength(1)
   })
 })

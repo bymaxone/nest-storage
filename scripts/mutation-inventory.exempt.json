@@ -18,5 +18,9 @@
   {
     "file": "src/stryker-scope.spec.ts",
     "reason": "Reads stryker.config.json, tsup.config.ts and the source tree as text and with the TypeScript compiler API; it imports no module of src/ that a mutant could change, so no mutant selects it."
+  },
+  {
+    "file": "src/server/constants/default-options.constants.spec.ts",
+    "reason": "Pins the as-const defaults of default-options.constants.ts, a file Stryker generates 0 mutants for (measured), so no mutant can select this spec."
   }
 ]
