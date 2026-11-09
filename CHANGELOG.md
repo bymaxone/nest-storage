@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.10] - 2026-11-09
+
 ### Fixed
 
 - **A caller string bound for an HTTP header is now checked, whether or not a MIME whitelist is set.**
@@ -664,4 +666,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.7]: https://github.com/bymaxone/nest-storage/compare/v1.1.6...v1.1.7
 [1.1.8]: https://github.com/bymaxone/nest-storage/compare/v1.1.7...v1.1.8
 [1.1.9]: https://github.com/bymaxone/nest-storage/compare/v1.1.8...v1.1.9
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.9...HEAD
+[1.1.10]: https://github.com/bymaxone/nest-storage/compare/v1.1.9...v1.1.10
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.10...HEAD
