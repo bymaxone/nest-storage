@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.9] - 2026-11-09
+
 ### Fixed
 
 - **The MIME whitelist now refuses control and non-ASCII characters in the parameter part of a
@@ -636,4 +638,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.6]: https://github.com/bymaxone/nest-storage/compare/v1.1.5...v1.1.6
 [1.1.7]: https://github.com/bymaxone/nest-storage/compare/v1.1.6...v1.1.7
 [1.1.8]: https://github.com/bymaxone/nest-storage/compare/v1.1.7...v1.1.8
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.8...HEAD
+[1.1.9]: https://github.com/bymaxone/nest-storage/compare/v1.1.8...v1.1.9
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.9...HEAD
