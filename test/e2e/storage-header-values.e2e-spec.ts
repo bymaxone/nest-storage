@@ -104,8 +104,8 @@ describe('Storage E2E — header values', () => {
   })
 
   it('shows what the provider does with a line break in a signed GET override it is given', async () => {
-    // The URL is built straight with the SDK, the way a version without the check issued it, to
-    // record how the provider treats a reflected line break: it must not split the response.
+    // The URL is built straight with the SDK, bypassing the library's validation, to record how the
+    // provider treats a reflected line break: it must not split the response.
     const url = await getSignedUrl(
       root,
       new GetObjectCommand({
