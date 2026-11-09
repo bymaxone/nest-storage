@@ -14,5 +14,9 @@
   {
     "file": "src/server/constants/default-mime-whitelist.constants.spec.ts",
     "reason": "Checks that the server whitelist constants are the shared arrays. The source is a re-export that yields 0 mutants (measured), so no mutant can select this spec."
+  },
+  {
+    "file": "src/stryker-scope.spec.ts",
+    "reason": "Reads stryker.config.json, tsup.config.ts and the source tree as text and with the TypeScript compiler API; it imports no module of src/ that a mutant could change, so no mutant selects it."
   }
 ]
