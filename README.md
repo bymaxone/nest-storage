@@ -857,9 +857,21 @@ registered twice in one application with different prefixes. To keep tenants apa
 build the tenant segment into the key on each call from a trusted source (`tenants/${tenantId}/${name}`,
 never from request input) or give each tenant its own bucket and credentials.
 
-### Supply chain
+---
 
-`dependencies` is `{}`; see the repository's CI workflows for the scanners that run on it.
+## 🛡️ Security Table
+
+| Layer            | Control                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------- |
+| Object keys      | One guard: `..`, a leading `/`, null bytes and empty keys refused before `keyPrefix` is prepended    |
+| Multi-tenancy    | `keyPrefix` is a namespace, not an access boundary; isolate with IAM policies or separate buckets     |
+| Credentials      | Injected options only; never read from `process.env`, never logged, never in an exception             |
+| Error payloads   | Provider code and message, status, request id and operation context; never credentials or a signed URL |
+| Presign lifetime | TTL capped by `signedUrls.maxTtlSeconds`                                                              |
+| Header values    | Tab, space and printable ASCII only; refused with `STORAGE_VALIDATION_FAILED` before any request      |
+| Encryption       | Server-side (AES256 / `aws:kms`), globally or per upload                                              |
+| Content          | MIME allowlist and size limit, then registered validators, then the scanner                           |
+| Supply chain     | `dependencies: {}`; see the repository's CI workflows for the scanners that run on it                 |
 
 ---
 
