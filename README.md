@@ -47,8 +47,8 @@ minimal.
 ### Why nest-storage?
 
 - **One engine, six providers.** `providerRecipes` only produce module options (endpoint, region,
-  addressing style, public URLs and the checksum opt-out each provider needs). There is no per-provider code
-  path, so switching provider is a configuration change and every operation behaves the same after it.
+  addressing style, public URLs and, for the non-AWS providers, the checksum opt-out). There is no per-provider code
+  path, so switching provider is a configuration change.
 - **One key chokepoint.** Every caller key passes through `KeyResolverService` before it reaches S3,
   and `keyPrefix` is prepended only after it ([Security Model](#-security-model)).
 - **Uploads are refused before they are stored.** MIME allowlist and size limit first, then any
