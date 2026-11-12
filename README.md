@@ -803,9 +803,6 @@ IUploadValidator[]   post-upload        collapses a retry
 validation, scanning and the idempotency cache apply to `StorageService` only. See the signed-PUT
 caveat above.
 
-`SignedUrlService` stops at `KeyResolverService`: it signs a URL and never sees the body, so validation,
-scanning and the idempotency cache apply to `StorageService` only. See the signed-PUT caveat above.
-
 Options are validated before any client is built. Credentials are the deliberate exception: empty
 values are tolerated so a development workflow boots, and operations then fail with
 `STORAGE_NOT_CONFIGURED`.
