@@ -93,9 +93,7 @@ minimal.
 | `.`        | Server runtime: `BymaxStorageModule`, `StorageService`, `SignedUrlService`, `BucketLifecycleService`, `providerRecipes`, DI tokens, interfaces, `StorageException`, `NoOpUploadValidator`, `NoOpFileScanner` |
 | `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`, `StorageErrorResponse`) + `STORAGE_ERROR_CODES` + `StorageErrorCode` + the default MIME whitelists and the TTL and multipart default constants                                            |
 
-The root also re-exports `UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`,
-`STORAGE_ERROR_CODES` and `StorageErrorCode` from `./shared`; import the rest of `./shared` from the
-subpath.
+The root re-exports some `./shared` names for convenience; import the rest from the subpath.
 
 Both subpaths ship ESM **and** CommonJS with declarations for each format, so a
 `require()` consumer receives CommonJS declarations rather than ESM ones. The
@@ -824,8 +822,7 @@ and what leaves in an error.
 
 Everything a caller sends becomes part of a key, and a key is a path. `KeyResolverService.normalize`
 is the single chokepoint: it refuses an empty key, a null byte, a leading `/` and any `..` segment,
-collapses duplicate slashes, and only then prepends `keyPrefix`. Nothing else in the library composes
-a key, so a tenant cannot climb out of its prefix by naming one.
+collapses duplicate slashes, and only then prepends `keyPrefix`, so a tenant cannot climb out of its prefix by naming one.
 
 ### Presigned URLs are bearer credentials
 
@@ -900,7 +897,6 @@ Scorecard run on the repository.
 
 ## 📖 API Reference
 
-Every operation below is documented with a runnable example in the sections above.
 This is the index.
 
 ### `StorageService`
@@ -957,7 +953,6 @@ is the one full value: it is a URL, and the prefix is part of the object's real 
 
 ### Exported types and constants
 
-Every name the package exports is listed here, so none is a surprise.
 
 - **Module configuration:** `BymaxStorageModuleOptions`, `BymaxStorageModuleAsyncOptions` (the
   `forRootAsync` shape: `imports`, `inject`, and one of `useFactory`, `useClass`, `useExisting`) and
@@ -974,7 +969,7 @@ Every name the package exports is listed here, so none is a surprise.
 - **Extension points:** `IUploadValidator`, `IFileScanner`, `FileScanResult`, and the helpers
   `NoOpUploadValidator` and `NoOpFileScanner`.
 - **From `./shared`:** `UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`,
-  `StorageErrorResponse`, `StorageErrorCode`, `STORAGE_ERROR_CODES`, the three MIME presets
+  `StorageErrorResponse`, `StorageErrorCode`, `STORAGE_ERROR_CODES`, the MIME presets
   `DEFAULT_IMAGE_MIME_WHITELIST`, `DEFAULT_VIDEO_MIME_WHITELIST`, `DEFAULT_DOC_MIME_WHITELIST`, and the
   defaults `DEFAULT_SIGNED_URL_TTL_SECONDS`, `MAX_SIGNED_URL_TTL_SECONDS`,
   `DEFAULT_MULTIPART_THRESHOLD_BYTES`, `DEFAULT_MULTIPART_PART_SIZE_BYTES`,
@@ -988,8 +983,8 @@ that object, but they are readable on it: treat the token as sensitive.
 
 `BYMAX_STORAGE_OPTIONS` · `BYMAX_STORAGE_S3_CLIENT` · `BYMAX_STORAGE_FILE_SCANNER` ·
 `BYMAX_STORAGE_UPLOAD_VALIDATORS` — all `Symbol()`, so no string token can collide with
-them, and all four are in the module's `exports`, so injection resolves rather than raising
-`UnknownDependenciesException`. Two of them are nullable by design: `BYMAX_STORAGE_S3_CLIENT`
+them, and they are in the module's `exports`, so injection resolves rather than raising
+`UnknownDependenciesException`. Some are nullable by design: `BYMAX_STORAGE_S3_CLIENT`
 is `null` until credentials are configured, and `BYMAX_STORAGE_FILE_SCANNER` is `null` when no
 scanner is set, which is the default. Type them as `S3Client | null` and `IFileScanner | null`.
 
