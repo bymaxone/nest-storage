@@ -46,74 +46,41 @@ minimal.
 
 ### Why nest-storage?
 
-- **One engine, six providers.** `providerRecipes` differ only in endpoint, region and the flags
-  each provider needs (`forcePathStyle` for MinIO, `auto` region for R2). There is no
-  per-provider code path, so switching provider is a configuration change and every operation
-  behaves the same way afterwards.
-- **The key guard is one chokepoint.** Every caller-supplied key passes through
-  `KeyResolverService` before it reaches S3 — `..` segments, a leading `/`, null bytes and empty
-  keys are refused, and only then is `keyPrefix` prepended. A tenant cannot climb out of its
-  prefix by naming a key.
+- **One engine, six providers.** `providerRecipes` differ only in endpoint, region and the flags each
+  provider needs (`forcePathStyle` for MinIO, `auto` region for R2). There is no per-provider code
+  path, so switching provider is a configuration change and every operation behaves the same after it.
+- **One key chokepoint.** Every caller key passes through `KeyResolverService` before it reaches S3,
+  and `keyPrefix` is prepended only after it ([Security Model](#-security-model)).
 - **Uploads are refused before they are stored.** MIME allowlist and size limit first, then any
-  `IUploadValidator` you register, then the `IFileScanner` if configured — before the upload
-  or after it.
-- **Presigned URLs stay inside a configured ceiling.** A requested TTL above
-  `signedUrls.maxTtlSeconds` (604 800 s, the SigV4 limit, by default) is clamped locally, rather
-  than handed to a signature the provider rejects at use time.
+  `IUploadValidator` you register, then the `IFileScanner`, before or after the upload.
 
 ---
 
 ## 🔥 Features
 
-### ⬆️ Uploading
-
 - ✅ **Multipart upload** — `@aws-sdk/lib-storage` with automatic abort on failure
   (`leavePartsOnError: false`), progress events, and a configurable threshold and part size
-- ✅ **Content validation** — MIME allowlist with wildcards (`image/*`, `text/*`) and a size
-  limit, refused before a byte is stored
-- ✅ **Pluggable validators** — register any number of `IUploadValidator`s; each runs after the
-  built-in checks and can refuse with its own reason
-- ✅ **Virus scanning hook** — `IFileScanner` pre-upload or post-upload, for ClamAV, AWS
-  Macie or anything that answers `'clean' | 'infected' | 'unknown'`
-- ✅ **Idempotent retries** — an in-memory LRU (1 000 entries / 24 h by default) returns the
-  cached `UploadResult` for a repeated `idempotencyKey` instead of storing the object twice
-
-### 🔗 Access & URLs
-
-- ✅ **Presigned GET / PUT** — the PUT signs the `Content-Type` (and ACL and metadata, when set) as required headers; a PUT that sends another type is refused and stores nothing
-- ✅ **Presigned multipart** — one signed URL per part plus the upload id, so a browser can
-  upload directly without the bytes passing through your process
-- ✅ **TTL clamping** — a requested TTL above `signedUrls.maxTtlSeconds` (default 604 800 s, the
-  7-day SigV4 limit) is clamped locally, not discovered when the provider rejects the signature
-- ✅ **Public URL composition** — `getPublicUrl` builds from `cdnBaseUrl` or `publicBaseUrl` for
-  buckets that are public by policy; it composes, it does not sign
-
-### 🗄️ Objects & Lifecycle
-
-- ✅ **Streaming download** — `download` returns a stream; the body is never buffered unless you
-  ask for `downloadBuffer`
-- ✅ **Metadata without transfer** — `head` and `exists` answer from object metadata alone
-- ✅ **Paginated listing** — `list` over continuation tokens, with the prefix stripped back off
-  the keys it returns
-- ✅ **Server-side copy** — `copy` moves bytes inside the provider; they never reach this process
-- ✅ **Bulk delete with partial results** — `deleteMany` reports what failed instead of throwing
-  away the successes
-- ✅ **Bucket lifecycle rules** — read the rules, add or replace an expiration rule by id, remove
-  one, and leave every other rule exactly as the provider returned it
-
-### 🧩 Developer Experience
-
+- ✅ **Content validation** — MIME allowlist with wildcards (`image/*`) and a size limit, then any
+  number of `IUploadValidator`s, all refused before a byte is stored
+- ✅ **Virus scanning hook** — `IFileScanner` pre-upload or post-upload, for ClamAV, AWS Macie or
+  anything that answers `'clean' | 'infected' | 'unknown'`
+- ✅ **Idempotent retries** — an in-memory LRU (1 000 entries / 24 h by default) returns the cached
+  `UploadResult` for a repeated `idempotencyKey`
+- ✅ **Presigned GET / PUT / multipart** — the PUT signs the `Content-Type` (and ACL and metadata, when set) as required headers, so a PUT that sends another type is refused and stores nothing; multipart gets one signed URL per part, so a browser uploads directly
+- ✅ **Streaming download, metadata without transfer, paginated listing, server-side copy, bulk delete**
+  — `deleteMany` reports what failed instead of throwing away the successes
+- ✅ **Public URL composition** — `getPublicUrl` builds from `cdnBaseUrl` or `publicBaseUrl`; it
+  composes, it does not sign
+- ✅ **Bucket lifecycle rules** — read the rules, add or replace an expiration or a multipart-abort
+  rule by id, remove one, and leave every other rule as the provider returned it
 - ✅ **Six provider recipes** — `awsS3`, `cloudflareR2`, `backblazeB2`, `digitalOceanSpaces`,
   `minio`, `wasabi`
-- ✅ **Zero runtime dependencies** — `@aws-sdk/*` and `@nestjs/*` all arrive as peer
-  dependencies, so you pin the versions
-- ✅ **Two subpaths** — the server surface, and `./shared` carrying types and the error catalog
-  that pull in nothing at all
+- ✅ **Zero runtime dependencies** — `@aws-sdk/*` and `@nestjs/*` all arrive as peer dependencies,
+  so you pin the versions
 - ✅ **Escape hatch** — `BYMAX_STORAGE_S3_CLIENT` injects the raw `S3Client` for the
-  provider-specific operations this surface deliberately does not wrap
-- ✅ **Key prefix** — `keyPrefix` is prepended after normalization, so a key cannot escape it; the
-  keys the library returns are relative to it, so they can be passed straight back
-- ✅ **Server-side encryption** — AES256 or `aws:kms`, globally or per upload
+  provider-specific operations this surface does not wrap
+- ✅ **Key prefix and server-side encryption** — `keyPrefix` is prepended after normalization and the
+  keys the library returns are relative to it; AES256 or `aws:kms`, globally or per upload
 - ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and
   `noUncheckedIndexedAccess`; zero `any`
 
@@ -126,11 +93,9 @@ minimal.
 | `.`        | Server runtime: `BymaxStorageModule`, `StorageService`, `SignedUrlService`, `BucketLifecycleService`, `providerRecipes`, DI tokens, interfaces, `StorageException`, `NoOpUploadValidator`, `NoOpFileScanner` |
 | `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`, `StorageErrorResponse`) + `STORAGE_ERROR_CODES` + `StorageErrorCode` + the default MIME whitelists and the TTL and multipart default constants                                            |
 
-```
-@bymax-one/nest-storage          (server — NestJS + @aws-sdk/client-s3)
-        │
-        └── re-exports ──▶ @bymax-one/nest-storage/shared   (zero dependencies)
-```
+The root also re-exports `UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`,
+`STORAGE_ERROR_CODES` and `StorageErrorCode` from `./shared`; import the rest of `./shared` from the
+subpath.
 
 Both subpaths ship ESM **and** CommonJS with declarations for each format, so a
 `require()` consumer receives CommonJS declarations rather than ESM ones. The
@@ -142,12 +107,6 @@ Both subpaths ship ESM **and** CommonJS with declarations for each format, so a
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `.` (server) | `@nestjs/common ^11.0.16`, `@nestjs/core ^11.1.18`, `@aws-sdk/client-s3 ^3.700`, `@aws-sdk/lib-storage ^3.700`, `@aws-sdk/s3-request-presigner ^3.700`, `reflect-metadata ^0.2` |
 | `./shared`   | None                                                                                                                                                                            |
-
----
-
-> [!TIP]
-> A reference application lives in
-> [`bymaxone/nest-storage-example`](https://github.com/bymaxone/nest-storage-example).
 
 ---
 
@@ -247,7 +206,7 @@ BymaxStorageModule.forRoot({
 
 ## ⚙️ Configuration
 
-The full configuration reference lives in `docs/technical_specification.md` §4. Key options:
+Options accepted by `forRoot` and `forRootAsync`:
 
 | Option                         | Type                                              | Default           | Notes                                          |
 | ------------------------------ | ------------------------------------------------- | ----------------- | ---------------------------------------------- |
@@ -270,7 +229,7 @@ The full configuration reference lives in `docs/technical_specification.md` §4.
 | `uploadIdleTimeoutMs`          | `number`                                          | `30000`           | Longest silence from a stream body during a multipart upload; follows `requestTimeoutMs` unless set, `0` disables; see below the table |
 | `signedUrls.defaultGetTtlSeconds` | `number`                                       | `300`             | Default TTL for `getDownloadUrl`               |
 | `signedUrls.defaultPutTtlSeconds` | `number`                                       | `300`             | Default TTL for `getUploadUrl`                 |
-| `signedUrls.maxTtlSeconds`     | `number`                                          | `604800`          | Per-request TTLs above this are clamped; a value above 604800 (the 7-day SigV4 limit) is reduced to it at init |
+| `signedUrls.maxTtlSeconds`     | `number`                                          | `604800`          | Per-request TTLs above this are clamped; a larger value is reduced to 604800 (the 7-day SigV4 limit) at init |
 | `multipart.thresholdBytes`     | `number`                                          | `5 MiB`           | Switch to multipart at or above this size      |
 | `multipart.partSizeBytes`      | `number`                                          | `5 MiB`           | Part size (S3 minimum: 5 MiB)                  |
 | `multipart.queueSize`          | `number`                                          | `4`               | Concurrent parts                               |
@@ -281,7 +240,8 @@ The full configuration reference lives in `docs/technical_specification.md` §4.
 
 **`requestTimeoutMs`** is passed to the S3 client's request handler as `requestTimeout` with `throwOnRequestTimeout` ([AWS SDK for JavaScript v3: `requestHandler: { requestTimeout: 3_000, ... }`][sdk-request-timeout]). It bounds one attempt, from sending the request until the response headers arrive, and an upload body counts toward it, so a large single-shot upload on a slow link needs a larger value. It does not limit reading a download stream. With `maxAttempts` above 1 a stalled request is retried, so the total wait is the timeout times the attempts.
 
-**`uploadIdleTimeoutMs`** covers the gap `requestTimeoutMs` cannot: a multipart upload that is waiting for the next bytes of a stream has no request in flight, so a source that stops delivering (a client that stalls, a pipe that never closes) would hold the upload open on the provider indefinitely. When the source delivers nothing for this long, the upload is aborted (the provider is sent `AbortMultipartUpload`), your stream is destroyed and `upload()` rejects with `STORAGE_TIMEOUT` and `details.phase` set to `'source-idle'`. The clock restarts on every chunk and runs only while the library is waiting for data, so a slow but live source succeeds and a slow provider does not trip it. It defaults to the value of `requestTimeoutMs`; `0` turns it off. It applies only to a stream that takes the multipart path; a single-shot upload is bounded by `requestTimeoutMs`, and a `Buffer` cannot stall.
+**`uploadIdleTimeoutMs`** covers what `requestTimeoutMs` cannot: a multipart upload waiting for the next bytes of a stream has no request in flight, so a source that stops delivering would hold the upload open on the provider indefinitely. After this much silence the upload is aborted (the provider is sent `AbortMultipartUpload`), your stream is destroyed and `upload()` rejects with `STORAGE_TIMEOUT` and `details.phase` set to `'source-idle'`. The clock restarts on every chunk and runs only while the library is waiting for data, so a slow but live source succeeds and a slow provider does not trip it. It defaults to the value of `requestTimeoutMs`; `0` turns it off. It applies only to a stream on the multipart path: a single-shot upload is bounded by `requestTimeoutMs`, and a `Buffer` cannot stall.
+
 
 [aws-presigned-expiry]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html
 [aws-get-object]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html
@@ -350,18 +310,17 @@ const result = await storage.upload({
 console.log(result.publicUrl) // https://...
 ```
 
-**Header values.** Anything you pass that becomes an HTTP header or a signed query value —
+**Header values.** Every caller string that becomes an HTTP header or a signed query value —
 `contentType`, `cacheControl`, `contentDisposition`, `kmsKeyId`, the keys and values of `metadata`,
 `range`, `ifMatch`, `ifNoneMatch`, and `responseContentDisposition` / `responseContentType` on a
-signed GET — may hold only tab, space and printable ASCII. A control character (a line break
-included) or a non-ASCII character is refused with `STORAGE_VALIDATION_FAILED` before any request
-is made, whether or not `validation.mimeWhitelist` is set; the error names the field and the
-reason, never the value. When a whitelist is set it is consulted first, so a `contentType` it does
-not allow, a malformed one included, fails as `STORAGE_MIME_NOT_ALLOWED`; a value that passes the
-whitelist, or any value when there is none, is then checked as a header value. A `metadata` key must also be a non-empty header name: letters, digits and
-the characters ``!#$%&'*+-.^_`|~``. To send a non-ASCII filename, percent-encode it as RFC 6266
-`filename*`: `contentDisposition: "attachment; filename*=UTF-8''caf%C3%A9.pdf"`. Percent-encode
-non-ASCII `metadata` values yourself (`encodeURIComponent`) and decode them when you read them.
+signed GET — may hold only tab, space and printable ASCII. Anything else, a line break included, fails
+with `STORAGE_VALIDATION_FAILED` before any request, whether or not `validation.mimeWhitelist` is set;
+`details` names the field and the reason, never the value. With a whitelist set it is consulted first,
+so a `contentType` it does not allow, a malformed one included, fails as `STORAGE_MIME_NOT_ALLOWED`. A
+`metadata` key must also be a non-empty header name: letters, digits and the characters
+``!#$%&'*+-.^_`|~``. To send a non-ASCII filename, percent-encode it as RFC 6266 `filename*`:
+`contentDisposition: "attachment; filename*=UTF-8''caf%C3%A9.pdf"`. Percent-encode non-ASCII
+`metadata` values yourself (`encodeURIComponent`) and decode them when you read them.
 
 ### Stream with Progress
 
@@ -379,7 +338,7 @@ await storage.upload({
 
 Uploads are automatically routed to multipart when `size >= multipart.thresholdBytes` (default 5 MiB). A `Readable` without a `size` always uses multipart. Multipart aborts automatically on failure (`leavePartsOnError: false`).
 
-**The library owns a `Readable` once you pass it to `upload()`**, the convention of `stream.pipeline`. When the upload is rejected for any reason (invalid key or content type, a validation or scan failure, a provider error), the stream is destroyed, which releases the file handle or the socket behind it. It is destroyed without an error, so a listener on the stream sees `'close'` and not the failure; the failure is the rejection of `upload()`. A call answered from the idempotency cache destroys the stream unread. A stream consumed by a successful upload ends on its own. Do not reuse a stream after passing it in: if you retry an upload, open a new stream. A listener on the stream itself is not needed to avoid an unhandled `'error'` event.
+**The library owns a `Readable` once you pass it to `upload()`**, as with `stream.pipeline`. When the upload is rejected for any reason, the stream is destroyed without an error, which releases the file handle or socket behind it: a listener on the stream sees `'close'`, and the failure is the rejection of `upload()`. A call answered from the idempotency cache destroys the stream unread. Do not reuse a stream you passed in; open a new one to retry. No listener on the stream is needed to avoid an unhandled `'error'` event.
 
 ### Idempotency
 
@@ -582,23 +541,19 @@ BymaxStorageModule.forRoot({
 })
 ```
 
-**Streams in pre-upload mode.** A stream can be read once, so the scanner and the upload could not
-both consume it. In `pre-upload` mode a stream body is first read into memory, counted as it
-arrives, and the scanner and the upload then share that buffer. The read is bounded by
-`validation.maxSizeBytes`: a stream longer than the limit is refused with
-`STORAGE_VALIDATION_FAILED` as soon as it passes it, and with no `maxSizeBytes` a stream is
-refused with a reason that says to set it or use `post-upload`. Buffer bodies and `post-upload`
-mode are not affected; `post-upload` hands the scanner no body, only the key.
+**Streams in pre-upload mode.** A stream can be read once, so in `pre-upload` mode it is first read
+into memory, bounded by `validation.maxSizeBytes`, and the scanner and the upload share that buffer. A
+stream longer than the limit is refused with `STORAGE_VALIDATION_FAILED` as soon as it passes it, and
+with no `maxSizeBytes` it is refused with a reason that says to set it or use `post-upload`. Buffer
+bodies are not affected, and `post-upload` hands the scanner the key only, no body.
 
-**A rejected object that could not be removed.** In `post-upload` mode the object is already
-stored when the scanner rejects it, so the library deletes it and rejects `upload()` with the
-verdict (`STORAGE_SCAN_INFECTED` or `STORAGE_SCAN_INCONCLUSIVE`). When that delete fails, the
-verdict is still the error, and `details` says so: `cleanup: 'failed'`, the `key` you passed, the
-`storedKey` (the key as the provider holds it, with any `keyPrefix`, which is what a bucket listing
-shows) and the delete failure in `cleanupError` (the error code and the provider's message); the
-failure is also logged at error level with the code `STORAGE_SCAN_CLEANUP_FAILED` and the stored
-key. No `details.cleanup` means the object was removed; `cleanup: 'failed'` means it is **still
-stored** and has to be removed by other means.
+**A rejected object that could not be removed.** In `post-upload` mode the object is already stored
+when the scanner rejects it, so the library deletes it and rejects `upload()` with the verdict
+(`STORAGE_SCAN_INFECTED` or `STORAGE_SCAN_INCONCLUSIVE`). If that delete fails the verdict is still the
+error, and `details` carries `cleanup: 'failed'`, the `key` you passed, the `storedKey` (with any
+`keyPrefix`, as a bucket listing shows it) and the delete failure in `cleanupError`; the failure is
+also logged at error level as `STORAGE_SCAN_CLEANUP_FAILED`. With no `details.cleanup` the object was
+removed; with `cleanup: 'failed'` it is **still stored** and has to be removed by other means.
 
 ---
 
@@ -637,9 +592,9 @@ const { deleted, failed } = await storage.deleteMany(['a.png', 'b.png', 'c.png']
 
 ### Bucket Lifecycle Rules
 
-`BucketLifecycleService` manages the bucket's lifecycle configuration: read the rules, add or
-replace one expiration rule or one multipart-abort rule by id, remove one. Every other rule in the bucket — transitions,
-tag filters, multipart aborts — is sent back exactly as the provider returned it.
+`BucketLifecycleService` reads, adds, replaces and removes one expiration rule or one multipart-abort
+rule by id. Every other rule in the bucket, and the `TransitionDefaultMinimumObjectSize` setting when
+the provider reports it, is sent back unchanged.
 
 ```typescript
 import { BucketLifecycleService } from '@bymax-one/nest-storage'
@@ -655,60 +610,50 @@ const rules = await lifecycle.get() // [] when the bucket has no configuration
 const removed = await lifecycle.remove('expire-tmp') // true; false when no rule has that id
 ```
 
-- **Read-modify-write.** `PutBucketLifecycleConfiguration` replaces the whole configuration
-  ([AWS: "this will overwrite an existing lifecycle configuration"][aws-put-lifecycle]), so
-  `upsert` and `remove` read the rules, change the one with the given id, and write all of them
-  back. A rule with the same id is replaced in place; a new id is appended.
-- **Removing the last rule deletes the configuration.** A put with no rules is invalid (the `Rule`
-  element is required), so the service calls `DeleteBucketLifecycle` instead.
-- **Not atomic.** S3 has no conditional write for lifecycle configuration. If another writer
-  changes the bucket between the read and the write, that change is overwritten. The service does
-  not lock; run lifecycle changes from one place (an operator command or a single deployment step).
-- **`prefix` is relative to `keyPrefix`.** The rule's effective prefix is `keyPrefix` plus the one
-  you pass, because that is where the objects live. `get()` returns filter prefixes the same
-  relative way `list()` returns keys, so `upsert({ prefix: rule.Filter.Prefix, ... })` on a value
-  read from `get()` does not prefix twice. The deprecated rule-level `Prefix` is treated the same
-  way as `Filter.Prefix`.
-- **Rules outside `keyPrefix` are read-only.** With a `keyPrefix` set, a rule whose filter prefix
-  does not start with it — written by another application or by hand, tag-only, or covering the
-  whole bucket — is returned exactly as stored with `isOutsideKeyPrefix: true`. `upsert` and
-  `remove` refuse an id that names such a rule (`STORAGE_LIFECYCLE_RULE_INVALID`), and every write
-  sends it back field for field. Without a `keyPrefix`, no rule is flagged.
-- **Two rule kinds.** An input has exactly one of `expirationDays` (delete objects under the prefix after
-  N days) and `abortIncompleteMultipartDays` (abort uploads not completed within N days of starting;
-  [AWS: "Specifies the number of days after which Amazon S3 aborts an incomplete multipart
+- **Read-modify-write, not atomic.** `PutBucketLifecycleConfiguration` replaces the whole
+  configuration ([AWS: "this will overwrite an existing lifecycle configuration"][aws-put-lifecycle]),
+  so `upsert` and `remove` read the rules, change the one with the given id (replaced in place, or
+  appended when new) and write them all back. S3 has no conditional write for it, so a change made by
+  another writer between the read and the write is overwritten: run lifecycle changes from one place.
+- **Removing the last rule deletes the configuration**, because a put with no rules is invalid.
+- **`prefix` is relative to `keyPrefix`**, the way `list()` keys are, and `get()` returns filter
+  prefixes relative too, so `upsert({ prefix: rule.Filter.Prefix, ... })` on a value read from `get()`
+  does not prefix twice. The deprecated rule-level `Prefix` is treated like `Filter.Prefix`.
+- **Rules outside `keyPrefix` are read-only.** With a `keyPrefix` set, a rule whose filter prefix does
+  not start with it (another application's, tag-only, or whole-bucket) is returned as stored with
+  `isOutsideKeyPrefix: true`; `upsert` and `remove` refuse its id with `STORAGE_LIFECYCLE_RULE_INVALID`,
+  and every write sends it back field for field.
+- **Two rule kinds.** An input has exactly one of `expirationDays` (delete objects under the prefix
+  after N days) and `abortIncompleteMultipartDays` (abort uploads not completed within N days of
+  starting; [AWS: "Specifies the number of days after which Amazon S3 aborts an incomplete multipart
   upload"][aws-abort-mpu]). A rule with the same id is replaced, whichever kind it was.
-- **Inputs are validated before any request.** `id` is 1 to 255 characters (the AWS limit), the day
-  count is an integer of at least 1, and `prefix` passes the same key guard as every other key. An
-  expiration rule needs a non-empty prefix: an expiry over the whole bucket is not supported by this
-  API. A multipart-abort rule may have an empty prefix, which means every upload in the module's
-  namespace (the whole bucket without a `keyPrefix`), because aborting a stale upload deletes no object.
-  A bad input throws `STORAGE_LIFECYCLE_RULE_INVALID`.
-- **Typed provider errors.** A provider that does not implement the API throws
-  `STORAGE_LIFECYCLE_UNSUPPORTED` (501); a configuration the provider refuses throws
-  `STORAGE_LIFECYCLE_REJECTED` (422). `details` carries the provider's error code, status and
-  request id, never the caught error.
-- **`TransitionDefaultMinimumObjectSize`.** When the provider reports this setting, a write sends it
-  back unchanged so existing transition behaviour does not reset.
+- **Validated before any request.** `id` is 1 to 255 characters, the day count an integer of at least
+  1, and `prefix` passes the key guard. An expiration rule needs a non-empty prefix; a multipart-abort
+  rule may have an empty one, meaning every upload in the module's namespace, because aborting deletes
+  no object. A bad input throws `STORAGE_LIFECYCLE_RULE_INVALID`.
+- **Typed provider errors.** `STORAGE_LIFECYCLE_UNSUPPORTED` (501) when the provider lacks the API,
+  `STORAGE_LIFECYCLE_REJECTED` (422) when it refuses the configuration; `details` carries the
+  provider's code, status and request id, never the caught error.
 
 **Provider support**
 
-| Provider                                   | Status                | Basis                                                                                                                                               |
-| ------------------------------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MinIO (tested with the `pgsty/silo` image) | **Verified**          | The end-to-end suite applies an expiration rule once, keeps unrelated rules through upsert, replace and remove, and deletes the configuration on the last rule. It does not accept a multipart-abort rule: the server answers HTTP 400 `InvalidArgument`, which the library types as `STORAGE_LIFECYCLE_REJECTED`, and the existing rules stay as they were (also checked end to end). |
-| Cloudflare R2                              | **Verified (docs)**   | R2 documents the S3 lifecycle calls ([R2 object lifecycles][r2-lifecycles]) and multipart-abort rules, and a default rule that expires multipart uploads after seven days; this repository does not run them against R2. |
-| AWS S3                                     | Documented, not run   | The behaviour follows the S3 API reference ([Put][aws-put-lifecycle], [Get][aws-get-lifecycle], [Delete][aws-delete-lifecycle]), including multipart-abort rules; no test here hits AWS. |
-| Backblaze B2, DigitalOcean Spaces, Wasabi  | **Unverified**        | Neither documented nor tested here. A provider without the API surfaces as `STORAGE_LIFECYCLE_UNSUPPORTED`.                                        |
+| Provider                                   | Status                | Basis |
+| ------------------------------------------ | --------------------- | ----- |
+| MinIO (tested with the `pgsty/silo` image) | **Verified**          | The end-to-end suite applies an expiration rule and keeps unrelated rules through upsert, replace and remove. It does not accept a multipart-abort rule: the server answers HTTP 400 `InvalidArgument`, typed as `STORAGE_LIFECYCLE_REJECTED`, and the existing rules stay as they were. |
+| Cloudflare R2                              | **Verified (docs)**   | R2 documents the lifecycle calls and multipart-abort rules ([R2 object lifecycles][r2-lifecycles]); this repository does not run them against R2. |
+| AWS S3                                     | Documented, not run   | Follows the S3 API reference ([Put][aws-put-lifecycle], [Get][aws-get-lifecycle], [Delete][aws-delete-lifecycle]); no test here hits AWS. |
+| Backblaze B2, DigitalOcean Spaces, Wasabi  | **Unverified**        | Neither documented nor tested here. A provider without the API surfaces as `STORAGE_LIFECYCLE_UNSUPPORTED`. |
 
-Expiry timing is the provider's, not this library's. R2 states that objects "will typically be
-removed from a bucket within 24 hours" of their expiry; MinIO's scanner runs at low priority, so an
-object can outlive its rule period.
+Expiry timing is the provider's: R2 states that objects "will typically be removed from a bucket
+within 24 hours" of their expiry, and MinIO's scanner runs at low priority, so an object can outlive
+its rule period.
 
 [aws-put-lifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html
 [aws-abort-mpu]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortIncompleteMultipartUpload.html
 [aws-get-lifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycleConfiguration.html
 [aws-delete-lifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketLifecycle.html
 [r2-lifecycles]: https://developers.cloudflare.com/r2/buckets/object-lifecycles/
+
 
 ### Raw S3Client (Advanced)
 
@@ -770,13 +715,13 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_OBJECT_NOT_FOUND`       | 404  | `head()`, `download()`, or `copy()` on a nonexistent key                                                                                                                                                           |
 | `STORAGE_PROVIDER_ERROR`         | 502  | AWS SDK error (network, 5xx, throttling, `AccessControlListNotSupported`); `details` carries `awsCode`, `awsMessage`, `httpStatus`, `requestId` plus the operation context (`op`, `bucket`, and `key` or `prefix`) |
 | `STORAGE_SIGNED_URL_TTL_INVALID` | 400  | Per-request `ttlSeconds` ≤ 0                                                                                                                                                                                       |
-| `STORAGE_PART_TOO_SMALL`         | 400  | Reserved: a `multipart.partSizeBytes` below 5 MiB is rejected at init as `STORAGE_INVALID_CONFIG`                                                                                                                                                                             |
+| `STORAGE_PART_TOO_SMALL`         | 400  | Never thrown: a `multipart.partSizeBytes` below 5 MiB fails at init as `STORAGE_INVALID_CONFIG`                                                                                                                                                                             |
 | `STORAGE_INVALID_PART_COUNT`     | 400  | `getMultipartUploadUrls()` with `parts` not an integer from 1 to 10 000 (`details.provided`, `details.reason`)                                                                                                                                                  |
 | `STORAGE_BUCKET_UNDEFINED`       | 400  | Operation without a bucket and no default in config                                                                                                                                                                |
-| `STORAGE_MULTIPART_ABORTED`      | 500  | A multipart upload failed. `details.abort` is `'completed'` when the library aborted it and `'failed'` (with `abortError`) when the abort itself failed (the message then reads "Multipart upload failed and could not be aborted"): that upload stays open on the provider until a lifecycle rule removes it |
+| `STORAGE_MULTIPART_ABORTED`      | 500  | A multipart upload failed. `details.abort` is `'completed'` when the library aborted it, `'failed'` (with `abortError`) when the abort itself failed: that upload then stays open on the provider until a lifecycle rule removes it |
 | `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                                                                                                                    |
-| `STORAGE_TIMEOUT`                | 504  | An attempt got no response headers within `requestTimeoutMs` (the SDK's `TimeoutError`); a multipart source that stays silent for `uploadIdleTimeoutMs` also surfaces as `STORAGE_TIMEOUT` (`details.phase: 'source-idle'`); any other failure inside a multipart upload surfaces as `STORAGE_MULTIPART_ABORTED`                                                                                                                                                                                |
-| `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: empty or over-long `id`, non-positive or non-integer `expirationDays`, bad `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |
+| `STORAGE_TIMEOUT`                | 504  | An attempt got no response headers within `requestTimeoutMs`, or a multipart source stayed silent for `uploadIdleTimeoutMs` (`details.phase: 'source-idle'`)                                                                                                                                                                                |
+| `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: bad `id`, day count or `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |
 | `STORAGE_LIFECYCLE_UNSUPPORTED` | 501  | The provider does not implement the lifecycle API |
 | `STORAGE_LIFECYCLE_REJECTED` | 422  | The provider refused the lifecycle configuration |
 | `STORAGE_BUCKET_NOT_FOUND`       | 404  | The provider answered `NoSuchBucket` (any operation that gets an error body: `download()`, `upload()`, `list()`, `copy()`, `delete()`), or `checkBucket()` got a 404 |
@@ -800,99 +745,21 @@ try {
 
 ---
 
-## 📖 API Reference
+## 🚫 What This Library Does NOT Do
 
-Every operation below is documented with a runnable example in the sections above.
-This is the index.
-
-### `StorageService`
-
-| Method           | Signature                                                     | Notes                                                        |
-| ---------------- | ------------------------------------------------------------- | ------------------------------------------------------------ |
-| `upload`         | `(options: UploadOptions) => Promise<UploadResult>`           | Multipart via `@aws-sdk/lib-storage`; aborts on failure      |
-| `download`       | `(options: DownloadOptions) => Promise<{ stream, metadata }>` | Streaming; the body is never buffered                        |
-| `downloadBuffer` | `(options: DownloadOptions) => Promise<{ buffer, metadata }>` | Buffers — bounded by the caller's own memory                 |
-| `head`           | `(key, options?) => Promise<ObjectMetadata>`                  | Metadata without transferring the body                       |
-| `exists`         | `(key, options?) => Promise<boolean>`                         | `head` reduced to a boolean; any non-404 failure is logged and returns `false`                                  |
-| `getPublicUrl`   | `(key, options?) => string`                                   | Composed, not signed — for buckets that are public by policy |
-| `delete`         | `(key, options?) => Promise<void>`                            | Idempotent for a missing object, as S3 delete is; a missing bucket rejects `STORAGE_BUCKET_NOT_FOUND` |
-| `deleteMany`     | `(keys: string[], options?) => Promise<DeleteManyResult>`     | Partial failures are reported, not thrown                    |
-| `list`           | `(options: ListOptions) => Promise<ListResult>`               | Paginated by continuation token                              |
-| `copy`           | `(options: CopyOptions) => Promise<{ etag }>`            | Server-side; the bytes never reach this process              |
-| `checkBucket`    | `(options?) => Promise<void>`                                 | One `HeadBucket` for a readiness check; resolves when the bucket is reachable, otherwise rejects `STORAGE_BUCKET_NOT_FOUND`, `STORAGE_BUCKET_ACCESS_DENIED`, `STORAGE_BUCKET_REGION_MISMATCH` or `STORAGE_TIMEOUT`; needs `s3:ListBucket`; never called at boot |
-
-> **`exists()` returns `false` for any failure that is not a 404** (a 403, a 5xx, a timeout), after
-> logging a warning, so a transient provider error reads as "absent". Do not use it to decide whether
-> to overwrite or to create (`if (!(await exists(k))) await upload(k)` can overwrite an object
-> that is there); use `head()` and branch on the error code.
-
-**A missing bucket and `head()` / `exists()`.** A `HEAD` response has no body, so the provider cannot say which of the bucket and the key is missing: AWS documents that "if the `HEAD` request generates an error, it returns a generic code, such as `400 Bad Request`, `403 Forbidden`, `404 Not Found` ... It's not possible to retrieve the exact exception of these error codes" ([HeadObject][aws-head-object]). `head()` therefore rejects `STORAGE_OBJECT_NOT_FOUND` and `exists()` returns `false` for a missing bucket too. Call `checkBucket()` to tell the two apart, for example from a readiness endpoint.
-
-### `SignedUrlService`
-
-| Method                   | Signature                                                                     | Notes                                                         |
-| ------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `getDownloadUrl`         | `(options: SignedGetUrlOptions) => Promise<SignedUrlResult>`                  | GET presign                                                   |
-| `getUploadUrl`           | `(options: SignedPutUrlOptions) => Promise<SignedUrlResult>`                  | PUT presign; signs `Content-Type` and returns the `requiredHeaders` |
-| `getMultipartUploadUrls` | `(options: MultipartUploadUrlsOptions) => Promise<MultipartUploadUrlsResult>` | One signed URL per part, plus the upload id and the completion URL                   |
-
-### `BucketLifecycleService`
-
-| Method   | Signature                                                              | Notes                                                                   |
-| -------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `get`    | `(options?) => Promise<BucketLifecycleRuleView[]>`                     | `[]` when the bucket has no configuration; filter prefixes are relative to `keyPrefix`; rules outside it carry `isOutsideKeyPrefix` |
-| `upsert` | `(rule: ExpirationRuleInput, options?) => Promise<void>`               | Read-modify-write; replaces the rule with the same id, keeps the rest   |
-| `remove` | `(id: string, options?) => Promise<boolean>`                           | `false` and no write for an unknown id; deletes the configuration when it removes the last rule |
-
-### Key normalization
-
-`KeyResolverService` is internal — it is not exported, and it is not something a
-consumer calls. It is named here because every method above passes the key you
-supply through it first: the guard below, then `keyPrefix`.
-
-**Keys the library returns are relative to `keyPrefix`.** `UploadResult.key`, `ObjectMetadata.key`
-(from `head`, `download` and `downloadBuffer`), `ListedObject.key`, `commonPrefixes` and the
-`deleteMany` result all omit the prefix, so any of them can be passed straight back to `head`,
-`download`, `delete`, `copy` or a signed-URL call, which prepend it once. `UploadResult.publicUrl`
-is the one full value: it is a URL, and the prefix is part of the object's real path. Error
-`details` carry the real, prefixed key, because they describe what was sent to the provider.
-
-### Exported types and constants
-
-Every name the package exports is listed here, so none is a surprise.
-
-- **Module configuration:** `BymaxStorageModuleOptions`, `BymaxStorageModuleAsyncOptions` (the
-  `forRootAsync` shape: `imports`, `inject`, and one of `useFactory`, `useClass`, `useExisting`) and
-  `BymaxStorageModuleOptionsFactory` (the `createStorageOptions()` contract for `useClass` /
-  `useExisting`).
-- **Provider recipes:** `providerRecipes`, and the `ProviderRecipe<TInput>` type for writing a recipe
-  for another S3-compatible provider (it must keep the `'WHEN_REQUIRED'` checksum opt-out).
-- **Operation inputs and results:** `UploadOptions`, `DownloadOptions`, `ListOptions`, `ListResult`,
-  `CopyOptions`, `DeleteManyOptions`, `DeleteManyResult`, `FailedDeletion`, `SignedGetUrlOptions`,
-  `SignedPutUrlOptions`, `MultipartUploadUrlsOptions`, `MultipartUploadUrlsResult`.
-- **Lifecycle:** `BucketLifecycleRule` (the provider's rule as stored), `BucketLifecycleRuleView` (what
-  `get()` returns), `ExpirationRuleInput` and `LifecycleBucketOptions` (`{ bucket? }`).
-- **Extension points:** `IUploadValidator`, `IFileScanner`, `FileScanResult`, and the helpers
-  `NoOpUploadValidator` and `NoOpFileScanner`.
-- **From `./shared`:** `UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`,
-  `StorageErrorResponse`, `StorageErrorCode`, `STORAGE_ERROR_CODES`, the three MIME presets
-  `DEFAULT_IMAGE_MIME_WHITELIST`, `DEFAULT_VIDEO_MIME_WHITELIST`, `DEFAULT_DOC_MIME_WHITELIST`, and the
-  defaults `DEFAULT_SIGNED_URL_TTL_SECONDS`, `MAX_SIGNED_URL_TTL_SECONDS`,
-  `DEFAULT_MULTIPART_THRESHOLD_BYTES`, `DEFAULT_MULTIPART_PART_SIZE_BYTES`,
-  `DEFAULT_MULTIPART_QUEUE_SIZE`.
-
-`BYMAX_STORAGE_OPTIONS` is exported so a provider of yours can read the resolved configuration, and it
-is also reachable by every other provider in the application. The credentials are not enumerable on
-that object, but they are readable on it: treat the token as sensitive.
-
-### DI tokens
-
-`BYMAX_STORAGE_OPTIONS` · `BYMAX_STORAGE_S3_CLIENT` · `BYMAX_STORAGE_FILE_SCANNER` ·
-`BYMAX_STORAGE_UPLOAD_VALIDATORS` — all `Symbol()`, so no string token can collide with
-them, and all four are in the module's `exports`, so injection resolves rather than raising
-`UnknownDependenciesException`. Two of them are nullable by design: `BYMAX_STORAGE_S3_CLIENT`
-is `null` until credentials are configured, and `BYMAX_STORAGE_FILE_SCANNER` is `null` when no
-scanner is set, which is the default. Type them as `S3Client | null` and `IFileScanner | null`.
+- **Detect a file's real type.** The MIME check reads the declared `Content-Type` only; plug in an
+  `IUploadValidator` with a `readBytes(n)` magic-byte check for untrusted sources ([Validation](#-validation)).
+- **Bound a signed PUT.** A signed URL skips local size validation and custom validators, and no size
+  limit is signed into it ([Presigned PUT](#presigned-put-direct-browser-upload)).
+- **Isolate tenants.** `keyPrefix` is a namespace, not an access boundary ([Security Model](#-security-model)).
+- **Share state between replicas.** The idempotency cache is per instance.
+- **Complete or abort a presigned multipart upload.** The client sends the part ETags to `completeUrl`
+  and aborts with its own signed request ([Presigned Multipart](#presigned-multipart)).
+- **Make ACLs work everywhere.** `publicRead` fails on modern AWS S3 and is a no-op on R2
+  ([Public Access / ACLs](#public-access--acls)).
+- **Lock lifecycle writes.** Changes are read-modify-write and not atomic.
+- **Wrap every S3 operation.** Provider-specific calls go through the raw `S3Client`
+  ([Raw S3Client](#raw-s3client-advanced)).
 
 ---
 
@@ -938,153 +805,193 @@ IUploadValidator[]   post-upload        collapses a retry
 validation, scanning and the idempotency cache apply to `StorageService` only. See the signed-PUT
 caveat above.
 
-One engine, six recipes. `providerRecipes` differ only in endpoint, region and the
-handful of flags each provider needs (`forcePathStyle` for MinIO, `auto` region for
-R2) — there is no per-provider code path, so a provider swap is a configuration
-change and every operation behaves the same way afterwards.
+`SignedUrlService` stops at `KeyResolverService`: it signs a URL and never sees the body, so validation,
+scanning and the idempotency cache apply to `StorageService` only. See the signed-PUT caveat above.
 
-The idempotency cache is **in-process**. It collapses a retried `upload` inside one
-instance; it does not coordinate between replicas.
-
-### Design Principles
-
-| Principle                        | Description                                                                                                                                                                                                                           |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🔑 **One key chokepoint**        | Every caller-supplied key passes through `KeyResolverService` before it reaches S3. `..`, a leading `/`, null bytes and empty keys are refused, and `keyPrefix` is prepended after normalization — so it cannot be escaped by the key |
-| 🧩 **One engine, six recipes**   | `providerRecipes` differ in endpoint, region and per-provider flags only. There is no per-provider code path, so a provider swap is configuration and every operation behaves the same afterwards                                     |
-| 🚫 **Refuse before storing**     | MIME allowlist and size limit, then registered `IUploadValidator`s, then the `IFileScanner`. An upload that will be rejected is rejected before a byte is written                                                                     |
-| ⏱️ **Bounded signatures**        | Presign TTLs above `signedUrls.maxTtlSeconds` (default 604 800 s, the SigV4 limit) are clamped locally, not discovered when the provider rejects the signature                                                                                                    |
-| 💥 **Fail at boot, mostly**      | Options are validated before any client is built. Credentials are the deliberate exception: empty values are tolerated so a development workflow boots, and operations then fail with `STORAGE_NOT_CONFIGURED`                        |
-| 🧊 **Zero runtime dependencies** | `dependencies` is `{}`. You choose the exact `@aws-sdk/*` versions and the supply-chain surface stays yours                                                                                                                           |
+Options are validated before any client is built. Credentials are the deliberate exception: empty
+values are tolerated so a development workflow boots, and operations then fail with
+`STORAGE_NOT_CONFIGURED`.
 
 ---
 
 ## 🔐 Security Model
 
-This library turns caller input into object keys, signs URLs that grant access on their
-own, and holds the credentials for a bucket. Its security contract is about what a key can
-reach, how long a signature lives, and what leaves in an error.
+This library turns caller input into object keys, signs URLs that grant access on their own, and holds
+the credentials for a bucket. Its contract covers what a key can reach, how long a signature lives,
+and what leaves in an error.
 
 ### The object key is the attack surface
 
-Everything a caller sends becomes part of a key, and a key is a path.
-`KeyResolverService.normalize` is the single chokepoint: it refuses an empty key, a key
-containing a null byte, a key starting with `/`, and any key with a `..` segment; it
-collapses duplicate slashes; and only then does it prepend `keyPrefix`. Nothing in this
-library composes a key any other way, so a tenant cannot climb out of its prefix by naming
-one.
+Everything a caller sends becomes part of a key, and a key is a path. `KeyResolverService.normalize`
+is the single chokepoint: it refuses an empty key, a null byte, a leading `/` and any `..` segment,
+collapses duplicate slashes, and only then prepends `keyPrefix`. Nothing else in the library composes
+a key, so a tenant cannot climb out of its prefix by naming one.
 
 ### Presigned URLs are bearer credentials
 
-Anyone holding one has the access it encodes, for as long as it lives. A requested TTL
-above `signedUrls.maxTtlSeconds` (604 800 s, SigV4's limit, by default) is clamped here rather
-than passed through to a signature the provider would reject at use time. Treat a signed URL like a password
-with an expiry, not like a link.
+Anyone holding one has the access it encodes until it expires, so treat it like a password with an
+expiry, not like a link. Its lifetime is capped by `signedUrls.maxTtlSeconds` (see
+[Signed URLs](#-signed-urls-get--put--multipart)), and it must never be logged.
 
 ### Credentials stay where they were put
 
-They arrive through module options and are handed to the SDK. This library never reads
-`process.env`, never logs them, and never places them — or a signed URL — in an exception.
+They arrive through module options and are handed to the SDK. This library never reads `process.env`,
+never logs them, and never places them — or a signed URL — in an exception.
 
-They are also not reachable by serializing the objects that hold them. The resolved
-options are injected into every service, so `credentials` is attached as a non-enumerable
-accessor: `JSON.stringify`, object spread, `util.inspect` and `util.inspect` with
-`showHidden` all omit it. Those are the paths taken by code that renders a provider it was
-handed incidentally — a structured logger formatting its arguments, an error reporter
-capturing the scope of a throw. Reading on purpose is unchanged.
+They are also not reachable by serializing the objects that hold them. The resolved options are
+injected into every service, so `credentials` is attached as a non-enumerable accessor:
+`JSON.stringify`, object spread and `util.inspect` (with or without `showHidden`) all omit it, which
+is what a structured logger or an error reporter capturing a scope would otherwise pick up. Reading it
+on purpose is unchanged.
 
 ### Error payloads carry the operation, and that includes the key
 
-What `aws-error-mapper` puts in `details` is the provider's error code and message, the
-HTTP status, the request id, and the operation context the call site supplies: which
-operation, which bucket, and the resolved key or prefix. That is enough to diagnose a
-failure, and it means an object key reaches whatever consumes the exception — so if a key
-is itself sensitive in your deployment, do not log the envelope verbatim.
-
-### Uploads are refused before they are stored
-
-MIME allowlist (wildcards included) and size limit run first, then any `IUploadValidator`
-you register, then the `IFileScanner` if configured. A scanner runs either pre-upload or
-post-upload — the post-upload position exists because some scanners only accept an
-object they can fetch.
+`details` holds the provider's error code and message, the HTTP status, the request id, and the
+operation context the call site supplies: the operation, the bucket, and the resolved key or prefix.
+That is enough to diagnose a failure, and it means an object key reaches whatever consumes the
+exception, so if a key is itself sensitive in your deployment, do not log the envelope verbatim.
 
 ### `keyPrefix` is a namespace, not an access boundary
 
-It scopes the keys this library composes; it does not restrict what the credentials can
-reach. Anything holding the bucket's credentials can read every prefix in it. Isolation
-that must survive a compromised client belongs in IAM policies or separate buckets.
+It scopes the keys this library composes; it does not restrict what the credentials can reach. Anything
+holding the bucket's credentials can read every prefix in it. Isolation that must survive a compromised
+client belongs in IAM policies or separate buckets.
 
-It is also fixed when the module is registered: `forRoot` resolves one prefix, and the
-module is `@Global()` with one `StorageService` behind fixed injection tokens, so it is not
-designed to be registered twice in one application with different prefixes. To keep tenants
-apart in one application, build the tenant segment into the key on each call from a trusted
-source (`tenants/${tenantId}/${name}`, never from request input) or give each tenant its own
-bucket and credentials.
+It is also fixed when the module is registered: `forRoot` resolves one prefix, and the module is
+`@Global()` with one `StorageService` behind fixed injection tokens, so it is not designed to be
+registered twice in one application with different prefixes. To keep tenants apart in one application,
+build the tenant segment into the key on each call from a trusted source (`tenants/${tenantId}/${name}`,
+never from request input) or give each tenant its own bucket and credentials.
 
----
+### Supply chain
 
-## 🛡️ Security Table
-
-| Layer            | Implementation                                                                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Object keys      | Guarded and normalized in one place; `..`, leading `/`, null bytes and empty keys refused                                                              |
-| Multi-tenancy    | `keyPrefix` prepended after normalization, so it cannot be escaped by the key                                                                          |
-| Credentials      | Injected options only; never read from `process.env`, never logged, never in an exception; held in a non-enumerable accessor, so serializing a service omits them |
-| Error payloads   | Provider code and message, HTTP status, request id, and the operation context (`op`, `bucket`, `key`/`prefix`) — never credentials, never a signed URL |
-| Presign lifetime | TTL clamped to `signedUrls.maxTtlSeconds` (default: SigV4's 7-day limit)                                                                                                    |
-| Encryption       | Server-side (AES256 / `aws:kms`) configurable globally or per upload                                                                                   |
-| Content          | MIME allowlist + size limit, then registered validators, then the scanner                                                                              |
-| Supply chain     | `dependencies: {}`; third-party Actions pinned by commit SHA (org-internal reusables by tag); CodeQL, OSV-Scanner and OpenSSF Scorecard                |
-
-> [!IMPORTANT]
-> **`keyPrefix` is not an access boundary.** It scopes the keys this library composes;
-> it does not restrict what the credentials can reach. Anything holding the bucket's
-> credentials can read every prefix in it. Enforce tenant isolation with IAM policies
-> or separate buckets when the boundary has to hold against the application itself.
+`dependencies` is `{}`; third-party Actions are pinned by commit SHA; CodeQL, OSV-Scanner and OpenSSF
+Scorecard run on the repository.
 
 ---
 
 ## 🧱 Tech Stack
 
-- **Runtime:** Node.js 24+
-- **Framework:** NestJS 11 (a hand-written `forRoot` / `forRootAsync` dynamic module, `@Global()`, `Symbol()` tokens)
-- **Storage engine:** `@aws-sdk/client-s3 ^3.700` (peer), with `@aws-sdk/lib-storage`
-  for multipart and `@aws-sdk/s3-request-presigner` for presigns — all peers
-- **Providers:** AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, MinIO, Wasabi
-- **Build:** tsup — ESM + CJS per subpath, with `.d.ts` _and_ `.d.cts` declarations
-- **Tests:** Jest + Testcontainers (MinIO, E2E) + Stryker (mutation)
-- **TypeScript:** 5.x strict (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), zero `any`
+![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-339933?style=flat-square&logo=node.js&logoColor=white)
+![NestJS 11](https://img.shields.io/badge/NestJS-11-E0234E?style=flat-square&logo=nestjs&logoColor=white)
+![AWS SDK v3](https://img.shields.io/badge/AWS%20SDK-v3%20(peer)-FF9900?style=flat-square&logo=amazons3&logoColor=white)
+![TypeScript 5 strict](https://img.shields.io/badge/TypeScript-5%20strict-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![tsup](https://img.shields.io/badge/build-tsup-000000?style=flat-square)
+![Jest 30](https://img.shields.io/badge/tests-Jest%2030-C21325?style=flat-square&logo=jest&logoColor=white)
+![Testcontainers](https://img.shields.io/badge/e2e-Testcontainers%20%2B%20MinIO-9B1D20?style=flat-square)
+![Stryker](https://img.shields.io/badge/mutation-Stryker-E74C3C?style=flat-square)
 
 ---
 
 ## 🧪 Testing & Quality
 
-Object storage is where a bug is expensive to discover later — a key written to the wrong
-place stays there — so the suite is held to a bar beyond "the tests pass".
+- ✅ **100% coverage** — statements, branches, functions and lines, enforced as a gate
+- ✅ **100% mutation score** — [Stryker](https://stryker-mutator.io/) at `break: 100`
+- ✅ **Real object storage in e2e** — MinIO through Testcontainers, so multipart, presigning and
+  listing are exercised against an actual S3 API rather than a mock
+- ✅ **Published-artifact gates** — `check:exports` resolves the types the way each module system
+  does, `check:runtime` loads every subpath from the packed tarball in ESM and CommonJS, and
+  `check:published` compiles this README's snippets against `dist/`
+- ✅ **Every suppression is justified** — no coverage directives anywhere; each `// Stryker disable`
+  comment in the production source names why its mutant is provably equivalent, and `check:mutants`
+  proves the reason is written in the grammar Stryker parses, so the mutation report carries it in full
 
-- ✅ **100% line coverage** — statements, branches, functions and lines, enforced as a gate
-- ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at
-  `break: 100`; every survivor was killed by a strengthened assertion, and the provable
-  equivalents are documented inline
-- ✅ **Real object storage in e2e** — MinIO through Testcontainers, so multipart, presigning
-  and listing are exercised against an actual S3 API rather than a mock
-- ✅ **Published-artifact gates** — `check:exports` resolves the types the way each module
-  system does, `check:runtime` loads every subpath from the packed tarball in ESM and
-  CommonJS, and `check:published` compiles this README's snippets against `dist/`
-- ✅ **Every suppression is justified** — no coverage directives anywhere; the six
-  `// Stryker disable` comments in the production source each name why the mutant they
-  silence is provably equivalent, and `check:mutants` proves each reason is written in the
-  grammar Stryker parses, so the mutation report carries it in full rather than the
-  `Ignored using a comment` fallback
+---
 
-```bash
-pnpm test          # unit tests (Jest)
-pnpm test:cov      # unit tests with the 100% coverage gate
-pnpm test:e2e      # end-to-end against MinIO (requires Docker)
-pnpm mutation      # Stryker mutation testing (break: 100)
-pnpm typecheck     # tsc strict check
-pnpm lint          # ESLint
-```
+## 📖 API Reference
+
+Every operation below is documented with a runnable example in the sections above.
+This is the index.
+
+### `StorageService`
+
+| Method           | Signature                                                     | Notes                                                        |
+| ---------------- | ------------------------------------------------------------- | ------------------------------------------------------------ |
+| `upload`         | `(options: UploadOptions) => Promise<UploadResult>`           | Multipart via `@aws-sdk/lib-storage`; aborts on failure      |
+| `download`       | `(options: DownloadOptions) => Promise<{ stream, metadata }>` | Streaming; the body is never buffered                        |
+| `downloadBuffer` | `(options: DownloadOptions) => Promise<{ buffer, metadata }>` | Buffers — bounded by the caller's own memory                 |
+| `head`           | `(key, options?) => Promise<ObjectMetadata>`                  | Metadata without transferring the body                       |
+| `exists`         | `(key, options?) => Promise<boolean>`                         | `head` reduced to a boolean; any non-404 failure is logged and returns `false`                                  |
+| `getPublicUrl`   | `(key, options?) => string`                                   | Composed, not signed — for buckets that are public by policy |
+| `delete`         | `(key, options?) => Promise<void>`                            | Idempotent for a missing object, as S3 delete is; a missing bucket rejects `STORAGE_BUCKET_NOT_FOUND` |
+| `deleteMany`     | `(keys: string[], options?) => Promise<DeleteManyResult>`     | Partial failures are reported, not thrown                    |
+| `list`           | `(options: ListOptions) => Promise<ListResult>`               | Paginated by continuation token                              |
+| `copy`           | `(options: CopyOptions) => Promise<{ etag }>`            | Server-side; the bytes never reach this process              |
+| `checkBucket`    | `(options?) => Promise<void>`                                 | One `HeadBucket` for a readiness check; resolves when the bucket is reachable, otherwise rejects `STORAGE_BUCKET_NOT_FOUND`, `STORAGE_BUCKET_ACCESS_DENIED`, `STORAGE_BUCKET_REGION_MISMATCH` or `STORAGE_TIMEOUT`; needs `s3:ListBucket`; never called at boot |
+
+> **`exists()` returns `false` for any failure that is not a 404** (a 403, a 5xx, a timeout), after
+> logging a warning, so a transient provider error reads as "absent". Do not use it to decide whether
+> to overwrite or to create (`if (!(await exists(k))) await upload(k)` can overwrite an object
+> that is there); use `head()` and branch on the error code.
+
+**A missing bucket and `head()` / `exists()`.** A `HEAD` response has no body, so the provider cannot say which of the bucket and the key is missing: AWS documents that "if the `HEAD` request generates an error, it returns a generic code, such as `400 Bad Request`, `403 Forbidden`, `404 Not Found` ... It's not possible to retrieve the exact exception of these error codes" ([HeadObject][aws-head-object]). `head()` therefore rejects `STORAGE_OBJECT_NOT_FOUND` and `exists()` returns `false` for a missing bucket too. Call `checkBucket()` to tell the two apart, for example from a readiness endpoint.
+
+### `SignedUrlService`
+
+| Method                   | Signature                                                                     | Notes                                                         |
+| ------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `getDownloadUrl`         | `(options: SignedGetUrlOptions) => Promise<SignedUrlResult>`                  | GET presign                                                   |
+| `getUploadUrl`           | `(options: SignedPutUrlOptions) => Promise<SignedUrlResult>`                  | PUT presign; signs `Content-Type` and returns the `requiredHeaders` |
+| `getMultipartUploadUrls` | `(options: MultipartUploadUrlsOptions) => Promise<MultipartUploadUrlsResult>` | One signed URL per part, plus the upload id and the completion URL                   |
+
+### `BucketLifecycleService`
+
+| Method   | Signature                                                              | Notes                                                                   |
+| -------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `get`    | `(options?) => Promise<BucketLifecycleRuleView[]>`                     | `[]` when the bucket has no configuration; filter prefixes are relative to `keyPrefix`; rules outside it carry `isOutsideKeyPrefix` |
+| `upsert` | `(rule: LifecycleRuleInput, options?) => Promise<void>`                | Read-modify-write; replaces the rule with the same id, keeps the rest   |
+| `remove` | `(id: string, options?) => Promise<boolean>`                           | `false` and no write for an unknown id; deletes the configuration when it removes the last rule |
+
+### Key normalization
+
+`KeyResolverService` is internal — it is not exported, and it is not something a
+consumer calls. It is named here because every method above passes the key you
+supply through it first: the guard below, then `keyPrefix`.
+
+**Keys the library returns are relative to `keyPrefix`.** `UploadResult.key`, `ObjectMetadata.key`
+(from `head`, `download` and `downloadBuffer`), `ListedObject.key`, `commonPrefixes` and the
+`deleteMany` result all omit the prefix, so any of them can be passed straight back to `head`,
+`download`, `delete`, `copy` or a signed-URL call, which prepend it once. `UploadResult.publicUrl`
+is the one full value: it is a URL, and the prefix is part of the object's real path. Error
+`details` carry the real, prefixed key, because they describe what was sent to the provider.
+
+### Exported types and constants
+
+Every name the package exports is listed here, so none is a surprise.
+
+- **Module configuration:** `BymaxStorageModuleOptions`, `BymaxStorageModuleAsyncOptions` (the
+  `forRootAsync` shape: `imports`, `inject`, and one of `useFactory`, `useClass`, `useExisting`) and
+  `BymaxStorageModuleOptionsFactory` (the `createStorageOptions()` contract for `useClass` /
+  `useExisting`).
+- **Provider recipes:** `providerRecipes`, and the `ProviderRecipe<TInput>` type for writing a recipe
+  for another S3-compatible provider (it must keep the `'WHEN_REQUIRED'` checksum opt-out).
+- **Operation inputs and results:** `UploadOptions`, `DownloadOptions`, `ListOptions`, `ListResult`,
+  `CopyOptions`, `DeleteManyOptions`, `DeleteManyResult`, `FailedDeletion`, `SignedGetUrlOptions`,
+  `SignedPutUrlOptions`, `MultipartUploadUrlsOptions`, `MultipartUploadUrlsResult`.
+- **Lifecycle:** `BucketLifecycleRule` (the provider's rule as stored), `BucketLifecycleRuleView` (what
+  `get()` returns), `LifecycleRuleInput` (`ExpirationRuleInput` or `AbortMultipartRuleInput`) and
+  `LifecycleBucketOptions` (`{ bucket? }`).
+- **Extension points:** `IUploadValidator`, `IFileScanner`, `FileScanResult`, and the helpers
+  `NoOpUploadValidator` and `NoOpFileScanner`.
+- **From `./shared`:** `UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`,
+  `StorageErrorResponse`, `StorageErrorCode`, `STORAGE_ERROR_CODES`, the three MIME presets
+  `DEFAULT_IMAGE_MIME_WHITELIST`, `DEFAULT_VIDEO_MIME_WHITELIST`, `DEFAULT_DOC_MIME_WHITELIST`, and the
+  defaults `DEFAULT_SIGNED_URL_TTL_SECONDS`, `MAX_SIGNED_URL_TTL_SECONDS`,
+  `DEFAULT_MULTIPART_THRESHOLD_BYTES`, `DEFAULT_MULTIPART_PART_SIZE_BYTES`,
+  `DEFAULT_MULTIPART_QUEUE_SIZE`.
+
+`BYMAX_STORAGE_OPTIONS` is exported so a provider of yours can read the resolved configuration, and it
+is also reachable by every other provider in the application. The credentials are not enumerable on
+that object, but they are readable on it: treat the token as sensitive.
+
+### DI tokens
+
+`BYMAX_STORAGE_OPTIONS` · `BYMAX_STORAGE_S3_CLIENT` · `BYMAX_STORAGE_FILE_SCANNER` ·
+`BYMAX_STORAGE_UPLOAD_VALIDATORS` — all `Symbol()`, so no string token can collide with
+them, and all four are in the module's `exports`, so injection resolves rather than raising
+`UnknownDependenciesException`. Two of them are nullable by design: `BYMAX_STORAGE_S3_CLIENT`
+is `null` until credentials are configured, and `BYMAX_STORAGE_FILE_SCANNER` is `null` when no
+scanner is set, which is the default. Type them as `S3Client | null` and `IFileScanner | null`.
 
 ---
 
@@ -1092,9 +999,8 @@ pnpm lint          # ESLint
 
 Pull requests are welcome. Please open an issue first for significant changes.
 
-- Read [`docs/technical_specification.md`](docs/technical_specification.md) for architecture decisions.
 - Run `pnpm test:cov` and `pnpm lint` before opening a PR.
-- Please use Conventional Commits for the message; nothing enforces it here, so it is a convention rather than a gate.
+- Use Conventional Commits for commit messages.
 
 ---
 
