@@ -46,8 +46,8 @@ minimal.
 
 ### Why nest-storage?
 
-- **One engine, six providers.** `providerRecipes` differ only in endpoint, region and the flags each
-  provider needs (`forcePathStyle` for MinIO, `auto` region for R2). There is no per-provider code
+- **One engine, six providers.** `providerRecipes` only produce module options (endpoint, region,
+  addressing style, public URLs and the checksum opt-out each provider needs). There is no per-provider code
   path, so switching provider is a configuration change and every operation behaves the same after it.
 - **One key chokepoint.** Every caller key passes through `KeyResolverService` before it reaches S3,
   and `keyPrefix` is prepended only after it ([Security Model](#-security-model)).
@@ -64,7 +64,7 @@ minimal.
   number of `IUploadValidator`s, all refused before a byte is stored
 - ✅ **Virus scanning hook** — `IFileScanner` pre-upload or post-upload, for ClamAV, AWS Macie or
   anything that answers `'clean' | 'infected' | 'unknown'`
-- ✅ **Idempotent retries** — an in-memory LRU (1 000 entries / 24 h by default) returns the cached
+- ✅ **Idempotent retries** — a bounded in-memory LRU with a TTL returns the cached
   `UploadResult` for a repeated `idempotencyKey`
 - ✅ **Presigned GET / PUT / multipart** — the PUT signs the `Content-Type` (and ACL and metadata, when set) as required headers, so a PUT that sends another type is refused and stores nothing; multipart gets one signed URL per part, so a browser uploads directly
 - ✅ **Streaming download, metadata without transfer, paginated listing, server-side copy, bulk delete**
@@ -862,8 +862,7 @@ never from request input) or give each tenant its own bucket and credentials.
 
 ### Supply chain
 
-`dependencies` is `{}`; third-party Actions are pinned by commit SHA; CodeQL, OSV-Scanner and OpenSSF
-Scorecard run on the repository.
+`dependencies` is `{}`; see the repository's CI workflows for the scanners that run on it.
 
 ---
 
