@@ -13,6 +13,21 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Added
+
+- **`bodyIdleTimeoutMs` bounds a download body that stops delivering.** `requestTimeoutMs` ends when
+  the response headers arrive, so a provider that stalled mid-body left the stream, its connection
+  and the caller waiting for as long as the provider chose. After `bodyIdleTimeoutMs` of silence
+  while the caller is reading, `download` and `downloadBuffer` now fail with `STORAGE_TIMEOUT`
+  (`details.phase: 'body-idle'`) and the connection is released. The clock runs only while a read
+  is pending, so a slow consumer never trips it. It defaults to `requestTimeoutMs`; `0` turns it off.
+
+  **Apply to a derived backend:** a download that went quiet for longer than `requestTimeoutMs`
+  (30 s by default) used to wait on; it now fails `STORAGE_TIMEOUT`. If you serve very large
+  objects through a source that can pause that long, raise `bodyIdleTimeoutMs` or set it to `0`;
+  while the guard is on the stream returned by `download` is a wrapper, so code that read SDK-only
+  members from it (such as `transformToByteArray`) must read it as a stream instead.
+
 ### Fixed
 
 - **`requestTimeoutMs` and `maxAttempts` are now checked at boot.** A value of `0`, a negative or

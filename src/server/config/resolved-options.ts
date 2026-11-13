@@ -41,6 +41,7 @@ export interface ResolvedBymaxStorageOptions {
   maxAttempts: number
   requestTimeoutMs: number
   uploadIdleTimeoutMs: number
+  bodyIdleTimeoutMs: number
   /** True when both `accessKeyId` and `secretAccessKey` are non-empty. */
   hasCredentials: boolean
 }

@@ -46,9 +46,14 @@ function withinIdleTime<T>(next: Promise<T>, idleMs: number): Promise<T> {
  *
  * @param source - The caller's stream.
  * @param idleMs - Longest silence allowed, in milliseconds; must be greater than 0.
+ * @param toError - Optional mapping applied to the failure the wrapper is destroyed with.
  * @returns A readable that yields the source's chunks unchanged.
  */
-export function withIdleTimeout(source: NodeJS.ReadableStream, idleMs: number): Readable {
+export function withIdleTimeout(
+  source: NodeJS.ReadableStream,
+  idleMs: number,
+  toError?: (error: Error) => Error,
+): Readable {
   const iterator = source[Symbol.asyncIterator]() as AsyncIterator<Buffer | string>
   const wrapper = new Readable({
     objectMode: false,
@@ -62,7 +67,7 @@ export function withIdleTimeout(source: NodeJS.ReadableStream, idleMs: number): 
           wrapper.push(step.done === true ? null : step.value)
         },
         (error: unknown) => {
-          wrapper.destroy(error as Error)
+          wrapper.destroy(toError ? toError(error as Error) : (error as Error))
         },
       )
     },

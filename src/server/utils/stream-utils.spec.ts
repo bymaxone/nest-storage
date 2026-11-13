@@ -13,6 +13,7 @@ import {
   isBufferLike,
   isReadable,
   peekFirstBytes,
+  readStream,
   toUploadBody,
 } from './stream-utils'
 
@@ -45,6 +46,26 @@ async function waitUntil(predicate: () => boolean, maxTicks = 100): Promise<void
     await tick()
   }
 }
+
+describe('readStream', () => {
+  it('reads Buffer chunks to one Buffer', async () => {
+    // The whole stream, in order.
+    expect((await readStream(Readable.from([Buffer.from('ab'), Buffer.from('cd')]))).toString()).toBe('abcd')
+  })
+
+  it('reads string chunks as their bytes', async () => {
+    // A stream in string mode delivers text; it is returned as UTF-8 bytes.
+    const stream = Readable.from([Buffer.from('é')])
+    stream.setEncoding('utf8')
+
+    expect(await readStream(stream)).toEqual(Buffer.from('é', 'utf8'))
+  })
+
+  it('returns an empty Buffer for an empty stream', async () => {
+    // Nothing delivered is zero bytes, not an error.
+    expect((await readStream(Readable.from([]))).length).toBe(0)
+  })
+})
 
 describe('toUploadBody', () => {
   it('turns a string into its UTF-8 bytes', () => {

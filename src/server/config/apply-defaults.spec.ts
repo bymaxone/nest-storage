@@ -248,4 +248,12 @@ describe('applyDefaults', () => {
     expect(applyDefaults({ ...base, uploadIdleTimeoutMs: 5000 }).uploadIdleTimeoutMs).toBe(5000)
     expect(applyDefaults({ ...base, uploadIdleTimeoutMs: 0 }).uploadIdleTimeoutMs).toBe(0)
   })
+
+  it('should resolve bodyIdleTimeoutMs from its own value, including 0, and from requestTimeoutMs when unset', () => {
+    // An explicit value wins, 0 is kept rather than defaulted, and an unset value follows the request timeout.
+    expect(applyDefaults({ ...base, bodyIdleTimeoutMs: 5000 }).bodyIdleTimeoutMs).toBe(5000)
+    expect(applyDefaults({ ...base, bodyIdleTimeoutMs: 0 }).bodyIdleTimeoutMs).toBe(0)
+    expect(applyDefaults({ ...base, requestTimeoutMs: 1234 }).bodyIdleTimeoutMs).toBe(1234)
+    expect(applyDefaults(base).bodyIdleTimeoutMs).toBe(30_000)
+  })
 })

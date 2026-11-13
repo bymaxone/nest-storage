@@ -151,6 +151,20 @@ describe('validateOptions', () => {
     })).toMatch(new RegExp(name))
   })
 
+  it.each([0, 1, 30_000])('should accept a bodyIdleTimeoutMs of %s', (value) => {
+    // Integer >= 0 passes; 0 turns the guard off.
+    expect(() => {
+      validateOptions({ ...valid, bodyIdleTimeoutMs: value })
+    }).not.toThrow()
+  })
+
+  it.each([-1, 1.5, Number.NaN, '100', null])('should reject a bodyIdleTimeoutMs of %p', (value) => {
+    // Negative, fractional, NaN and non-number values are configuration errors, named in the reason.
+    expect(reasonOf(() => {
+      validateOptions({ ...valid, bodyIdleTimeoutMs: value })
+    })).toMatch(/bodyIdleTimeoutMs/)
+  })
+
   it('should accept aws:kms with a kmsKeyId', () => {
     // SSE `&&` right-false branch (kmsKeyId present).
     expect(() => {

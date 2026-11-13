@@ -69,9 +69,11 @@ export function validateOptions(options: unknown): void {
       throw invalid(`${name} must be an integer >= 1`)
     }
   }
-  const idle = options.uploadIdleTimeoutMs
-  if (idle !== undefined && (typeof idle !== 'number' || !Number.isInteger(idle) || idle < 0)) {
-    throw invalid('uploadIdleTimeoutMs must be an integer >= 0 (0 disables the guard)')
+  for (const name of ['uploadIdleTimeoutMs', 'bodyIdleTimeoutMs'] as const) {
+    const idle = options[name]
+    if (idle !== undefined && (typeof idle !== 'number' || !Number.isInteger(idle) || idle < 0)) {
+      throw invalid(`${name} must be an integer >= 0 (0 disables the guard)`)
+    }
   }
   if (options.serverSideEncryption === 'aws:kms' && !options.kmsKeyId) {
     throw invalid('kmsKeyId is required when serverSideEncryption === "aws:kms"')

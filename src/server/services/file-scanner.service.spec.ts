@@ -31,6 +31,7 @@ function buildOptions(scanner?: ResolvedBymaxStorageOptions['scanner']): Resolve
     maxAttempts: 3,
     requestTimeoutMs: 30000,
     uploadIdleTimeoutMs: 30000,
+    bodyIdleTimeoutMs: 30000,
     hasCredentials: true,
     scanner,
   }

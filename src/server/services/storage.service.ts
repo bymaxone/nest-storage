@@ -56,10 +56,12 @@ import {
   destroyStream,
   getBodySize,
   isBufferLike,
+  readStream,
   readStreamUpTo,
   type UploadBody,
 } from '../utils/stream-utils'
 import { boundStreamSize, withBytesBody } from '../utils/upload-body'
+import { guardDownloadBody } from '../utils/download-body'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
 import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
@@ -80,11 +82,6 @@ interface S3ObjectResponse {
 /** Per-call options that only need to override the target bucket. */
 interface BucketScopedOptions {
   bucket?: string
-}
-
-/** The Node `GetObject` body carries the sdk-stream-mixin's byte materializer. */
-interface SdkByteStream {
-  transformToByteArray(): Promise<Uint8Array>
 }
 
 /** S3's hard cap on the number of keys returned by one `ListObjectsV2` request. */
@@ -396,7 +393,11 @@ export class StorageService {
       // The SDK types `Body` as a cross-runtime union; in Node it is always a
       // Readable. The bridge is unavoidable because the static type is broader
       // than the concrete runtime value.
-      const stream = response.Body as unknown as NodeJS.ReadableStream
+      const stream = guardDownloadBody(
+        response.Body as unknown as NodeJS.ReadableStream,
+        this.options.bodyIdleTimeoutMs,
+        { key: finalKey, bucket },
+      )
       return { stream, metadata: this.toObjectMetadata(response, finalKey, bucket) }
     } catch (err) {
       if (err instanceof StorageException) {
@@ -407,8 +408,8 @@ export class StorageService {
   }
 
   /**
-   * Materializes an object fully into memory via the sdk-stream-mixin. NOT
-   * recommended for files larger than 10 MB — use {@link download} for those.
+   * Materializes an object fully into memory, reading the same idle-guarded stream as
+   * {@link download}. NOT recommended for files larger than 10 MB — use {@link download} for those.
    *
    * @param options - The download request.
    * @returns The object buffer and its metadata.
@@ -417,10 +418,7 @@ export class StorageService {
     options: DownloadOptions,
   ): Promise<{ buffer: Buffer; metadata: ObjectMetadata }> {
     const { stream, metadata } = await this.download(options)
-    // The Node GetObject body carries the sdk-stream-mixin, which the public
-    // `NodeJS.ReadableStream` return type of download() does not surface.
-    const bytes = await (stream as unknown as SdkByteStream).transformToByteArray()
-    return { buffer: Buffer.from(bytes), metadata }
+    return { buffer: await readStream(stream), metadata }
   }
 
   /**
