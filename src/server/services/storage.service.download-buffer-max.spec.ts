@@ -8,7 +8,6 @@ import { Readable } from 'node:stream'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { StorageService } from './storage.service'
 import type { StorageException } from '../errors/storage-exception'
-import type { DownloadBufferOptions } from '../interfaces/download-options.interface'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { IdempotencyCache } from '../utils/idempotency-cache'
@@ -140,12 +139,16 @@ describe('downloadBuffer maxBytes', () => {
   it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '5'])(
     'rejects a maxBytes of %p before any request',
     async (maxBytes) => {
-      // A zero, negative, fractional, non-finite or non-number limit would silently mean no limit or an impossible one.
+      // A zero, negative, fractional, non-finite or non-number limit would silently mean no limit or an
+      // impossible one. Reflect.apply takes untyped arguments, so a caller's bad input reaches the method as
+      // it would from untyped code, with no assertion to hide a type error.
       const { service, send } = makeService()
+      const callUntyped = (input: unknown): Promise<unknown> => {
+        const result: unknown = Reflect.apply(service.downloadBuffer, service, [input])
+        return Promise.resolve(result)
+      }
 
-      const error: unknown = await service
-        .downloadBuffer({ key: 'a.bin', maxBytes } as DownloadBufferOptions)
-        .catch((err: unknown) => err)
+      const error: unknown = await callUntyped({ key: 'a.bin', maxBytes }).catch((err: unknown) => err)
 
       expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
       expect(JSON.stringify((error as StorageException).getResponse())).toContain('maxBytes')
@@ -168,6 +171,7 @@ describe('downloadBuffer maxBytes', () => {
     // A connection that drops while counting is the provider's error, not a size error.
     const { service, send } = makeService()
     let pulled = 0
+    const failure = new Error('connection reset')
     const body = new Readable({
       read() {
         pulled += 1
@@ -175,7 +179,7 @@ describe('downloadBuffer maxBytes', () => {
           this.push(Buffer.alloc(10))
           return
         }
-        this.destroy(new Error('connection reset'))
+        this.destroy(failure)
       },
     })
     send.mockResolvedValue({ Body: body })
@@ -184,8 +188,7 @@ describe('downloadBuffer maxBytes', () => {
       .downloadBuffer({ key: 'drop.bin', maxBytes: 4096 })
       .catch((err: unknown) => err)
 
-    expect(error).toMatchObject({ message: 'connection reset' })
-    expect((error as { code?: string }).code).toBeUndefined()
+    expect(error).toBe(failure)
     expect(body.destroyed).toBe(true)
   })
 
