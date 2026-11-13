@@ -26,8 +26,9 @@ export interface FaultProxy {
   /** Sets the connection count back to zero. */
   resetCount(): void
   /**
-   * Switches the behavior of connections opened from now on and drops the ones already open, so a
-   * pooled keep-alive connection cannot carry on as if nothing changed.
+   * Switches the behavior of connections opened from now on. For any mode other than `pass` it also
+   * drops the connections already open, so a pooled keep-alive connection cannot carry on as if
+   * nothing changed.
    *
    * @param mode - The new behavior.
    * @param options - `stallAfterBytes`: how much of a response `stall-response` forwards.
