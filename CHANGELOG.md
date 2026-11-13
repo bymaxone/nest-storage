@@ -46,10 +46,12 @@ note on each entry is the compatibility contract — read it, not the number.
   callers as the base of every `publicUrl`, so a user or password in either, including one given
   through a provider recipe's `customDomain`, reached clients and anything that stores or logs those
   URLs. `validateOptions` now throws `STORAGE_INVALID_CONFIG` naming the option and repeating neither
-  the user nor the password, from `forRoot` and `forRootAsync` alike. This is the check that already
-  applied to `endpoint`.
+  the user nor the password, from `forRoot` and `forRootAsync` alike. The same check now applies to
+  `endpoint`, `publicBaseUrl` and `cdnBaseUrl`: an `@` in the host part (the text after an optional
+  `scheme://` and before the first `/`, `?` or `#`) is refused, with or without a scheme and with or
+  without a password, so no `publicUrl` can carry userinfo.
 
-  **Apply to a derived backend:** if either URL embeds `user:password@`, remove it before upgrading;
+  **Apply to a derived backend:** if one of these URLs embeds `user@` or `user:password@`, remove it before upgrading;
   the module now refuses to start with such a value.
 
 - **A key or a provider message in a log line is written as one escaped token.** The scanner warnings

@@ -170,6 +170,7 @@ describe('validateOptions', () => {
     'https://AKIAEXAMPLE@s3.example.com',
     'http://:SECRETEXAMPLE@localhost:9000',
     'AKIAEXAMPLE:SECRETEXAMPLE@s3.example.com:9000',
+    'AKIAEXAMPLE@s3.example.com:9000',
   ])('should refuse an endpoint that carries credentials, without echoing them', (endpoint) => {
     // Credentials belong in options.credentials: in the endpoint they reach logs and every returned public URL.
     const reason = reasonOf(() => {
@@ -200,6 +201,9 @@ describe('validateOptions', () => {
         'https://AKIAEXAMPLE:SECRETEXAMPLE@cdn.example.com',
         'https://AKIAEXAMPLE@cdn.example.com/media',
         'AKIAEXAMPLE:SECRETEXAMPLE@cdn.example.com:8443',
+        'AKIAEXAMPLE@cdn.example.com',
+        'https:\\\\AKIAEXAMPLE:SECRETEXAMPLE@cdn.example.com',
+        'https://AKIAEXAMPLE@@cdn.example.com',
       ]) {
         const reason = reasonOf(() => {
           validateOptions({ ...valid, [name]: value })
@@ -215,7 +219,14 @@ describe('validateOptions', () => {
 
   it.each(['publicBaseUrl', 'cdnBaseUrl'])('should accept a %s without credentials', (name) => {
     // A host, a port, a path and a bare host name are not credentials.
-    for (const value of ['https://cdn.example.com', 'https://cdn.example.com:8443/media', 'cdn.example.com']) {
+    for (const value of [
+      'https://cdn.example.com',
+      'https://cdn.example.com:8443/media',
+      'cdn.example.com',
+      'https://cdn.example.com/media/a@b',
+      'https://cdn.example.com?mail=a@b',
+      'https://cdn.example.com#@x',
+    ]) {
       expect(() => {
         validateOptions({ ...valid, [name]: value })
       }).not.toThrow()

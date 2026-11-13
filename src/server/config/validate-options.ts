@@ -26,19 +26,20 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
+/** A leading `scheme://`, with either slash direction as WHATWG URL parsing reads it. */
+const LEADING_SCHEME = /^[a-z][a-z\d+.-]*:[/\\]{2}/i
+
 /**
- * Whether a URL option holds a user or a password. A value without `//` after its scheme, such as
- * `user:pw@host:9000`, parses as an opaque path under the scheme `user:`, so an `@` in that path is
- * userinfo too. A value that is not a URL holds none.
+ * Whether a URL option holds userinfo. The authority is what follows an optional `scheme://` up to
+ * the first `/`, `\`, `?` or `#`, and an `@` in it separates userinfo from the host. Reading the
+ * string, not a parsed URL, also covers a value with no scheme or no `//` (`user@host:9000`,
+ * `user:pw@host`) that a URL parser reads as something else or rejects, and a value that is not a
+ * URL at all is judged the same way.
  */
 function urlCarriesCredentials(value: string): boolean {
-  try {
-    const url = new URL(value)
-    const opaquePath = !url.pathname.startsWith('/')
-    return url.username !== '' || url.password !== '' || (opaquePath && url.pathname.includes('@'))
-  } catch {
-    return false
-  }
+  const rest = value.replace(LEADING_SCHEME, '')
+  const end = rest.search(/[/\\?#]/)
+  return (end === -1 ? rest : rest.slice(0, end)).includes('@')
 }
 
 /**
