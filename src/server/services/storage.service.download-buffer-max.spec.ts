@@ -141,7 +141,7 @@ describe('downloadBuffer maxBytes', () => {
   })
 
   it('buffers without a limit when maxBytes is not given', async () => {
-    // The option is opt-in; the call behaves as before without it.
+    // Without maxBytes the whole body is buffered, whatever its size.
     const { service, send } = makeService()
     const { body } = countedBody(8, 1024)
     send.mockResolvedValue({ Body: body, ContentLength: 8192 })

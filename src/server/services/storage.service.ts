@@ -408,15 +408,13 @@ export class StorageService {
   }
 
   /**
-   * Materializes an object fully into memory, reading the same idle-guarded stream as
-   * {@link download}. Without `maxBytes` the whole object is held, however large; pass it for any
-   * object the process does not control, and use {@link download} for large ones.
+   * Reads an object fully into memory through the same idle-guarded stream as {@link download}.
+   * Without `maxBytes` the whole object is held, however large; use {@link download} for large ones.
    *
    * @param options - The download request; `maxBytes` is the most bytes to hold.
    * @returns The object buffer and its metadata.
-   * @throws StorageException `STORAGE_SIZE_EXCEEDED` when the object is larger than `maxBytes`, by
-   *   its `Content-Length` or by its bytes, and `STORAGE_VALIDATION_FAILED` for a `maxBytes` that
-   *   is not an integer of at least 1.
+   * @throws StorageException `STORAGE_SIZE_EXCEEDED` past `maxBytes`, by `Content-Length` or by
+   *   bytes; `STORAGE_VALIDATION_FAILED` for a `maxBytes` that is not an integer of at least 1.
    */
   async downloadBuffer(
     options: DownloadBufferOptions,
