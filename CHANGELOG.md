@@ -37,7 +37,9 @@ note on each entry is the compatibility contract — read it, not the number.
 
   **Apply to a derived backend:** if you set `validation.maxSizeBytes`, an upload that used to pass
   because it carried no `size` is now refused when it is longer than the limit; expect
-  `STORAGE_SIZE_EXCEEDED` from a stream or buffer over it, and pass `size` only when it is true.
+  `STORAGE_SIZE_EXCEEDED` from a stream or buffer over it, and pass `size` only when it is true. A
+  buffer's declared `size` is ignored in favour of its length, so a small buffer declared as large
+  is no longer refused or sent as multipart.
 
 ## [1.1.11] - 2026-11-13
 

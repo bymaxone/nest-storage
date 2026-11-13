@@ -37,7 +37,6 @@ import { FileScannerService } from './file-scanner.service'
 import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
-import { mapSizeLimitError } from '../errors/size-limit-exception'
 import { withCleanupFailure } from '../errors/scan-cleanup-error'
 import { closeMultipartUpload } from '../utils/multipart-abort'
 import { deleteObjectsChunk } from '../utils/delete-objects'
@@ -58,10 +57,9 @@ import {
   getBodySize,
   isBufferLike,
   readStreamUpTo,
-  toUploadBody,
   type UploadBody,
 } from '../utils/stream-utils'
-import { withSizeLimit } from '../utils/size-limit'
+import { boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
 import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
@@ -144,7 +142,7 @@ export class StorageService {
     if (rawBody === undefined || rawBody === null) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_BODY_MISSING)
     }
-    const options = this.withBytesBody(requested)
+    const options = withBytesBody(requested)
     if (!options.contentType) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_CONTENT_TYPE_REQUIRED)
     }
@@ -174,7 +172,7 @@ export class StorageService {
     })
     // A stream cannot be read by the scanner and then sent: buffer it first, bounded.
     const scanned = await this.bufferForPreUploadScan(validated.body, finalKey)
-    const body = this.boundStreamSize(scanned, options.size)
+    const body = boundStreamSize(scanned, options.size, this.options)
     const validatedOptions = { ...options, body }
 
     // Pre-upload scan: runs before the S3 PutObject.
@@ -200,33 +198,6 @@ export class StorageService {
       )
     }
     return result
-  }
-
-  /**
-   * Brings an untyped body to bytes: a string becomes its UTF-8 bytes and an `ArrayBuffer` or other
-   * view becomes a `Buffer`. A buffer has one size, its own length, which replaces any size the
-   * caller declared, so the limit check, the strategy, `Content-Length` and the result agree.
-   */
-  private withBytesBody(options: UploadOptions): UploadOptions {
-    const body = toUploadBody(options.body)
-    return isBufferLike(body) ? { ...options, body, size: body.byteLength } : { ...options, body }
-  }
-
-  /**
-   * Caps a stream that takes the multipart path, as it is read, at the lower of
-   * `validation.maxSizeBytes` and the size its caller declared, so an undeclared stream or one
-   * longer than it declared cannot exceed either. A single-shot stream needs no cap: the request
-   * carries `Content-Length` set to the declared size.
-   */
-  private boundStreamSize(body: UploadBody, declaredSize: number | undefined): UploadBody {
-    // A declared size above the maximum is refused before this point, so it is the lower bound.
-    const limit = declaredSize ?? this.options.validation?.maxSizeBytes
-    const singleShot =
-      pickUploadStrategy(body, declaredSize, this.options.multipart.thresholdBytes) === 'single-shot'
-    if (isBufferLike(body) || singleShot || limit === undefined) {
-      return body
-    }
-    return withSizeLimit(body, limit, declaredSize === undefined ? 'max' : 'declared')
   }
 
   /**
@@ -603,10 +574,7 @@ export class StorageService {
         multipart: false,
       })
     } catch (err) {
-      throw (
-        mapSizeLimitError(err, { key: finalKey, bucket }) ??
-        mapAwsError(err, { key: finalKey, bucket, op: 'upload-single' })
-      )
+      throw mapAwsError(err, { key: finalKey, bucket, op: 'upload-single' })
     }
   }
 

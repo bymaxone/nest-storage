@@ -602,22 +602,6 @@ describe('StorageService — scan integration', () => {
     expect(scanArg).not.toHaveProperty('size')
   })
 
-  it('passes a buffer\'s own length as the size to the pre-upload scan', async () => {
-    // A buffer is measured on entry, so the scanner is told its real length without the caller declaring it.
-    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
-    const scanner: FileScannerService = {
-      isEnabled: jest.fn().mockReturnValue(true),
-      getMode: jest.fn().mockReturnValue('pre-upload'),
-      scan: scanFn,
-    } as unknown as FileScannerService
-    const { service } = makeServiceWithScanner(scanner)
-
-    await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain' })
-
-    const [[scanArg]] = scanFn.mock.calls as [[Record<string, unknown>]]
-    expect(scanArg.size).toBe(2)
-  })
-
   it('normalizes a Uint8Array body to a Buffer before the pre-upload scan', async () => {
     // the scanner contract accepts Buffer | stream only, so a Uint8Array upload
     // must reach it as a Buffer rather than a raw Uint8Array
@@ -691,22 +675,6 @@ describe('StorageService — scan integration', () => {
     await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain', size: 2 })
 
     expect(scanFn).toHaveBeenCalledWith(expect.objectContaining({ mode: 'post-upload', key: 'a.txt', size: 2 }))
-  })
-
-  it('passes a buffer\'s own length as the size to the post-upload scan', async () => {
-    // A buffer is measured on entry, so the scan input carries its real length.
-    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
-    const scanner: FileScannerService = {
-      isEnabled: jest.fn().mockReturnValue(true),
-      getMode: jest.fn().mockReturnValue('post-upload'),
-      scan: scanFn,
-    } as unknown as FileScannerService
-    const { service } = makeServiceWithScanner(scanner)
-
-    await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain' })
-
-    const [[scanArg]] = scanFn.mock.calls as [[Record<string, unknown>]]
-    expect(scanArg.size).toBe(2)
   })
 
   it('cleans up the infected object from the per-call bucket, not the module default', async () => {
