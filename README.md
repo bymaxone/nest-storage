@@ -208,7 +208,7 @@ Options accepted by `forRoot` and `forRootAsync`:
 
 | Option                         | Type                                              | Default           | Notes                                          |
 | ------------------------------ | ------------------------------------------------- | ----------------- | ---------------------------------------------- |
-| `endpoint`                     | `string`                                          | —                 | Required. S3-compatible endpoint URL           |
+| `endpoint`                     | `string`                                          | —                 | Required. S3-compatible endpoint URL; it must not carry credentials (`https://user:pass@host` is refused), pass them in `credentials` |
 | `region`                       | `string`                                          | —                 | Required. Provider region or `'auto'` (R2)     |
 | `bucket`                       | `string`                                          | —                 | Default bucket (can be overridden per-call)    |
 | `credentials`                  | `{ accessKeyId, secretAccessKey, sessionToken? }` | —                 | Load from env / Secrets Manager                |

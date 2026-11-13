@@ -26,6 +26,16 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
+/** Whether an endpoint URL holds a user or a password; a value that is not a URL holds none. */
+function endpointCarriesCredentials(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint)
+    return url.username !== '' || url.password !== ''
+  } catch {
+    return false
+  }
+}
+
 /**
  * Validates options at module bootstrap. Credentials may be empty (handled
  * lazily); structural fields are mandatory.
@@ -39,6 +49,9 @@ export function validateOptions(options: unknown): void {
   }
   if (!isNonEmptyString(options.endpoint)) {
     throw invalid('options.endpoint must be a non-empty string')
+  }
+  if (endpointCarriesCredentials(options.endpoint)) {
+    throw invalid('options.endpoint must not carry credentials; pass them in options.credentials')
   }
   if (!isNonEmptyString(options.region)) {
     throw invalid('options.region must be a non-empty string')
