@@ -26,11 +26,16 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
-/** Whether an endpoint URL holds a user or a password; a value that is not a URL holds none. */
+/**
+ * Whether an endpoint holds a user or a password. A value without `//` after its scheme, such as
+ * `user:pw@host:9000`, parses as an opaque path under the scheme `user:`, so an `@` in that path is
+ * userinfo too. A value that is not a URL holds none.
+ */
 function endpointCarriesCredentials(endpoint: string): boolean {
   try {
     const url = new URL(endpoint)
-    return url.username !== '' || url.password !== ''
+    const opaquePath = !url.pathname.startsWith('/')
+    return url.username !== '' || url.password !== '' || (opaquePath && url.pathname.includes('@'))
   } catch {
     return false
   }

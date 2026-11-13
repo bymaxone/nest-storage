@@ -169,6 +169,7 @@ describe('validateOptions', () => {
     'https://AKIAEXAMPLE:SECRETEXAMPLE@s3.example.com',
     'https://AKIAEXAMPLE@s3.example.com',
     'http://:SECRETEXAMPLE@localhost:9000',
+    'AKIAEXAMPLE:SECRETEXAMPLE@s3.example.com:9000',
   ])('should refuse an endpoint that carries credentials, without echoing them', (endpoint) => {
     // Credentials belong in options.credentials: in the endpoint they reach logs and every returned public URL.
     const reason = reasonOf(() => {
