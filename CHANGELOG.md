@@ -18,10 +18,8 @@ note on each entry is the compatibility contract — read it, not the number.
 ### Changed
 
 - **Development and CI tooling updated; the published code does not change.** The AWS SDK
-  development dependencies move from 3.1161.0 to 3.1163.0, and the pinned GitHub Actions
-  `pnpm/action-setup` (6.1.1), `step-security/harden-runner` (2.22.4) and
-  `github/codeql-action/upload-sarif` (4.39.3) move to their latest patch releases. No file under
-  `src/` changed, and the published `dist/` is identical to 1.1.10.
+  development dependencies and the pinned GitHub Actions are bumped to newer patch releases.
+  No file under `src/` changed.
 
 ### Documentation
 
