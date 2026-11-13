@@ -192,6 +192,36 @@ describe('validateOptions', () => {
     },
   )
 
+  it.each(['publicBaseUrl', 'cdnBaseUrl'])(
+    'should refuse a %s that carries credentials, without echoing them',
+    (name) => {
+      // This URL is returned to callers in every publicUrl, so a secret in it reaches clients.
+      for (const value of [
+        'https://AKIAEXAMPLE:SECRETEXAMPLE@cdn.example.com',
+        'https://AKIAEXAMPLE@cdn.example.com/media',
+        'AKIAEXAMPLE:SECRETEXAMPLE@cdn.example.com:8443',
+      ]) {
+        const reason = reasonOf(() => {
+          validateOptions({ ...valid, [name]: value })
+        })
+
+        expect(reason).toContain(name)
+        expect(reason).toMatch(/credentials/)
+        expect(reason).not.toContain('AKIAEXAMPLE')
+        expect(reason).not.toContain('SECRETEXAMPLE')
+      }
+    },
+  )
+
+  it.each(['publicBaseUrl', 'cdnBaseUrl'])('should accept a %s without credentials', (name) => {
+    // A host, a port, a path and a bare host name are not credentials.
+    for (const value of ['https://cdn.example.com', 'https://cdn.example.com:8443/media', 'cdn.example.com']) {
+      expect(() => {
+        validateOptions({ ...valid, [name]: value })
+      }).not.toThrow()
+    }
+  })
+
   it('should accept aws:kms with a kmsKeyId', () => {
     // SSE `&&` right-false branch (kmsKeyId present).
     expect(() => {

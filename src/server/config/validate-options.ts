@@ -27,13 +27,13 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 /**
- * Whether an endpoint holds a user or a password. A value without `//` after its scheme, such as
+ * Whether a URL option holds a user or a password. A value without `//` after its scheme, such as
  * `user:pw@host:9000`, parses as an opaque path under the scheme `user:`, so an `@` in that path is
  * userinfo too. A value that is not a URL holds none.
  */
-function endpointCarriesCredentials(endpoint: string): boolean {
+function urlCarriesCredentials(value: string): boolean {
   try {
-    const url = new URL(endpoint)
+    const url = new URL(value)
     const opaquePath = !url.pathname.startsWith('/')
     return url.username !== '' || url.password !== '' || (opaquePath && url.pathname.includes('@'))
   } catch {
@@ -55,8 +55,13 @@ export function validateOptions(options: unknown): void {
   if (!isNonEmptyString(options.endpoint)) {
     throw invalid('options.endpoint must be a non-empty string')
   }
-  if (endpointCarriesCredentials(options.endpoint)) {
-    throw invalid('options.endpoint must not carry credentials; pass them in options.credentials')
+  // The endpoint is logged and is the base of the derived public URL; the two public URLs are
+  // returned to callers in every `publicUrl`. A secret in any of them reaches logs or clients.
+  for (const name of ['endpoint', 'publicBaseUrl', 'cdnBaseUrl'] as const) {
+    const value = options[name]
+    if (typeof value === 'string' && urlCarriesCredentials(value)) {
+      throw invalid(`options.${name} must not carry credentials; pass them in options.credentials`)
+    }
   }
   if (!isNonEmptyString(options.region)) {
     throw invalid('options.region must be a non-empty string')
