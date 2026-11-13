@@ -48,9 +48,7 @@ note on each entry is the compatibility contract — read it, not the number.
   URLs. `validateOptions` now throws `STORAGE_INVALID_CONFIG` naming the option and repeating neither
   the user nor the password, from `forRoot` and `forRootAsync` alike. The same check now applies to
   `endpoint`, `publicBaseUrl` and `cdnBaseUrl`: an `@` in the host part (the text after an optional
-  scheme and slashes, up to the first `/`, `?` or `#`) is refused, whatever the spelling of the
-  scheme and the slashes, with or without a password. A passing value has no userinfo, so none
-  reaches a `publicUrl`.
+  scheme and slashes, up to the first `/`, `?` or `#`) is refused, with or without a password.
 
   **Apply to a derived backend:** if one of these URLs embeds `user@` or `user:password@`, remove it before upgrading;
   the module now refuses to start with such a value.
