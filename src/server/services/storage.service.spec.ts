@@ -311,12 +311,16 @@ describe('StorageService — single-shot upload', () => {
       makeDisabledScanner(),
     )
 
-    await service.upload(uploadOf({ key: 'a.txt', size: 9, metadata: { owner: 'alice' } }))
+    // A stream carries the size its caller declared; a buffer is measured, so its length is passed
+    // even when none is declared.
+    await service.upload(
+      uploadOf({ key: 'a.txt', body: Readable.from([Buffer.from('hello')]), size: 9, metadata: { owner: 'alice' } }),
+    )
     await service.upload(uploadOf({ key: 'a.txt' }))
 
     expect(captured[0]?.size).toBe(9)
     expect(captured[0]?.metadata).toEqual({ owner: 'alice' })
-    expect('size' in (captured[1] ?? {})).toBe(false)
+    expect(captured[1]?.size).toBe(5)
     expect('metadata' in (captured[1] ?? {})).toBe(false)
   })
 })

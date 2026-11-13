@@ -212,3 +212,24 @@ export async function readStreamUpTo(
   }
   return Buffer.concat(chunks)
 }
+
+/**
+ * Brings a body that arrived untyped to one of the accepted shapes: a string becomes its UTF-8
+ * bytes and an `ArrayBuffer` or other view becomes a `Buffer`, so the size that is checked and
+ * the size that is sent are both a count of bytes. Accepted shapes pass through unchanged.
+ *
+ * @param body - The body as the caller passed it.
+ * @returns The same body, or its `Buffer` form.
+ */
+export function toUploadBody(body: unknown): UploadBody {
+  if (typeof body === 'string') {
+    return Buffer.from(body, 'utf8')
+  }
+  if (body instanceof ArrayBuffer) {
+    return Buffer.from(body)
+  }
+  if (ArrayBuffer.isView(body) && !(body instanceof Uint8Array)) {
+    return Buffer.from(body.buffer, body.byteOffset, body.byteLength)
+  }
+  return body as UploadBody
+}

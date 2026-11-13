@@ -70,7 +70,10 @@ export interface BymaxStorageModuleOptions {
   validation?: {
     /** MIME whitelist — supports wildcards like `'image/*'`. */
     mimeWhitelist?: readonly string[]
-    /** Max upload size in bytes. */
+    /**
+     * Max upload size in bytes. A buffer is checked by its length and a stream is counted as it
+     * is read, so the limit holds whether or not the caller declares `size`.
+     */
     maxSizeBytes?: number
     /** Custom validators run in order; the first rejection short-circuits. */
     customValidators?: readonly IUploadValidator[]
