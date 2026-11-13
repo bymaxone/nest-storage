@@ -501,7 +501,7 @@ export class StorageService {
 
   /** Download stream. Caller MUST consume the stream. @throws STORAGE_OBJECT_NOT_FOUND. */
   download(options: DownloadOptions): Promise<{
-    /** The v3 GetObject `Body` — at runtime a Node `Readable` carrying the sdk-stream-mixin; typed publicly as `NodeJS.ReadableStream`. */
+    /** The body as a Node `Readable`, typed publicly as `NodeJS.ReadableStream`. It is an idle guard around the SDK body, and the SDK body itself only when `bodyIdleTimeoutMs` is `0`. */
     stream: NodeJS.ReadableStream
     metadata: ObjectMetadata
   }>

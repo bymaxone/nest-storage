@@ -15,6 +15,8 @@ export interface FaultProxy {
   endpoint: string
   /** Connections the client opened since the last `resetCount()`. */
   connections(): number
+  /** Client connections that are open right now. */
+  openConnections(): number
   resetCount(): void
   setMode(mode: FaultMode, options?: { stallAfterBytes?: number }): void
   close(): Promise<void>
@@ -31,11 +33,16 @@ export async function startFaultProxy(target: { host: string; port: number }): P
   let stallAfterBytes = 0
   let count = 0
   const open = new Set<Socket>()
+  const clients = new Set<Socket>()
 
   const server: Server = createServer((client) => {
     count += 1
     open.add(client)
-    client.on('close', () => open.delete(client))
+    clients.add(client)
+    client.on('close', () => {
+      open.delete(client)
+      clients.delete(client)
+    })
     client.on('error', () => undefined)
     if (mode === 'reset') {
       client.resetAndDestroy()
@@ -48,6 +55,7 @@ export async function startFaultProxy(target: { host: string; port: number }): P
     open.add(upstream)
     upstream.on('close', () => open.delete(upstream))
     upstream.on('error', () => client.destroy())
+    upstream.on('close', () => client.destroy())
     client.on('close', () => upstream.destroy())
     client.pipe(upstream)
     let sent = 0
@@ -69,6 +77,7 @@ export async function startFaultProxy(target: { host: string; port: number }): P
   return {
     endpoint: `http://127.0.0.1:${String(port)}`,
     connections: () => count,
+    openConnections: () => clients.size,
     resetCount: () => {
       count = 0
     },

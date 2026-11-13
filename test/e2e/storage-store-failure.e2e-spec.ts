@@ -1,8 +1,9 @@
 /**
  * @fileoverview How the library behaves when the object store is hung, resetting connections,
  * stalls in the middle of a download body, or is stopped altogether, against a live MinIO behind a
- * fault-injecting proxy. Each case asserts a bound on time and attempts, that the socket is
- * released, and that no credential or signed URL reaches an error or a log line.
+ * fault-injecting proxy. The hung, resetting and stopped store cases assert a bound on time and, for
+ * the first two, on attempts, plus that no credential or signed URL reaches an error or a log line;
+ * the stalled body case asserts a timely STORAGE_TIMEOUT and that the connection is closed.
  * @layer test/e2e
  */
 import { Readable } from 'node:stream'
@@ -152,6 +153,7 @@ describe('Storage E2E — store failure', () => {
     proxy.setMode('stall-response', { stallAfterBytes: 64 * 1024 })
     const { stream } = await storage.download({ key: 'stall.bin' })
 
+    const timer: { id?: NodeJS.Timeout } = {}
     const outcome = await Promise.race([
       (async (): Promise<string> => {
         try {
@@ -163,14 +165,26 @@ describe('Storage E2E — store failure', () => {
           return (err as { code?: string }).code ?? 'error'
         }
       })(),
-      new Promise<string>((resolve) => setTimeout(() => { resolve('STILL_HANGING') }, 8000)),
-    ])
+      new Promise<string>((resolve) => {
+        timer.id = setTimeout(() => {
+          resolve('STILL_HANGING')
+        }, 8000)
+      }),
+    ]).finally(() => {
+      clearTimeout(timer.id)
+    })
 
     ;(stream as unknown as Readable).destroy()
     expect(outcome).toBe('STORAGE_TIMEOUT')
+    // The guard destroys the body, which closes the connection the proxy sees.
+    const deadline = Date.now() + 3000
+    while (proxy.openConnections() > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    expect(proxy.openConnections()).toBe(0)
   })
 
-  it('a stopped store (container down) fails within the bound and leaks nothing', async () => {
+  it('a stopped store (container down) fails within the bound with no credential or signed URL in the error or logs', async () => {
     const { storage } = await open()
     await minio.container.stop()
     const started = Date.now()
