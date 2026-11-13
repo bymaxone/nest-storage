@@ -99,4 +99,17 @@ describe('S3ClientProvider', () => {
       provider.onApplicationShutdown()
     }).not.toThrow()
   })
+
+  it('logs only the protocol, host and port of the endpoint, never its credentials, path or query', () => {
+    // The boot line must identify the store without carrying anything secret from a mistaken endpoint.
+    const provider = makeProvider({ endpoint: 'https://AKIAEXAMPLE:SECRETEXAMPLE@s3.example.com:9000/base?token=T' })
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+
+    provider.onModuleInit()
+
+    const lines = logSpy.mock.calls.map((call) => String(call[0]))
+    expect(lines).toContain('S3Client initialized: endpoint=https://s3.example.com:9000 region=us-east-1')
+    expect(lines.join('\n')).not.toMatch(/AKIAEXAMPLE|SECRETEXAMPLE|token=|\/base/)
+    logSpy.mockRestore()
+  })
 })

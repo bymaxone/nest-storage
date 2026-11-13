@@ -232,7 +232,7 @@ Three options were evaluated: (A) a separate SDK per provider — multiplies pee
 
 ```typescript
 export interface BymaxStorageModuleOptions {
-  /** S3-compatible endpoint. See "Provider Recipes" below. REQUIRED. */
+  /** S3-compatible endpoint. See "Provider Recipes" below. REQUIRED. Must not carry credentials (user or password in the URL). */
   endpoint: string
   /** Region. For R2 use 'auto'. For MinIO any string. REQUIRED. */
   region: string

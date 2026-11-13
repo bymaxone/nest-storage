@@ -15,6 +15,7 @@ import {
 import { S3Client, type S3ClientConfig } from '@aws-sdk/client-s3'
 import { BYMAX_STORAGE_OPTIONS } from '../bymax-storage.constants'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
+import { describeEndpoint } from '../utils/describe-endpoint'
 
 /**
  * When credentials are missing the module registers but never instantiates a
@@ -115,7 +116,7 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
     }
 
     this.logger.log(
-      `S3Client initialized: endpoint=${this.options.endpoint} region=${this.options.region}`,
+      `S3Client initialized: endpoint=${describeEndpoint(this.options.endpoint)} region=${this.options.region}`,
     )
     return new S3Client(config)
   }

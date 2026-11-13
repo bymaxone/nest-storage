@@ -165,6 +165,33 @@ describe('validateOptions', () => {
     })).toMatch(/bodyIdleTimeoutMs/)
   })
 
+  it.each([
+    'https://AKIAEXAMPLE:SECRETEXAMPLE@s3.example.com',
+    'https://AKIAEXAMPLE@s3.example.com',
+    'http://:SECRETEXAMPLE@localhost:9000',
+    'AKIAEXAMPLE:SECRETEXAMPLE@s3.example.com:9000',
+  ])('should refuse an endpoint that carries credentials, without echoing them', (endpoint) => {
+    // Credentials belong in options.credentials: in the endpoint they reach logs and every returned public URL.
+    const reason = reasonOf(() => {
+      validateOptions({ ...valid, endpoint })
+    })
+
+    expect(reason).toMatch(/endpoint/)
+    expect(reason).toMatch(/credentials/)
+    expect(reason).not.toContain('AKIAEXAMPLE')
+    expect(reason).not.toContain('SECRETEXAMPLE')
+  })
+
+  it.each(['https://s3.example.com', 'http://localhost:9000', 'https://s3.example.com/base/path', 'minio:9000', 'localhost'])(
+    'should accept the endpoint %s',
+    (endpoint) => {
+      // Host, port and path are not credentials; a value that is not a URL is left to the client.
+      expect(() => {
+        validateOptions({ ...valid, endpoint })
+      }).not.toThrow()
+    },
+  )
+
   it('should accept aws:kms with a kmsKeyId', () => {
     // SSE `&&` right-false branch (kmsKeyId present).
     expect(() => {

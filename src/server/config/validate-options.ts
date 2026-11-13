@@ -27,6 +27,21 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 /**
+ * Whether an endpoint holds a user or a password. A value without `//` after its scheme, such as
+ * `user:pw@host:9000`, parses as an opaque path under the scheme `user:`, so an `@` in that path is
+ * userinfo too. A value that is not a URL holds none.
+ */
+function endpointCarriesCredentials(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint)
+    const opaquePath = !url.pathname.startsWith('/')
+    return url.username !== '' || url.password !== '' || (opaquePath && url.pathname.includes('@'))
+  } catch {
+    return false
+  }
+}
+
+/**
  * Validates options at module bootstrap. Credentials may be empty (handled
  * lazily); structural fields are mandatory.
  *
@@ -39,6 +54,9 @@ export function validateOptions(options: unknown): void {
   }
   if (!isNonEmptyString(options.endpoint)) {
     throw invalid('options.endpoint must be a non-empty string')
+  }
+  if (endpointCarriesCredentials(options.endpoint)) {
+    throw invalid('options.endpoint must not carry credentials; pass them in options.credentials')
   }
   if (!isNonEmptyString(options.region)) {
     throw invalid('options.region must be a non-empty string')

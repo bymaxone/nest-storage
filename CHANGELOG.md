@@ -42,6 +42,16 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Fixed
 
+- **An endpoint that carries credentials is refused, and the boot log no longer prints the endpoint
+  whole.** The `S3Client initialized` line repeated `endpoint` as configured, so an endpoint such as
+  `https://KEY:SECRET@host` wrote the secret to the log, and the same string is the base of every
+  `publicUrl` the library returns when no `publicBaseUrl` is set. `validateOptions` now throws
+  `STORAGE_INVALID_CONFIG` for an endpoint with a user or password, without repeating it, and the log
+  line shows only protocol, host and port.
+
+  **Apply to a derived backend:** if your `endpoint` embeds `user:password@`, move the keys to
+  `credentials` before upgrading; the module now refuses to start with such a value.
+
 - **`requestTimeoutMs` and `maxAttempts` are now checked at boot.** A value of `0`, a negative or
   fractional number, `NaN` or `Infinity`, or a non-number reached the S3 client unchecked, and the
   request handler treats a `0` or `NaN` timeout as no timeout, so a typo could switch the bound off
