@@ -26,19 +26,23 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
-/** A leading `scheme://`, with either slash direction as WHATWG URL parsing reads it. */
-const LEADING_SCHEME = /^[a-z][a-z\d+.-]*:[/\\]{2}/i
+/**
+ * What precedes the authority: an optional scheme and any run of slashes or backslashes, since a URL
+ * parser accepts `https://host`, `https:/host`, `https:host` and `//host` alike.
+ */
+const BEFORE_AUTHORITY = /^(?:[a-z][a-z\d+.-]*:)?[/\\]*/i
 
 /**
- * Whether a URL option holds userinfo. The authority is what follows an optional `scheme://` up to
- * the first `/`, `\`, `?` or `#`, and an `@` in it separates userinfo from the host. Reading the
- * string, not a parsed URL, also covers a value with no scheme or no `//` (`user@host:9000`,
- * `user:pw@host`) that a URL parser reads as something else or rejects, and a value that is not a
- * URL at all is judged the same way.
+ * Whether a URL option holds userinfo. The authority is the text after {@link BEFORE_AUTHORITY} up
+ * to the first `/`, `?` or `#` (a backslash is not one: only a special scheme reads it as a slash, so
+ * counting it as part of the authority can only refuse more), and an `@` in it separates userinfo
+ * from the host. Reading the string, not a parsed URL, also covers a value a URL parser reads as
+ * something else or rejects (`user@host:9000`, `user:pw@host`); a value that is not a URL at all is
+ * judged the same way.
  */
 function urlCarriesCredentials(value: string): boolean {
-  const rest = value.replace(LEADING_SCHEME, '')
-  const end = rest.search(/[/\\?#]/)
+  const rest = value.replace(BEFORE_AUTHORITY, '')
+  const end = rest.search(/[/?#]/)
   return (end === -1 ? rest : rest.slice(0, end)).includes('@')
 }
 
