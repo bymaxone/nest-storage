@@ -5,15 +5,15 @@
  * @layer server/services
  */
 import { Readable } from 'node:stream'
-import type { S3Client } from '@aws-sdk/client-s3'
+import { S3Client } from '@aws-sdk/client-s3'
 import { StorageService } from './storage.service'
-import type { StorageException } from '../errors/storage-exception'
-import type { S3ClientProvider } from '../providers/s3-client.provider'
+import { StorageException } from '../errors/storage-exception'
+import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { IdempotencyCache } from '../utils/idempotency-cache'
 import { applyDefaults } from '../config/apply-defaults'
-import type { ValidationService } from './validation.service'
-import type { FileScannerService } from './file-scanner.service'
+import { ValidationService } from './validation.service'
+import { FileScannerService } from './file-scanner.service'
 
 /** A body of `chunks` chunks of `chunkBytes` bytes, counting how many the consumer pulled. */
 function countedBody(chunks: number, chunkBytes: number): { body: Readable; pulled: () => number } {
@@ -31,7 +31,7 @@ function countedBody(chunks: number, chunkBytes: number): { body: Readable; pull
   return { body, pulled: () => pulled }
 }
 
-function makeService(bodyIdleTimeoutMs = 0): { service: StorageService; send: jest.Mock } {
+function makeService(bodyIdleTimeoutMs = 0): { service: StorageService; send: jest.SpyInstance } {
   const resolved = applyDefaults({
     endpoint: 'https://s3.example.com',
     region: 'us-east-1',
@@ -39,27 +39,41 @@ function makeService(bodyIdleTimeoutMs = 0): { service: StorageService; send: je
     credentials: { accessKeyId: 'k', secretAccessKey: 's' },
     bodyIdleTimeoutMs,
   })
-  const send = jest.fn()
-  const s3Provider = {
-    isConfigured: (): boolean => true,
-    getClient: (): S3Client => ({ send }) as unknown as S3Client,
-  } as unknown as S3ClientProvider
+  // Real collaborators, with only the network call replaced: the client's `send` is a spy.
+  const client = new S3Client({
+    region: 'us-east-1',
+    credentials: { accessKeyId: 'k', secretAccessKey: 's' },
+  })
+  const send = jest.spyOn(client, 'send')
+  const s3Provider = new S3ClientProvider(resolved)
+  jest.spyOn(s3Provider, 'getClient').mockReturnValue(client)
+  jest.spyOn(s3Provider, 'isConfigured').mockReturnValue(true)
   const service = new StorageService(
     resolved,
     s3Provider,
     new KeyResolverService(resolved),
     new IdempotencyCache(10, 1000, () => 0),
-    { validate: jest.fn() } as unknown as ValidationService,
-    { isEnabled: () => false, getMode: () => null, scan: jest.fn() } as unknown as FileScannerService,
+    new ValidationService(resolved, []),
+    new FileScannerService(resolved, null),
   )
   return { service, send }
 }
 
+/** The `details` of a `StorageException`, or an empty object for any other error. */
 function detailsOf(error: unknown): Record<string, unknown> {
-  const body = (error as StorageException).getResponse() as {
-    error?: { details?: Record<string, unknown> }
+  if (!(error instanceof StorageException)) {
+    return {}
   }
-  return body.error?.details ?? {}
+  const body: unknown = error.getResponse()
+  if (typeof body !== 'object' || body === null || !('error' in body)) {
+    return {}
+  }
+  const inner: unknown = body.error
+  if (typeof inner !== 'object' || inner === null || !('details' in inner)) {
+    return {}
+  }
+  const details: unknown = inner.details
+  return typeof details === 'object' && details !== null ? { ...details } : {}
 }
 
 describe('downloadBuffer maxBytes', () => {
@@ -151,7 +165,8 @@ describe('downloadBuffer maxBytes', () => {
       const error: unknown = await callUntyped({ key: 'a.bin', maxBytes }).catch((err: unknown) => err)
 
       expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
-      expect(JSON.stringify((error as StorageException).getResponse())).toContain('maxBytes')
+      expect(error).toBeInstanceOf(StorageException)
+      expect(JSON.stringify(error instanceof StorageException ? error.getResponse() : {})).toContain('maxBytes')
       expect(send).not.toHaveBeenCalled()
     },
   )
