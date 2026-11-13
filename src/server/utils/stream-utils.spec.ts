@@ -13,6 +13,7 @@ import {
   isBufferLike,
   isReadable,
   peekFirstBytes,
+  toUploadBody,
 } from './stream-utils'
 
 /** Drains a stream to a string, normalizing string/Buffer chunks. */
@@ -44,6 +45,37 @@ async function waitUntil(predicate: () => boolean, maxTicks = 100): Promise<void
     await tick()
   }
 }
+
+describe('toUploadBody', () => {
+  it('turns a string into its UTF-8 bytes', () => {
+    // Characters are not bytes: "é" is two.
+    expect(toUploadBody('é')).toEqual(Buffer.from([0xc3, 0xa9]))
+  })
+
+  it('turns an ArrayBuffer into a Buffer of the same bytes', () => {
+    // Untyped callers can hand over a raw ArrayBuffer.
+    expect(toUploadBody(new Uint8Array([1, 2, 3]).buffer)).toEqual(Buffer.from([1, 2, 3]))
+  })
+
+  it('turns a non-Uint8 view into a Buffer over exactly its own bytes', () => {
+    // A Uint16Array of two elements is four bytes, and an offset view must not leak its neighbours.
+    const whole = new Uint16Array([1, 2, 3])
+    const view = new Uint16Array(whole.buffer, 2, 2)
+
+    expect(toUploadBody(view)).toEqual(Buffer.from(whole.buffer, 2, 4))
+  })
+
+  it('leaves a Buffer, a Uint8Array and a stream as they are', () => {
+    // The accepted shapes pass through by identity.
+    const buffer = Buffer.from('a')
+    const bytes = new Uint8Array(1)
+    const stream = new PassThrough()
+
+    expect(toUploadBody(buffer)).toBe(buffer)
+    expect(toUploadBody(bytes)).toBe(bytes)
+    expect(toUploadBody(stream)).toBe(stream)
+  })
+})
 
 describe('stream-utils', () => {
   describe('type guards', () => {

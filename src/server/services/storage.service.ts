@@ -59,6 +59,7 @@ import {
   readStreamUpTo,
   type UploadBody,
 } from '../utils/stream-utils'
+import { boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
 import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
@@ -133,14 +134,15 @@ export class StorageService {
   }
 
   /** The upload itself; `upload()` destroys a stream body when this rejects. */
-  private async uploadOwningBody(options: UploadOptions): Promise<UploadResult> {
+  private async uploadOwningBody(requested: UploadOptions): Promise<UploadResult> {
     this.assertConfigured()
     // Defensive boundary check: callers may pass an absent body from untyped
     // (JS / request-parsed) data despite the compile-time type.
-    const rawBody = options.body as unknown
+    const rawBody = requested.body as unknown
     if (rawBody === undefined || rawBody === null) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_BODY_MISSING)
     }
+    const options = withBytesBody(requested)
     if (!options.contentType) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_CONTENT_TYPE_REQUIRED)
     }
@@ -169,7 +171,8 @@ export class StorageService {
       kmsKeyId: options.kmsKeyId,
     })
     // A stream cannot be read by the scanner and then sent: buffer it first, bounded.
-    const body = await this.bufferForPreUploadScan(validated.body, finalKey)
+    const scanned = await this.bufferForPreUploadScan(validated.body, finalKey)
+    const body = boundStreamSize(scanned, options.size, this.options)
     const validatedOptions = { ...options, body }
 
     // Pre-upload scan: runs before the S3 PutObject.

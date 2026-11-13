@@ -25,6 +25,22 @@ note on each entry is the compatibility contract — read it, not the number.
   one that can be fractional, change it to a positive integer before upgrading; a module that booted
   with such a value now refuses to start.
 
+- **`validation.maxSizeBytes` now bounds every upload body, not only a declared `size`.** The limit
+  was compared with the `size` option alone, so a stream with no `size`, a stream longer than the
+  `size` it declared, and a `Buffer` or `Uint8Array` with no `size` were all stored whatever their
+  length. A multipart upload is now counted as it is read: past the limit (or past the declared
+  `size`, if that is lower) the multipart upload is aborted, the source is destroyed, and `upload()` rejects `STORAGE_SIZE_EXCEEDED` with `details.maxSize` or
+  `details.declaredSize` and the abort outcome. A buffer is checked by its own length. A string or
+  `ArrayBuffer` body, which the types forbid but untyped callers can pass, is now sent as its bytes
+  (a string as UTF-8) and measured in bytes. A single-shot stream is still sent as `size` bytes, as
+  before.
+
+  **Apply to a derived backend:** if you set `validation.maxSizeBytes`, an upload that used to pass
+  because it carried no `size` is now refused when it is longer than the limit; expect
+  `STORAGE_SIZE_EXCEEDED` from a stream or buffer over it, and pass `size` only when it is true. A
+  buffer's declared `size` is ignored in favour of its length, so a small buffer declared as large
+  is no longer refused or sent as multipart.
+
 ## [1.1.11] - 2026-11-13
 
 ### Changed

@@ -232,7 +232,7 @@ Options accepted by `forRoot` and `forRootAsync`:
 | `multipart.partSizeBytes`      | `number`                                          | `5 MiB`           | Part size (S3 minimum: 5 MiB)                  |
 | `multipart.queueSize`          | `number`                                          | `4`               | Concurrent parts                               |
 | `validation.mimeWhitelist`     | `string[]`                                        | —                 | No MIME check when absent. Wildcards: `'image/*'`. A value that lists several types never matches |
-| `validation.maxSizeBytes`      | `number`                                          | —                 | Maximum upload size in bytes                   |
+| `validation.maxSizeBytes`      | `number`                                          | —                 | Maximum upload size in bytes; counted as a stream is read, so it holds with or without `size` |
 
 > **Do not use `maxRetries` or `signatureVersion`** — these are AWS SDK v2 options that do not exist in v3. The v3 SDK is SigV4-only. Use `maxAttempts` (default `3`) for retry configuration.
 

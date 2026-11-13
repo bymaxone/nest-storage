@@ -8,6 +8,7 @@ import { StorageException } from './storage-exception'
 import { describeError } from '../utils/describe-error'
 import { SourceIdleError } from '../utils/idle-timeout'
 import { mapAwsError } from './aws-error-mapper'
+import { mapSizeLimitError } from './size-limit-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
 /** The message for a failed multipart upload whose abort did not complete. */
@@ -31,6 +32,10 @@ export function mapMultipartError(
       phase: 'source-idle',
       idleMs: err.idleMs,
     })
+  }
+  const tooLong = mapSizeLimitError(err, context)
+  if (tooLong) {
+    return tooLong
   }
   const bucketMissing = mapAwsError(err, context)
   if (bucketMissing.code === STORAGE_ERROR_CODES.STORAGE_BUCKET_NOT_FOUND) {
