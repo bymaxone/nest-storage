@@ -166,7 +166,7 @@ export class StorageService {
       key: finalKey,
       body: options.body,
       contentType: options.contentType,
-      ...this.measuredSize(options),
+      ...(options.size !== undefined ? { size: options.size } : {}),
       ...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
       cacheControl: options.cacheControl,
       contentDisposition: options.contentDisposition,
@@ -204,18 +204,12 @@ export class StorageService {
 
   /**
    * Brings an untyped body to bytes: a string becomes its UTF-8 bytes and an `ArrayBuffer` or other
-   * view becomes a `Buffer`, so what is checked against the size limit is a count of bytes.
+   * view becomes a `Buffer`. A buffer has one size, its own length, which replaces any size the
+   * caller declared, so the limit check, the strategy, `Content-Length` and the result agree.
    */
   private withBytesBody(options: UploadOptions): UploadOptions {
-    return { ...options, body: toUploadBody(options.body) }
-  }
-
-  /** The size the limit is checked against: a buffer's own length, otherwise what the caller declared. */
-  private measuredSize(options: UploadOptions): { size: number } | Record<string, never> {
-    if (isBufferLike(options.body)) {
-      return { size: options.body.byteLength }
-    }
-    return options.size !== undefined ? { size: options.size } : {}
+    const body = toUploadBody(options.body)
+    return isBufferLike(body) ? { ...options, body, size: body.byteLength } : { ...options, body }
   }
 
   /**

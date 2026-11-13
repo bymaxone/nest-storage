@@ -592,13 +592,30 @@ describe('StorageService — scan integration', () => {
       getMode: jest.fn().mockReturnValue('pre-upload'),
       scan: scanFn,
     } as unknown as FileScannerService
-    const { service } = makeServiceWithScanner(scanner)
+    const { service } = makeServiceWithScanner(scanner, { validation: { maxSizeBytes: 100 } })
 
-    await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain' })
+    // A stream carries no size; a buffer always does (its own length), so only a stream tests this.
+    await service.upload({ key: 'a.txt', body: Readable.from([Buffer.from('hi')]), contentType: 'text/plain' })
 
     expect(scanFn).toHaveBeenCalledTimes(1)
     const [[scanArg]] = scanFn.mock.calls as [[Record<string, unknown>]]
     expect(scanArg).not.toHaveProperty('size')
+  })
+
+  it('passes a buffer\'s own length as the size to the pre-upload scan', async () => {
+    // A buffer is measured on entry, so the scanner is told its real length without the caller declaring it.
+    const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
+    const scanner: FileScannerService = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      getMode: jest.fn().mockReturnValue('pre-upload'),
+      scan: scanFn,
+    } as unknown as FileScannerService
+    const { service } = makeServiceWithScanner(scanner)
+
+    await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain' })
+
+    const [[scanArg]] = scanFn.mock.calls as [[Record<string, unknown>]]
+    expect(scanArg.size).toBe(2)
   })
 
   it('normalizes a Uint8Array body to a Buffer before the pre-upload scan', async () => {
@@ -676,9 +693,8 @@ describe('StorageService — scan integration', () => {
     expect(scanFn).toHaveBeenCalledWith(expect.objectContaining({ mode: 'post-upload', key: 'a.txt', size: 2 }))
   })
 
-  it('omits size from the post-upload scan input when the upload has no size', async () => {
-    // The conditional spread must NOT inject a `size: undefined` key when the upload
-    // provides no size.
+  it('passes a buffer\'s own length as the size to the post-upload scan', async () => {
+    // A buffer is measured on entry, so the scan input carries its real length.
     const scanFn = jest.fn().mockResolvedValue({ status: 'clean', engine: 'test' })
     const scanner: FileScannerService = {
       isEnabled: jest.fn().mockReturnValue(true),
@@ -690,7 +706,7 @@ describe('StorageService — scan integration', () => {
     await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain' })
 
     const [[scanArg]] = scanFn.mock.calls as [[Record<string, unknown>]]
-    expect('size' in scanArg).toBe(false)
+    expect(scanArg.size).toBe(2)
   })
 
   it('cleans up the infected object from the per-call bucket, not the module default', async () => {

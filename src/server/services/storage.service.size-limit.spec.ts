@@ -243,6 +243,35 @@ describe('upload size bound', () => {
     ).resolves.toMatchObject({ size: 6 })
   })
 
+  it('uses a buffer\'s own length, not a larger size its caller declared, for strategy and result', async () => {
+    // A buffer has one size. A declared 999 999 999 must not route 10 bytes to multipart or be reported back.
+    const storage = await storageWith({ validation: { maxSizeBytes: MIB } })
+
+    const result = await storage.upload({
+      key: 'lie-big.bin',
+      body: Buffer.alloc(10),
+      size: 999_999_999,
+      contentType: 'application/octet-stream',
+    })
+
+    expect(result).toMatchObject({ multipart: false, size: 10 })
+    expect(calls).toEqual(['PUT ?x-id=PutObject'])
+  })
+
+  it('sends the whole buffer when its caller declared a smaller size', async () => {
+    // Content-Length must follow the bytes, or the provider refuses the request.
+    const storage = await storageWith({})
+
+    const result = await storage.upload({
+      key: 'lie-small.bin',
+      body: Buffer.alloc(3 * MIB),
+      size: 10,
+      contentType: 'application/octet-stream',
+    })
+
+    expect(result).toMatchObject({ size: 3 * MIB })
+  })
+
   it('still uploads a stream that stays within the limit', async () => {
     // The bound must not touch a healthy upload: 6 MiB through a 8 MiB limit completes.
     const storage = await storageWith({ validation: { maxSizeBytes: 8 * MIB } })
