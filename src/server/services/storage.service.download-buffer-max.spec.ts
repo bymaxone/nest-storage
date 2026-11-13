@@ -8,6 +8,7 @@ import { Readable } from 'node:stream'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { StorageService } from './storage.service'
 import type { StorageException } from '../errors/storage-exception'
+import type { DownloadBufferOptions } from '../interfaces/download-options.interface'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { IdempotencyCache } from '../utils/idempotency-cache'
@@ -31,13 +32,13 @@ function countedBody(chunks: number, chunkBytes: number): { body: Readable; pull
   return { body, pulled: () => pulled }
 }
 
-function makeService(): { service: StorageService; send: jest.Mock } {
+function makeService(bodyIdleTimeoutMs = 0): { service: StorageService; send: jest.Mock } {
   const resolved = applyDefaults({
     endpoint: 'https://s3.example.com',
     region: 'us-east-1',
     bucket: 'b',
     credentials: { accessKeyId: 'k', secretAccessKey: 's' },
-    bodyIdleTimeoutMs: 0,
+    bodyIdleTimeoutMs,
   })
   const send = jest.fn()
   const s3Provider = {
@@ -74,7 +75,12 @@ describe('downloadBuffer maxBytes', () => {
       .catch((err: unknown) => err)
 
     expect(error).toMatchObject({ code: 'STORAGE_SIZE_EXCEEDED', status: 413 })
-    expect(detailsOf(error)).toMatchObject({ maxSize: 4096, contentLength: 100 * 1024, key: 'big.bin' })
+    expect(detailsOf(error)).toMatchObject({
+      maxSize: 4096,
+      contentLength: 100 * 1024,
+      key: 'big.bin',
+      bucket: 'b',
+    })
     expect(pulled()).toBe(0)
     expect(body.destroyed).toBe(true)
   })
@@ -131,14 +137,14 @@ describe('downloadBuffer maxBytes', () => {
     expect(buffer.length).toBe(8192)
   })
 
-  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '5' as unknown as number])(
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '5'])(
     'rejects a maxBytes of %p before any request',
     async (maxBytes) => {
       // A zero, negative, fractional, non-finite or non-number limit would silently mean no limit or an impossible one.
       const { service, send } = makeService()
 
       const error: unknown = await service
-        .downloadBuffer({ key: 'a.bin', maxBytes })
+        .downloadBuffer({ key: 'a.bin', maxBytes } as DownloadBufferOptions)
         .catch((err: unknown) => err)
 
       expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
@@ -146,4 +152,64 @@ describe('downloadBuffer maxBytes', () => {
       expect(send).not.toHaveBeenCalled()
     },
   )
+
+  it('returns a body of exactly maxBytes when no Content-Length was sent', async () => {
+    // With no header to check, the count alone must let the limit itself through.
+    const { service, send } = makeService()
+    const { body } = countedBody(4, 1024)
+    send.mockResolvedValue({ Body: body })
+
+    const { buffer } = await service.downloadBuffer({ key: 'exact.bin', maxBytes: 4096 })
+
+    expect(buffer.length).toBe(4096)
+  })
+
+  it('passes a failure of the body mid-read through unchanged and releases it', async () => {
+    // A connection that drops while counting is the provider's error, not a size error.
+    const { service, send } = makeService()
+    let pulled = 0
+    const body = new Readable({
+      read() {
+        pulled += 1
+        if (pulled === 1) {
+          this.push(Buffer.alloc(10))
+          return
+        }
+        this.destroy(new Error('connection reset'))
+      },
+    })
+    send.mockResolvedValue({ Body: body })
+
+    const error: unknown = await service
+      .downloadBuffer({ key: 'drop.bin', maxBytes: 4096 })
+      .catch((err: unknown) => err)
+
+    expect(error).toMatchObject({ message: 'connection reset' })
+    expect((error as { code?: string }).code).toBeUndefined()
+    expect(body.destroyed).toBe(true)
+  })
+
+  it('still ends a stalled body with STORAGE_TIMEOUT when a limit is set', async () => {
+    // The limit adds to the idle guard of download(); it does not replace it.
+    const { service, send } = makeService(200)
+    let sent = false
+    const body = new Readable({
+      read() {
+        // Delivers one chunk, then goes silent.
+        if (!sent) {
+          sent = true
+          this.push(Buffer.alloc(10))
+        }
+      },
+    })
+    send.mockResolvedValue({ Body: body, ContentLength: 20 })
+
+    const error: unknown = await service
+      .downloadBuffer({ key: 'stall.bin', maxBytes: 4096 })
+      .catch((err: unknown) => err)
+
+    expect(error).toMatchObject({ code: 'STORAGE_TIMEOUT' })
+    expect(detailsOf(error)).toMatchObject({ phase: 'body-idle' })
+    expect(body.destroyed).toBe(true)
+  })
 })
