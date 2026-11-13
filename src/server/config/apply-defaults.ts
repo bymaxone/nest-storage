@@ -76,6 +76,7 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     maxAttempts: options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
     requestTimeoutMs,
     uploadIdleTimeoutMs: options.uploadIdleTimeoutMs ?? requestTimeoutMs,
+    bodyIdleTimeoutMs: options.bodyIdleTimeoutMs ?? requestTimeoutMs,
     hasCredentials,
   }
 

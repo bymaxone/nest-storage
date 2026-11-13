@@ -326,6 +326,8 @@ export interface BymaxStorageModuleOptions {
   requestTimeoutMs?: number
   /** Longest silence from a stream body while a multipart upload waits for bytes; integer >= 0, `0` disables. Default: `requestTimeoutMs`. */
   uploadIdleTimeoutMs?: number
+  /** Longest silence from a download body while the caller is reading; integer >= 0, `0` disables. Default: `requestTimeoutMs`. */
+  bodyIdleTimeoutMs?: number
 }
 ```
 
@@ -343,7 +345,7 @@ export interface BymaxStorageModuleOptions {
 | Multipart        | `thresholdBytes: 5_242_880` (5 MB), `partSizeBytes: 5_242_880`, `queueSize: 4`              |
 | Scanner          | `mode: 'pre-upload'`, `rejectOnUnknown: false`                                              |
 | Integrity        | `requestChecksumCalculation: 'WHEN_SUPPORTED'`, `responseChecksumValidation: 'WHEN_SUPPORTED'` (non-AWS recipes override to `'WHEN_REQUIRED'`) |
-| Network          | `maxAttempts: 3` (AWS SDK v3), `requestTimeoutMs: 30_000`, `uploadIdleTimeoutMs` (= `requestTimeoutMs`) |
+| Network          | `maxAttempts: 3` (AWS SDK v3), `requestTimeoutMs: 30_000`, `uploadIdleTimeoutMs` and `bodyIdleTimeoutMs` (each = `requestTimeoutMs`) |
 | Optional         | `keyPrefix`, `publicBaseUrl`, `cdnBaseUrl`, `validation.*`, `scanner.*`, `serverSideEncryption`, `kmsKeyId` |
 
 ### 4.3 Provider Recipes
@@ -1008,7 +1010,7 @@ export class StorageException extends HttpException {
 | `STORAGE_BUCKET_UNDEFINED`        | 400  | Operation without a bucket and no default bucket in the config                                 |
 | `STORAGE_MULTIPART_ABORTED`       | 500  | Multipart upload failed and was aborted. With `@aws-sdk/lib-storage` (`leavePartsOnError: false`) the abort is automatic; on the raw presigned-multipart path the lib issues `AbortMultipartUpload` to avoid orphan parts being billed |
 | `STORAGE_INVALID_CONFIG`          | 500  | `BymaxStorageModuleOptions` validation failed at initialization                            |
-| `STORAGE_TIMEOUT`                 | 504  | Request exceeded `requestTimeoutMs`, or a multipart source was silent for `uploadIdleTimeoutMs` (`details.phase: 'source-idle'`) |
+| `STORAGE_TIMEOUT`                 | 504  | Request exceeded `requestTimeoutMs`, a multipart source was silent for `uploadIdleTimeoutMs` (`details.phase: 'source-idle'`), or a download body was silent for `bodyIdleTimeoutMs` (`details.phase: 'body-idle'`) |
 
 ### 12.3 AWS SDK → `StorageException` mapping
 

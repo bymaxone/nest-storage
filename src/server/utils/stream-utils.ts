@@ -214,6 +214,20 @@ export async function readStreamUpTo(
 }
 
 /**
+ * Reads a stream to its end into one `Buffer`.
+ *
+ * @param source - The stream to drain.
+ * @returns Every byte the stream delivered.
+ */
+export async function readStream(source: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  for await (const chunk of source) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+  }
+  return Buffer.concat(chunks)
+}
+
+/**
  * Brings a body that arrived untyped to one of the accepted shapes: a string becomes its UTF-8
  * bytes and an `ArrayBuffer` or other view becomes a `Buffer`, so the size that is checked and
  * the size that is sent are both a count of bytes. Accepted shapes pass through unchanged.

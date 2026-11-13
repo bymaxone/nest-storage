@@ -146,15 +146,33 @@ describe('StorageService — download', () => {
   })
 
   it('materializes the object into a Buffer via downloadBuffer', async () => {
-    // downloadBuffer consumes the sdk-stream-mixin transformToByteArray.
+    // downloadBuffer reads the same guarded stream as download(), so the body is a stream.
     const { service, send } = makeService()
     send.mockResolvedValue({
-      Body: { transformToByteArray: jest.fn().mockResolvedValue(new Uint8Array([104, 105])) },
+      Body: Readable.from([Buffer.from('h'), Buffer.from('i')]),
       ContentLength: 2,
       ContentType: 'application/octet-stream',
     })
     const { buffer, metadata } = await service.downloadBuffer({ key: 'a.bin' })
     expect(buffer.toString()).toBe('hi')
     expect(metadata.size).toBe(2)
+  })
+
+  it('passes a source failure through unchanged, without calling it a stall', async () => {
+    // Only silence is mapped to STORAGE_TIMEOUT; a body that errors keeps its own error.
+    const { service, send } = makeService()
+    send.mockResolvedValue({
+      Body: new Readable({
+        read() {
+          this.destroy(new Error('connection reset'))
+        },
+      }),
+      ContentLength: 2,
+    })
+
+    const error: unknown = await service.downloadBuffer({ key: 'a.bin' }).catch((err: unknown) => err)
+
+    expect(error).toMatchObject({ message: 'connection reset' })
+    expect((error as { code?: string }).code).toBeUndefined()
   })
 })

@@ -110,6 +110,14 @@ export interface BymaxStorageModuleOptions {
    * An integer of at least `0`; `0` turns the guard off. Default: `requestTimeoutMs`.
    */
   uploadIdleTimeoutMs?: number
+  /**
+   * Longest silence, in milliseconds, tolerated from a download body while the caller is waiting
+   * for its next bytes; past it the stream fails with `STORAGE_TIMEOUT` (`details.phase` is
+   * `'body-idle'`) and the connection is released. The clock runs only while a read is pending, so
+   * a consumer that is slow to read never trips it. An integer of at least `0`; `0` turns the guard
+   * off. Default: `requestTimeoutMs`.
+   */
+  bodyIdleTimeoutMs?: number
 }
 
 /**
