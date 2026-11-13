@@ -13,6 +13,22 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.11] - 2026-11-13
+
+### Changed
+
+- **Development and CI tooling updated; the published code does not change.** The AWS SDK
+  development dependencies and the pinned GitHub Actions are bumped to newer patch releases.
+  No file under `src/` changed.
+
+### Documentation
+
+- **The README is shorter and corrected.** The API table and the export list now match the
+  published surface, text that repeated itself or did not belong is removed, and the security
+  controls are restored as one compact table with a row per control.
+
+  **Apply to a derived backend:** nothing to change; this release carries no runtime change.
+
 ## [1.1.10] - 2026-11-09
 
 ### Fixed
@@ -667,4 +683,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.8]: https://github.com/bymaxone/nest-storage/compare/v1.1.7...v1.1.8
 [1.1.9]: https://github.com/bymaxone/nest-storage/compare/v1.1.8...v1.1.9
 [1.1.10]: https://github.com/bymaxone/nest-storage/compare/v1.1.9...v1.1.10
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.10...HEAD
+[1.1.11]: https://github.com/bymaxone/nest-storage/compare/v1.1.10...v1.1.11
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.11...HEAD
