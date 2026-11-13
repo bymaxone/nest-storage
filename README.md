@@ -216,14 +216,14 @@ Options accepted by `forRoot` and `forRootAsync`:
 | `publicBaseUrl`                | `string`                                          | —                 | Base URL for public `getPublicUrl()` results   |
 | `cdnBaseUrl`                   | `string`                                          | —                 | CDN edge URL (preferred over `publicBaseUrl`)  |
 | `keyPrefix`                    | `string`                                          | —                 | Prepended to every key before it reaches the provider; fixed per module instance |
-| `maxAttempts`                  | `number`                                          | `3`               | SDK v3 retry count                             |
+| `maxAttempts`                  | `number`                                          | `3`               | SDK v3 retry count; an integer of at least `1` |
 | `serverSideEncryption`         | `'AES256' \| 'aws:kms'`                           | —                 | Global SSE policy; `aws:kms` needs `kmsKeyId`. `'NONE'` is accepted per upload only |
 | `requestChecksumCalculation`   | `'WHEN_SUPPORTED' \| 'WHEN_REQUIRED'`             | SDK default       | Set to `'WHEN_REQUIRED'` for non-AWS providers |
 | `responseChecksumValidation`   | `'WHEN_SUPPORTED' \| 'WHEN_REQUIRED'`             | SDK default       | Set to `'WHEN_REQUIRED'` for non-AWS providers |
 | `defaultPublicRead`            | `boolean`                                         | `false`           | ACL `public-read` on uploads; see Public Access / ACLs |
 | `defaultCacheControl`          | `string`                                          | `public, max-age=31536000, immutable` | Default `Cache-Control` on uploads |
 | `defaultContentDisposition`    | `'inline' \| 'attachment'`                        | `inline`          | Default `Content-Disposition` on uploads       |
-| `requestTimeoutMs`             | `number`                                          | `30000`           | Per attempt, until the response headers arrive; see below the table |
+| `requestTimeoutMs`             | `number`                                          | `30000`           | Per attempt, until the response headers arrive; an integer of at least `1`; see below the table |
 | `uploadIdleTimeoutMs`          | `number`                                          | `30000`           | Longest silence from a stream body during a multipart upload; follows `requestTimeoutMs` unless set, `0` disables; see below the table |
 | `signedUrls.defaultGetTtlSeconds` | `number`                                       | `300`             | Default TTL for `getDownloadUrl`               |
 | `signedUrls.defaultPutTtlSeconds` | `number`                                       | `300`             | Default TTL for `getUploadUrl`                 |

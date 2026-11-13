@@ -97,9 +97,9 @@ export interface BymaxStorageModuleOptions {
   requestChecksumCalculation?: 'WHEN_SUPPORTED' | 'WHEN_REQUIRED'
   /** S3Client `responseChecksumValidation` (checksum mode on GET). Same provider caveat. */
   responseChecksumValidation?: 'WHEN_SUPPORTED' | 'WHEN_REQUIRED'
-  /** Total attempts including the first try (maps to `maxAttempts`). Default: `3`. */
+  /** Total attempts including the first try (maps to `maxAttempts`). An integer of at least `1`. Default: `3`. */
   maxAttempts?: number
-  /** Per-request timeout. Default: `30000` ms. */
+  /** Per-attempt timeout until the response headers arrive. An integer of at least `1`. Default: `30000` ms. */
   requestTimeoutMs?: number
   /**
    * Longest silence, in milliseconds, tolerated from a stream body while a multipart upload

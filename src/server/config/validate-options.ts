@@ -63,6 +63,12 @@ export function validateOptions(options: unknown): void {
   ) {
     throw invalid('multipart.partSizeBytes must be >= 5 MB (S3 hard limit)')
   }
+  for (const name of ['requestTimeoutMs', 'maxAttempts'] as const) {
+    const value = options[name]
+    if (value !== undefined && (typeof value !== 'number' || !Number.isInteger(value) || value < 1)) {
+      throw invalid(`${name} must be an integer >= 1`)
+    }
+  }
   const idle = options.uploadIdleTimeoutMs
   if (idle !== undefined && (typeof idle !== 'number' || !Number.isInteger(idle) || idle < 0)) {
     throw invalid('uploadIdleTimeoutMs must be an integer >= 0 (0 disables the guard)')
