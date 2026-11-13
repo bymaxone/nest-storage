@@ -47,6 +47,27 @@ describe('logValue', () => {
     expect(logValue(raw)).toBe(expected)
   })
 
+  it.each([
+    ['a\u061cb', '"a\\u061cb"'],
+    ['a\u206ab', '"a\\u206ab"'],
+    ['a\ufff9b', '"a\\ufff9b"'],
+    ['a\u180eb', '"a\\u180eb"'],
+    ['a\u200db', '"a\\u200db"'],
+  ])('escapes every format character, not a list of them: %j', (raw, expected) => {
+    // The class is the Unicode category Cf, so a format control nobody listed is still covered.
+    expect(logValue(raw)).toBe(expected)
+  })
+
+  it.each([
+    ['a\u{1f600}b', '"a\u{1f600}b"'],
+    ['a\u65e5\u672cb', '"a\u65e5\u672cb"'],
+    ['e\u0301', '"e\u0301"'],
+    ['a\ufe0fb', '"a\ufe0fb"'],
+  ])('leaves %j readable: letters, emoji, combining marks and variation selectors are not controls', (raw, expected) => {
+    // Escaping by category must not turn ordinary text in a key into escapes.
+    expect(logValue(raw)).toBe(expected)
+  })
+
   it('escapes a Unicode tag character, which is invisible, as a code point escape', () => {
     // Tag characters are outside the BMP and print as nothing; they are shown as \\u{...}.
     expect(logValue(String.fromCodePoint(0xe0041))).toBe('"\\u{e0041}"')

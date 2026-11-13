@@ -6,13 +6,13 @@
 import { describeError } from './describe-error'
 
 /**
- * The characters JSON leaves literal that a terminal or a log viewer can still act on: DEL and the C1
- * controls, the Unicode line and paragraph separators and the bidirectional embeddings and
- * overrides (which can make a viewer show a key as different text), the zero-width and invisible
- * format characters, the byte order mark and the Unicode tag characters.
+ * The characters JSON leaves literal that a terminal or a log viewer can still act on, by Unicode
+ * category rather than by list: control characters (`Cc`, which covers DEL and the C1 range), format
+ * characters (`Cf`: the bidirectional marks, embeddings and overrides that can make a viewer show a
+ * key as other text, the zero-width and invisible characters, the byte order mark and the tag
+ * characters) and the line and paragraph separators (`Zl`, `Zp`).
  */
-const LEFT_LITERAL_BY_JSON =
-  /[\u007f-\u009f\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u2069\ufeff\u{e0000}-\u{e007f}]/gu
+const LEFT_LITERAL_BY_JSON = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu
 
 /**
  * Renders a value for a log line. A string becomes one quoted token, so a key or a message holding
