@@ -61,10 +61,17 @@ import {
 } from '../utils/stream-utils'
 import { boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
+import { buildPublicUrl } from '../utils/public-url'
+import {
+  buildUploadResult,
+  emitProgress,
+  forwardProgress,
+  normalizeScanBody,
+  normalizeSingleShotBody,
+} from '../utils/upload-support'
 import { assertMaxBytes, readDownloadBody } from '../utils/download-buffer'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
-import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
 
 /** Common metadata fields shared by `HeadObject` and `GetObject` responses. */
 interface S3ObjectResponse {
@@ -245,21 +252,12 @@ export class StorageService {
     }
     await this.scanner.scan({
       mode: 'pre-upload',
-      body: this.normalizeScanBody(body),
+      body: normalizeScanBody(body),
       key: finalKey,
       bucket,
       contentType: options.contentType,
       ...(options.size !== undefined ? { size: options.size } : {}),
     })
-  }
-
-  /**
-   * Coerces the scan body to a `Buffer` so the scanner always receives its declared
-   * contract type. In pre-upload mode a stream has already been buffered by
-   * {@link bufferForPreUploadScan}, so only `Buffer` and `Uint8Array` arrive here.
-   */
-  private normalizeScanBody(body: UploadBody): Buffer {
-    return Buffer.isBuffer(body) ? body : Buffer.from(body as Uint8Array)
   }
 
   /**
@@ -355,7 +353,7 @@ export class StorageService {
   getPublicUrl(key: string, options?: BucketScopedOptions): string {
     const finalKey = this.keyResolver.normalize(key)
     const bucket = this.resolveBucket(options?.bucket)
-    return this.buildPublicUrl(finalKey, bucket)
+    return buildPublicUrl(this.options, finalKey, bucket)
   }
 
   /**
@@ -487,33 +485,6 @@ export class StorageService {
     return bucket
   }
 
-  /** Builds a public URL, avoiding a duplicated bucket segment in the base. */
-  private buildPublicUrl(finalKey: string, bucket: string): string {
-    const base = trimTrailingSlashes(this.options.cdnBaseUrl ?? this.options.publicBaseUrl)
-    return this.baseCarriesBucket(base, bucket)
-      ? `${base}/${finalKey}`
-      : `${base}/${bucket}/${finalKey}`
-  }
-
-  /**
-   * Reports whether the base URL already carries the bucket as a real segment —
-   * the leading host label (virtual-hosted-style `bucket.host`) or a path segment
-   * (path-style `/bucket` or `/bucket/…`) — rather than an incidental substring,
-   * so `bucket="test"` is not matched by a `latest` elsewhere in the base.
-   */
-  private baseCarriesBucket(base: string, bucket: string): boolean {
-    // Stryker disable next-line Regex: `base` is always a well-formed absolute URL with a single leading `scheme://` (or a bare authority with no `://`); for that input domain removing the `^` anchor or widening `\d`→`\D` yields the identical leftmost scheme strip, so `schemeless` is unchanged (equivalent within the contract).
-    const schemeless = base.replace(/^[a-z][a-z\d+.-]*:\/\//i, '')
-    const pathStart = schemeless.indexOf('/')
-    const authority = pathStart === -1 ? schemeless : schemeless.slice(0, pathStart)
-    // Stryker disable next-line StringLiteral: when `pathStart === -1` the resulting `path` is only consumed by `pathSegments.includes(bucket)`; '' and any non-bucket sentinel are indistinguishable, and no real bucket equals the injected sentinel (equivalent).
-    const path = pathStart === -1 ? '' : schemeless.slice(pathStart)
-    const leadingHostLabel = authority.split('.')[0]
-    // Stryker disable next-line MethodExpression,ConditionalExpression,EqualityOperator: `pathSegments` is only used via `.includes(bucket)`, and `bucket` is guaranteed non-empty by `resolveBucket`; keeping empty '' segments cannot change the result.
-    const pathSegments = path.split('/').filter((segment) => segment.length > 0)
-    return leadingHostLabel === bucket || pathSegments.includes(bucket)
-  }
-
   /** Maps an S3 metadata response onto the public `ObjectMetadata` shape. */
   private toObjectMetadata(
     response: S3ObjectResponse,
@@ -547,7 +518,7 @@ export class StorageService {
     const input: PutObjectCommandInput = {
       Bucket: bucket,
       Key: finalKey,
-      Body: this.normalizeSingleShotBody(options.body),
+      Body: normalizeSingleShotBody(options.body),
       ContentType: options.contentType,
       ContentLength: total,
       CacheControl: buildCacheControl(options.cacheControl, this.options.defaultCacheControl),
@@ -563,9 +534,9 @@ export class StorageService {
     try {
       const response = await this.s3Provider.getClient().send(new PutObjectCommand(input))
       if (options.onProgress) {
-        this.emitProgress(options.onProgress, total, total)
+        emitProgress(options.onProgress, total, total)
       }
-      return this.buildUploadResult({
+      return buildUploadResult(this.keyResolver, this.options, {
         finalKey,
         bucket,
         etag: response.ETag,
@@ -611,10 +582,10 @@ export class StorageService {
       partSize: this.options.multipart.partSizeBytes,
       leavePartsOnError: true,
     })
-    this.forwardProgress(uploader, options.onProgress)
+    forwardProgress(uploader, options.onProgress)
     try {
       const response = await uploader.done()
-      return this.buildUploadResult({
+      return buildUploadResult(this.keyResolver, this.options, {
         finalKey,
         bucket,
         etag: response.ETag,
@@ -626,14 +597,6 @@ export class StorageService {
     } catch (err) {
       return this.failMultipart(err, finalKey, bucket, uploader.uploadId)
     }
-  }
-
-  /** Relays the uploader's progress events to the caller's callback, when there is one. */
-  private forwardProgress(uploader: Upload, onProgress: UploadOptions['onProgress']): void {
-    if (!onProgress) return
-    uploader.on('httpUploadProgress', (event) => {
-      this.emitProgress(onProgress, event.loaded, event.total, event.part)
-    })
   }
 
   /** Aborts the multipart upload that failed, then throws the original failure with the outcome. */
@@ -650,51 +613,6 @@ export class StorageService {
       uploadId,
     )
     throw mapMultipartError(err, { key: finalKey, bucket, ...abort })
-  }
-
-  /** Converts a `Uint8Array` body to a `Buffer` for SDK safety; passes others through. */
-  private normalizeSingleShotBody(body: UploadBody): NonNullable<PutObjectCommandInput['Body']> {
-    if (isBufferLike(body)) {
-      return Buffer.isBuffer(body) ? body : Buffer.from(body)
-    }
-    return body as NonNullable<PutObjectCommandInput['Body']>
-  }
-
-  /** Assembles an `UploadResult`, omitting optional fields that are absent. */
-  private buildUploadResult(params: {
-    finalKey: string
-    bucket: string
-    etag: string | undefined
-    versionId: string | undefined
-    size: number | undefined
-    contentType: string
-    multipart: boolean
-  }): UploadResult {
-    return {
-      key: this.keyResolver.stripPrefix(params.finalKey),
-      bucket: params.bucket,
-      etag: params.etag ?? '',
-      contentType: params.contentType,
-      publicUrl: this.buildPublicUrl(params.finalKey, params.bucket),
-      multipart: params.multipart,
-      fromIdempotencyCache: false,
-      ...(params.size !== undefined ? { size: params.size } : {}),
-      ...(params.versionId !== undefined ? { versionId: params.versionId } : {}),
-    }
-  }
-
-  /** Emits a progress event, omitting `total`/`part` when they are unknown. */
-  private emitProgress(
-    onProgress: NonNullable<UploadOptions['onProgress']>,
-    loaded: number | undefined,
-    total: number | undefined,
-    part?: number,
-  ): void {
-    onProgress({
-      loaded: loaded ?? 0,
-      ...(total !== undefined ? { total } : {}),
-      ...(part !== undefined ? { part } : {}),
-    })
   }
 
   /**
