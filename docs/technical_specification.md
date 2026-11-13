@@ -507,7 +507,7 @@ export class StorageService {
   }>
 
   /** Buffer (files < 10 MB only). For large files use download() stream. */
-  downloadBuffer(options: DownloadOptions): Promise<{ buffer: Buffer; metadata: ObjectMetadata }>
+  downloadBuffer(options: DownloadBufferOptions): Promise<{ buffer: Buffer; metadata: ObjectMetadata }>
 
   /** Idempotent delete: does not throw if the object does not exist, just logs a warning. */
   delete(key: string, options?: { bucket?: string }): Promise<void>
@@ -581,6 +581,12 @@ export interface DownloadOptions {
   ifNoneMatch?: string
   /** Conditional GET — maps to the GetObject `IfMatch` header. */
   ifMatch?: string
+}
+
+/** Parameters for `downloadBuffer()`: those of `download()` plus a size bound. */
+export interface DownloadBufferOptions extends DownloadOptions {
+  /** The most bytes to hold; integer >= 1. An object over it, by `Content-Length` or by counting, rejects `STORAGE_SIZE_EXCEEDED`. Default: none. */
+  maxBytes?: number
 }
 ```
 
@@ -1160,7 +1166,7 @@ Deliverables: complete JSDoc; README with quick start + provider scenarios; SECU
 
 ### 16.3 Performance
 
-- **`downloadBuffer()` loads everything in memory.** Use `download()` (stream) for files > 10 MB.
+- **`downloadBuffer()` loads everything in memory** unless `maxBytes` is set, which bounds it (STORAGE_SIZE_EXCEEDED past it). Use `download()` (stream) for files > 10 MB.
 - **Listing is per page of 1000.** A bucket with millions of objects requires explicit iteration; `listAll()` async-iterable helper planned for v0.2.
 - **Multipart with part < 5 MB is rejected by S3.** Keep `partSizeBytes >= 5_242_880`.
 

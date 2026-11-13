@@ -1,5 +1,5 @@
 /**
- * @fileoverview Per-call options for `StorageService.download()`.
+ * @fileoverview Per-call options for `StorageService.download()` and `downloadBuffer()`.
  * @layer server/interfaces
  */
 
@@ -13,4 +13,15 @@ export interface DownloadOptions {
   ifNoneMatch?: string
   /** Conditional GET — only return if the ETag matches. */
   ifMatch?: string
+}
+
+/** Options for a single `downloadBuffer()` call. */
+export interface DownloadBufferOptions extends DownloadOptions {
+  /**
+   * The most bytes `downloadBuffer()` will hold. An object whose `Content-Length` is larger is
+   * refused before its body is read, and a body that turns out longer than this (a missing or
+   * wrong `Content-Length`) is cut off as it is counted; both reject `STORAGE_SIZE_EXCEEDED` and
+   * release the connection. An integer of at least `1`. Without it the whole object is buffered.
+   */
+  maxBytes?: number
 }

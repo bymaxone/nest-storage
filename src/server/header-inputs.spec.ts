@@ -230,9 +230,11 @@ describe('public API: caller strings bound for a header', () => {
 })
 
 /** Option interfaces whose header-bound properties are listed in HEADER_BOUND. */
-const HEADER_BOUND_INTERFACES = new Set(
-  Object.keys(HEADER_BOUND).map((name) => name.slice(0, name.indexOf('.'))),
-)
+const HEADER_BOUND_INTERFACES = new Set([
+  ...Object.keys(HEADER_BOUND).map((name) => name.slice(0, name.indexOf('.'))),
+  // Extends DownloadOptions, so `range`, `ifNoneMatch` and `ifMatch` reach the same headers.
+  'DownloadBufferOptions',
+])
 
 /** Calls that run the whitelist or a header-value check. */
 const GUARDS = [
