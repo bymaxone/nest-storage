@@ -32,6 +32,26 @@ describe('logValue', () => {
     expect(logValue(raw)).toBe(expected)
   })
 
+  it.each([
+    ['a\u202eb', '"a\\u202eb"'],
+    ['a\u202ab', '"a\\u202ab"'],
+    ['a\u2066b', '"a\\u2066b"'],
+    ['a\u2069b', '"a\\u2069b"'],
+    ['a\u200bb', '"a\\u200bb"'],
+    ['a\u200fb', '"a\\u200fb"'],
+    ['a\u00adb', '"a\\u00adb"'],
+    ['a\u2060b', '"a\\u2060b"'],
+    ['a\ufeffb', '"a\\ufeffb"'],
+  ])('escapes the format character in %j that can reorder or hide text in a viewer', (raw, expected) => {
+    // A right-to-left override in a key can make a log viewer show `a.txt` + `exe.txt` reversed as something else.
+    expect(logValue(raw)).toBe(expected)
+  })
+
+  it('escapes a Unicode tag character, which is invisible, as a code point escape', () => {
+    // Tag characters are outside the BMP and print as nothing; they are shown as \\u{...}.
+    expect(logValue(String.fromCodePoint(0xe0041))).toBe('"\\u{e0041}"')
+  })
+
   it('escapes a quote and a backslash so the token cannot be closed early', () => {
     // A key holding a quote must not end the quoted value and continue the line.
     expect(logValue('a"b\\c')).toBe('"a\\"b\\\\c"')

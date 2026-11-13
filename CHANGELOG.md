@@ -48,8 +48,9 @@ note on each entry is the compatibility contract — read it, not the number.
   engine and threat names, or the provider's message as they were. S3 accepts a key with a newline, a
   carriage return or an escape sequence, so such a key could end its log line and forge the next, or
   colour or hide what followed. Each of those values is now a quoted token in which control
-  characters (and DEL, the C1 controls and the Unicode line separators, which JSON leaves literal)
-  show as `\n`, `\r` and `\uNNNN`.
+  characters (and DEL, the C1 controls, the Unicode line separators, the bidirectional overrides
+  that can make a viewer show a key as other text, and the zero-width and tag characters, which JSON
+  leaves literal) show as `\n`, `\r` and `\uNNNN`.
 
   **Apply to a derived backend:** nothing changes in behaviour or in an error response. If a log
   parser matches `key=<value>` in these lines, the value is now enclosed in double quotes.
