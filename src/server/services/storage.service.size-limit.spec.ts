@@ -294,7 +294,8 @@ describe('upload size bound', () => {
     const result = await storage.upload({ key: 'ok.bin', body: stream, contentType: 'application/octet-stream' })
 
     expect(result.multipart).toBe(true)
-    expect(calls).not.toContain('DELETE ')
+    expect(calls.filter((call) => call.startsWith('DELETE'))).toEqual([])
+    expect(calls).toContain('POST ?uploadId=u1')
   })
 
   it('accepts a stream of exactly maxSizeBytes', async () => {
