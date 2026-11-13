@@ -61,6 +61,7 @@ import {
 } from '../utils/stream-utils'
 import { boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
+import { logValue } from '../utils/log-value'
 import { buildPublicUrl } from '../utils/public-url'
 import {
   buildUploadResult,
@@ -287,8 +288,8 @@ export class StorageService {
         await this.delete(key, { bucket })
       } catch (deleteErr) {
         this.logger.error(
-          `STORAGE_SCAN_CLEANUP_FAILED: the rejected object is still stored: ${finalKey}`,
-          describeError(deleteErr),
+          `STORAGE_SCAN_CLEANUP_FAILED: the rejected object is still stored: ${logValue(finalKey)}`,
+          logValue(describeError(deleteErr)),
         )
         throw withCleanupFailure(scanErr, { key, storedKey: finalKey }, deleteErr)
       }
@@ -337,7 +338,7 @@ export class StorageService {
       ) {
         return false
       }
-      this.logger.warn(`exists() — treating a non-404 error as "false": ${describeError(err)}`)
+      this.logger.warn(`exists() — treating a non-404 error as "false": ${logValue(describeError(err))}`)
       return false
     }
   }
@@ -442,7 +443,7 @@ export class StorageService {
       if (mapped.code !== STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND) {
         throw mapped
       }
-      this.logger.warn(`delete() — key not found (idempotent no-op): ${finalKey}`)
+      this.logger.warn(`delete() — key not found (idempotent no-op): ${logValue(finalKey)}`)
     }
     // The object is gone, so an upload cached as having created it no longer holds.
     this.idempotencyCache.invalidate(bucket, this.keyResolver.stripPrefix(finalKey))

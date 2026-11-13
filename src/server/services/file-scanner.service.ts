@@ -10,6 +10,7 @@ import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { IFileScanner, FileScanResult } from '../interfaces/file-scanner.interface'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { logValue } from '../utils/log-value'
 
 /** Input shape for a scan request. */
 interface ScanInput {
@@ -76,7 +77,7 @@ export class FileScannerService {
     const result = await this.scanner.scan(input)
 
     if (result.status === 'infected') {
-      this.logger.warn(`Infected file detected: key=${input.key} engine=${result.engine} threat=${result.threat ?? 'unknown'}`)
+      this.logger.warn(`Infected file detected: key=${logValue(input.key)} engine=${logValue(result.engine)} threat=${logValue(result.threat ?? 'unknown')}`)
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED, undefined, {
         engine: result.engine,
         threat: result.threat,
@@ -91,7 +92,7 @@ export class FileScannerService {
           details: result.details,
         })
       }
-      this.logger.warn(`Inconclusive scan result accepted: key=${input.key} engine=${result.engine}`)
+      this.logger.warn(`Inconclusive scan result accepted: key=${logValue(input.key)} engine=${logValue(result.engine)}`)
     }
 
     return result

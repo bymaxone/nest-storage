@@ -42,6 +42,18 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Fixed
 
+- **A key or a provider message in a log line is written as one escaped token.** The scanner warnings
+  (`Infected file detected`, `Inconclusive scan result accepted`), the idempotent-delete warning, the
+  `exists` warning and the `STORAGE_SCAN_CLEANUP_FAILED` error repeated the object key, the scanner's
+  engine and threat names, or the provider's message as they were. S3 accepts a key with a newline, a
+  carriage return or an escape sequence, so such a key could end its log line and forge the next, or
+  colour or hide what followed. Each of those values is now a quoted token in which control
+  characters, and the invisible or bidirectional characters JSON leaves literal, show as `\n`, `\r`,
+  `\uNNNN` or `\u{...}`.
+
+  **Apply to a derived backend:** nothing changes in behaviour or in an error response. If a log
+  parser matches `key=<value>` in these lines, the value is now enclosed in double quotes.
+
 - **An endpoint that carries credentials is refused, and the boot log no longer prints the endpoint
   whole.** The `S3Client initialized` line repeated `endpoint` as configured, so an endpoint such as
   `https://KEY:SECRET@host` wrote the secret to the log, and the same string is the base of every
