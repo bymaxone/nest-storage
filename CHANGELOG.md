@@ -42,12 +42,12 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Fixed
 
-- **`publicBaseUrl` and `cdnBaseUrl` are refused when they carry credentials.** Both are returned to
+- **`publicBaseUrl` and `cdnBaseUrl` are refused when they carry credentials.** Either is returned to
   callers as the base of every `publicUrl`, so a user or password in either, including one given
   through a provider recipe's `customDomain`, reached clients and anything that stores or logs those
   URLs. `validateOptions` now throws `STORAGE_INVALID_CONFIG` naming the option and repeating neither
   the user nor the password, from `forRoot` and `forRootAsync` alike. This is the check that already
-  applied to `endpoint`; with it, no URL the library builds from these options can carry userinfo.
+  applied to `endpoint`.
 
   **Apply to a derived backend:** if either URL embeds `user:password@`, remove it before upgrading;
   the module now refuses to start with such a value.
