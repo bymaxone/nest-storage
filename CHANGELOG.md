@@ -15,6 +15,18 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Added
 
+- **`downloadBuffer({ maxBytes })` bounds what a buffered download holds.** `downloadBuffer` read the
+  whole object into memory whatever its size, so one large or hostile object could exhaust the
+  process. With `maxBytes`, an object whose `Content-Length` is larger is refused before its body is
+  read, and a body that is longer than it said, or has no length, is cut off as it is counted; both
+  reject `STORAGE_SIZE_EXCEEDED` (`details.maxSize`, and `details.contentLength` for the first) and
+  release the connection. A value that is not an integer of at least `1` rejects
+  `STORAGE_VALIDATION_FAILED` before any request. There is no default: without `maxBytes` the call
+  behaves as before. The new `DownloadBufferOptions` type is exported.
+
+  **Apply to a derived backend:** nothing changes until you pass `maxBytes`. Set it wherever a
+  backend calls `downloadBuffer` on an object it does not control, to what the process can hold.
+
 - **`bodyIdleTimeoutMs` bounds a download body that stops delivering.** `requestTimeoutMs` ends when
   the response headers arrive, so a provider that stalled mid-body left the stream, its connection
   and the caller waiting for as long as the provider chose. After `bodyIdleTimeoutMs` of silence

@@ -386,9 +386,17 @@ async download(@Param('key') key: string, @Res() res: Response) {
 ### As a Buffer
 
 ```typescript
-// Use only for files < 10 MB — loads the entire object into memory.
-const { buffer, metadata } = await this.storage.downloadBuffer({ key: 'docs/report.pdf' })
+// Always pass `maxBytes`: without it the whole object is held in memory, however large it is.
+const { buffer, metadata } = await this.storage.downloadBuffer({
+  key: 'docs/report.pdf',
+  maxBytes: 10 * 1024 * 1024,
+})
 ```
+
+`maxBytes` is an integer of at least `1`. An object whose `Content-Length` is larger is refused before its
+body is read, and a body that turns out longer (a missing or wrong `Content-Length`) is cut off as it is
+counted; both reject `STORAGE_SIZE_EXCEEDED` with `details.maxSize` and release the connection. The limit
+is per call and has no default, so a backend that buffers should set it from what it can hold.
 
 ### Conditional and ranged reads
 
@@ -916,7 +924,7 @@ This is the index.
 | ---------------- | ------------------------------------------------------------- | ------------------------------------------------------------ |
 | `upload`         | `(options: UploadOptions) => Promise<UploadResult>`           | Multipart via `@aws-sdk/lib-storage`; aborts on failure      |
 | `download`       | `(options: DownloadOptions) => Promise<{ stream, metadata }>` | Streaming; the body is never buffered                        |
-| `downloadBuffer` | `(options: DownloadOptions) => Promise<{ buffer, metadata }>` | Buffers — bounded by the caller's own memory                 |
+| `downloadBuffer` | `(options: DownloadBufferOptions) => Promise<{ buffer, metadata }>` | Buffers — set `maxBytes` to bound it; without it the whole object is held |
 | `head`           | `(key, options?) => Promise<ObjectMetadata>`                  | Metadata without transferring the body                       |
 | `exists`         | `(key, options?) => Promise<boolean>`                         | `head` reduced to a boolean; any non-404 failure is logged and returns `false`                                  |
 | `getPublicUrl`   | `(key, options?) => string`                                   | Composed, not signed — for buckets that are public by policy |

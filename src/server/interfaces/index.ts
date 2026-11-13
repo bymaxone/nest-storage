@@ -8,7 +8,7 @@ export type {
   BymaxStorageModuleOptionsFactory,
 } from './storage-module-options.interface'
 export type { UploadOptions } from './upload-options.interface'
-export type { DownloadOptions } from './download-options.interface'
+export type { DownloadBufferOptions, DownloadOptions } from './download-options.interface'
 export type { ListOptions, ListResult } from './list-options.interface'
 export type { CopyOptions } from './copy-options.interface'
 export type {

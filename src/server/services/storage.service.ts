@@ -21,7 +21,7 @@ import { Upload } from '@aws-sdk/lib-storage'
 import { BYMAX_STORAGE_IDEMPOTENCY_CACHE, BYMAX_STORAGE_OPTIONS } from '../bymax-storage.constants'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
-import type { DownloadOptions } from '../interfaces/download-options.interface'
+import type { DownloadBufferOptions, DownloadOptions } from '../interfaces/download-options.interface'
 import type { ListOptions, ListResult } from '../interfaces/list-options.interface'
 import type { CopyOptions } from '../interfaces/copy-options.interface'
 import type {
@@ -56,12 +56,12 @@ import {
   destroyStream,
   getBodySize,
   isBufferLike,
-  readStream,
   readStreamUpTo,
   type UploadBody,
 } from '../utils/stream-utils'
 import { boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
+import { assertMaxBytes, readDownloadBody } from '../utils/download-buffer'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
 import { trimTrailingSlashes } from '../utils/trim-trailing-slashes'
@@ -415,10 +415,11 @@ export class StorageService {
    * @returns The object buffer and its metadata.
    */
   async downloadBuffer(
-    options: DownloadOptions,
+    options: DownloadBufferOptions,
   ): Promise<{ buffer: Buffer; metadata: ObjectMetadata }> {
+    assertMaxBytes(options.maxBytes)
     const { stream, metadata } = await this.download(options)
-    return { buffer: await readStream(stream), metadata }
+    return { buffer: await readDownloadBody(stream, metadata, options.maxBytes), metadata }
   }
 
   /**

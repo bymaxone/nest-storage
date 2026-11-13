@@ -34,6 +34,7 @@ export type {
   BymaxStorageModuleAsyncOptions,
   BymaxStorageModuleOptionsFactory,
   UploadOptions,
+  DownloadBufferOptions,
   DownloadOptions,
   ListOptions,
   ListResult,
