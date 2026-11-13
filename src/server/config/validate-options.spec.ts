@@ -118,6 +118,39 @@ describe('validateOptions', () => {
     })).toMatch(/uploadIdleTimeoutMs/)
   })
 
+  it.each(['requestTimeoutMs', 'maxAttempts'] as const)('should accept a %s of 1 and of a large integer', (name) => {
+    // The smallest valid value is 1; there is no upper bound beyond being an integer.
+    expect(() => {
+      validateOptions({ ...valid, [name]: 1 })
+    }).not.toThrow()
+    expect(() => {
+      validateOptions({ ...valid, [name]: 120_000 })
+    }).not.toThrow()
+  })
+
+  it.each([
+    ['requestTimeoutMs', 0],
+    ['requestTimeoutMs', -1],
+    ['requestTimeoutMs', 1.5],
+    ['requestTimeoutMs', Number.NaN],
+    ['requestTimeoutMs', Number.POSITIVE_INFINITY],
+    ['requestTimeoutMs', '100'],
+    ['requestTimeoutMs', null],
+    ['maxAttempts', 0],
+    ['maxAttempts', -3],
+    ['maxAttempts', 2.5],
+    ['maxAttempts', Number.NaN],
+    ['maxAttempts', Number.POSITIVE_INFINITY],
+    ['maxAttempts', '3'],
+    ['maxAttempts', null],
+  ])('should reject %s of %p', (name, value) => {
+    // A zero, negative, fractional, non-finite or non-number value would switch the bound off
+    // or make the SDK behave undefined; it is a configuration error, named in the reason.
+    expect(reasonOf(() => {
+      validateOptions({ ...valid, [name]: value })
+    })).toMatch(new RegExp(name))
+  })
+
   it('should accept aws:kms with a kmsKeyId', () => {
     // SSE `&&` right-false branch (kmsKeyId present).
     expect(() => {
