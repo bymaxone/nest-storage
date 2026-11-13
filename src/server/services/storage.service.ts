@@ -222,11 +222,10 @@ export class StorageService {
    * Caps a stream that takes the multipart path, as it is read, at the lower of
    * `validation.maxSizeBytes` and the size its caller declared, so an undeclared stream or one
    * longer than it declared cannot exceed either. A single-shot stream needs no cap: the request
-   * carries `Content-Length` set to the declared size, which validation has already checked.
+   * carries `Content-Length` set to the declared size.
    */
   private boundStreamSize(body: UploadBody, declaredSize: number | undefined): UploadBody {
-    // Validation has refused a declared size above the maximum, so a declared size is the lower
-    // bound of the two.
+    // A declared size above the maximum is refused before this point, so it is the lower bound.
     const limit = declaredSize ?? this.options.validation?.maxSizeBytes
     const singleShot =
       pickUploadStrategy(body, declaredSize, this.options.multipart.thresholdBytes) === 'single-shot'

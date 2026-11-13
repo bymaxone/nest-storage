@@ -29,8 +29,7 @@ note on each entry is the compatibility contract — read it, not the number.
   was compared with the `size` option alone, so a stream with no `size`, a stream longer than the
   `size` it declared, and a `Buffer` or `Uint8Array` with no `size` were all stored whatever their
   length. A multipart upload is now counted as it is read: past the limit (or past the declared
-  `size`, if that is lower) it is aborted, the source is destroyed, the parts already sent are
-  removed, and `upload()` rejects `STORAGE_SIZE_EXCEEDED` with `details.maxSize` or
+  `size`, if that is lower) the multipart upload is aborted, the source is destroyed, and `upload()` rejects `STORAGE_SIZE_EXCEEDED` with `details.maxSize` or
   `details.declaredSize` and the abort outcome. A buffer is checked by its own length. A string or
   `ArrayBuffer` body, which the types forbid but untyped callers can pass, is now sent as its bytes
   (a string as UTF-8) and measured in bytes. A single-shot stream is still sent as `size` bytes, as
