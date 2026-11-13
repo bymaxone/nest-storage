@@ -11,6 +11,7 @@ import { BymaxStorageModule } from '../bymax-storage.module'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 import type { StorageException } from '../errors/storage-exception'
 import { StorageService } from './storage.service'
+import { destroyStream } from '../utils/stream-utils'
 
 const MIB = 1024 * 1024
 const IDLE_MS = 250
@@ -99,11 +100,11 @@ describe('download body idle timeout', () => {
   }
 
   /** Reads a stream to its end or its error. */
-  async function drain(stream: NodeJS.ReadableStream): Promise<unknown> {
+  async function drain(stream: AsyncIterable<Buffer | string>): Promise<unknown> {
     let bytes = 0
     try {
       for await (const chunk of stream) {
-        bytes += (chunk as Buffer).length
+        bytes += chunk.length
       }
       return bytes
     } catch (err) {
@@ -142,7 +143,7 @@ describe('download body idle timeout', () => {
       if (bytes >= 3 * 64 * 1024) break
     }
     // Finish quickly once the slow phase is over.
-    const rest = await drain({ [Symbol.asyncIterator]: () => iterator } as unknown as NodeJS.ReadableStream)
+    const rest = await drain({ [Symbol.asyncIterator]: () => iterator })
 
     expect(typeof rest).toBe('number')
     expect(bytes + (rest as number)).toBe(4 * MIB)
@@ -156,7 +157,7 @@ describe('download body idle timeout', () => {
     const outcome = await Promise.race([drain(stream), sleep(IDLE_MS * 4).then(() => 'STILL_WAITING')])
 
     expect(outcome).toBe('STILL_WAITING')
-    ;(stream as unknown as { destroy(): void }).destroy()
+    destroyStream(stream)
   })
 
   it('takes requestTimeoutMs as the default limit', async () => {

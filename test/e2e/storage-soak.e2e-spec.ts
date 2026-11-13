@@ -13,6 +13,7 @@ import {
   SignedUrlService,
   StorageService,
 } from '@bymax-one/nest-storage'
+import { destroyStream } from '../../src/server/utils/stream-utils'
 import { startMinio, type MinioHandle } from './fixtures/minio-container'
 
 const SOAK_MS = Number(process.env.STORAGE_SOAK_MS ?? 0)
@@ -28,9 +29,7 @@ interface Sample {
 }
 
 function openSockets(): number {
-  const handles = (process as unknown as { _getActiveHandles(): { constructor: { name: string } }[] })
-    ._getActiveHandles()
-  return handles.filter((h) => h.constructor.name === 'Socket').length
+  return process.getActiveResourcesInfo().filter((name) => name === 'TCPSocketWrap').length
 }
 
 function median(values: number[]): number {
@@ -81,7 +80,7 @@ describeSoak('Storage E2E — soak', () => {
         void chunk
       }
       const partial = await storage.download({ key })
-      ;(partial.stream as unknown as Readable).destroy()
+      destroyStream(partial.stream)
       await storage.downloadBuffer({ key })
       await signed.getDownloadUrl({ key })
       await storage.upload({

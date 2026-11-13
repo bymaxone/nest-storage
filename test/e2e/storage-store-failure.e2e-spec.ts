@@ -6,7 +6,6 @@
  * the stalled body case asserts a timely STORAGE_TIMEOUT and that the connection is closed.
  * @layer test/e2e
  */
-import { Readable } from 'node:stream'
 import { Logger } from '@nestjs/common'
 import { Test, type TestingModule } from '@nestjs/testing'
 import {
@@ -16,6 +15,7 @@ import {
   SignedUrlService,
   type BymaxStorageModuleOptions,
 } from '@bymax-one/nest-storage'
+import { destroyStream } from '../../src/server/utils/stream-utils'
 import { startMinio, type MinioHandle } from './fixtures/minio-container'
 import { startFaultProxy, type FaultProxy } from './fixtures/fault-proxy'
 
@@ -174,7 +174,7 @@ describe('Storage E2E — store failure', () => {
       clearTimeout(timer.id)
     })
 
-    ;(stream as unknown as Readable).destroy()
+    destroyStream(stream)
     expect(outcome).toBe('STORAGE_TIMEOUT')
     // The guard destroys the body, which closes the connection the proxy sees.
     const deadline = Date.now() + 3000
