@@ -207,6 +207,11 @@ describe('validateOptions', () => {
         'https:/AKIAEXAMPLE@cdn.example.com',
         'https:AKIAEXAMPLE@cdn.example.com',
         '//AKIAEXAMPLE:SECRETEXAMPLE@cdn.example.com',
+        ' https://AKIAEXAMPLE@cdn.example.com',
+        'ht\ntps://AKIAEXAMPLE@cdn.example.com',
+        'https:\t//AKIAEXAMPLE@cdn.example.com',
+        'https://AKIAEXAMPLE\t@cdn.example.com',
+        ' AKIAEXAMPLE:SECRETEXAMPLE@cdn.example.com:8443',
       ]) {
         const reason = reasonOf(() => {
           validateOptions({ ...valid, [name]: value })

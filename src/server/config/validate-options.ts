@@ -33,17 +33,42 @@ function isNonEmptyString(value: unknown): value is string {
 const BEFORE_AUTHORITY = /^(?:[a-z][a-z\d+.-]*:)?[/\\]*/i
 
 /**
- * Whether a URL option holds userinfo. The authority is the text after {@link BEFORE_AUTHORITY} up
- * to the first `/`, `?` or `#` (a backslash is not one: only a special scheme reads it as a slash, so
- * counting it as part of the authority can only refuse more), and an `@` in it separates userinfo
- * from the host. Reading the string, not a parsed URL, also covers a value a URL parser reads as
- * something else or rejects (`user@host:9000`, `user:pw@host`); a value that is not a URL at all is
- * judged the same way.
+ * The value as a URL parser reads it before parsing: leading control characters and spaces are
+ * dropped (trailing ones cannot matter here) and tabs and line breaks are removed wherever they are.
  */
-function urlCarriesCredentials(value: string): boolean {
-  const rest = value.replace(BEFORE_AUTHORITY, '')
+function asParsed(value: string): string {
+  return value.replace(/[\t\n\r]/g, '').replace(/^[\p{Cc} ]+/u, '')
+}
+
+/** Whether a URL parser reads the value as having a user or a password. */
+function parsedCarriesCredentials(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.username !== '' || url.password !== ''
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether the text holds userinfo read as a string: the authority is what follows
+ * {@link BEFORE_AUTHORITY} up to the first `/`, `?` or `#` (a backslash is not one: only a special
+ * scheme reads it as a slash, so counting it as part of the authority can only refuse more), and an
+ * `@` in it separates userinfo from the host. This covers values a URL parser reads as something
+ * else or rejects (`user@host:9000`, `user:pw@host`).
+ */
+function authorityCarriesCredentials(text: string): boolean {
+  const rest = text.replace(BEFORE_AUTHORITY, '')
   const end = rest.search(/[/?#]/)
   return (end === -1 ? rest : rest.slice(0, end)).includes('@')
+}
+
+/**
+ * Whether a URL option holds userinfo, by either reading: the URL parser's own, which normalizes
+ * whatever it normalizes, or the string reading of the value as the parser would see it.
+ */
+function urlCarriesCredentials(value: string): boolean {
+  return parsedCarriesCredentials(value) || authorityCarriesCredentials(asParsed(value))
 }
 
 /**
