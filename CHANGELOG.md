@@ -17,8 +17,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 - **`requestTimeoutMs` and `maxAttempts` are now checked at boot.** A value of `0`, a negative or
   fractional number, `NaN` or `Infinity`, or a non-number reached the S3 client unchecked, and the
-  request handler treats a falsy timeout as no timeout, so a typo could switch the bound off without
-  a sign. Both options must now be integers of at least `1`; anything else throws
+  request handler treats a `0` or `NaN` timeout as no timeout, so a typo could switch the bound off
+  without a sign. Both options must now be integers of at least `1`; anything else throws
   `STORAGE_INVALID_CONFIG` naming the option.
 
   **Apply to a derived backend:** if your configuration passes `0` for either option, or computes
