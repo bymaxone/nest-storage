@@ -39,7 +39,8 @@ function makeService(bodyIdleTimeoutMs = 0): { service: StorageService; send: je
     credentials: { accessKeyId: 'k', secretAccessKey: 's' },
     bodyIdleTimeoutMs,
   })
-  // Real collaborators, with only the network call replaced: the client's `send` is a spy.
+  // Real collaborators. Replaced: the client's `send` (the network call) and the provider's `getClient`
+  // and `isConfigured`, which would otherwise need an initialised module; everything else is real.
   const client = new S3Client({
     region: 'us-east-1',
     credentials: { accessKeyId: 'k', secretAccessKey: 's' },
