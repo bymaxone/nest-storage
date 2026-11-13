@@ -44,14 +44,21 @@ describe('upload size bound', () => {
   let server: Server
   let port: number
   let calls: string[] = []
+  let putBodies: Buffer[] = []
   let moduleRef: TestingModule | undefined
   const sockets = new Set<Socket>()
 
   beforeAll(async () => {
     server = createServer((req, res) => {
       const url = new URL(req.url ?? '/', 'http://stand-in')
-      req.resume()
+      const received: Buffer[] = []
+      req.on('data', (chunk: Buffer) => {
+        received.push(chunk)
+      })
       req.on('end', () => {
+        if (req.method === 'PUT' && !url.searchParams.has('partNumber')) {
+          putBodies.push(Buffer.concat(received))
+        }
         calls.push(`${req.method ?? ''} ${url.searchParams.has('uploads') ? 'uploads' : url.search.split('&')[0] ?? ''}`)
         if (req.method === 'POST' && url.searchParams.has('uploads')) {
           res.setHeader('content-type', 'application/xml')
@@ -94,6 +101,7 @@ describe('upload size bound', () => {
 
   beforeEach(() => {
     calls = []
+    putBodies = []
   })
 
   afterEach(async () => {
@@ -122,8 +130,8 @@ describe('upload size bound', () => {
   }
 
   it('refuses a stream with no declared size once it passes maxSizeBytes, aborts the upload and stops reading', async () => {
-    // The limit used to apply only to a declared size, so an undeclared stream was unbounded. A
-    // 6 MiB limit lets the first 5 MiB part start, so there is an upload to abort.
+    // The SDK holds a whole 5 MiB part before it creates the upload, so a 6 MiB limit lets the first
+    // part start and leaves an upload to abort.
     const storage = await storageWith({ validation: { maxSizeBytes: 6 * MIB } })
     const { stream, pulled } = mibStream(40)
 
@@ -167,7 +175,7 @@ describe('upload size bound', () => {
   })
 
   it('refuses a buffer over maxSizeBytes when no size is declared, before any request', async () => {
-    // Validation received only the declared size, so a buffer with no `size` passed unchecked.
+    // A buffer is checked by its own length, whether or not its caller declares a size.
     const storage = await storageWith({ validation: { maxSizeBytes: MIB } })
 
     const error: unknown = await storage
@@ -241,6 +249,8 @@ describe('upload size bound', () => {
     await expect(
       storage.upload({ key: 'str.txt', body: 'héllo' as unknown as Buffer, contentType: 'text/plain' }),
     ).resolves.toMatchObject({ size: 6 })
+    expect(putBodies).toHaveLength(1)
+    expect(putBodies[0]?.equals(Buffer.from('héllo', 'utf8'))).toBe(true)
   })
 
   it('uses a buffer\'s own length, not a larger size its caller declared, for strategy and result', async () => {
@@ -256,6 +266,8 @@ describe('upload size bound', () => {
 
     expect(result).toMatchObject({ multipart: false, size: 10 })
     expect(calls).toEqual(['PUT ?x-id=PutObject'])
+    expect(putBodies).toHaveLength(1)
+    expect(putBodies[0]?.length).toBe(10)
   })
 
   it('sends the whole buffer when its caller declared a smaller size', async () => {
@@ -270,6 +282,8 @@ describe('upload size bound', () => {
     })
 
     expect(result).toMatchObject({ size: 3 * MIB })
+    expect(putBodies).toHaveLength(1)
+    expect(putBodies[0]?.length).toBe(3 * MIB)
   })
 
   it('still uploads a stream that stays within the limit', async () => {
