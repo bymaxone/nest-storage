@@ -331,7 +331,9 @@ describe('abortSignal', () => {
 
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
     expect(detailsOf(error)).toMatchObject({ abort: 'completed' })
-    expect(calls).toContain('DELETE ?uploadId=u1')
+    // Once, not again when the id turns up: the cleanup that found it is the only one.
+    await sleep(100)
+    expect(calls.filter((call) => call === 'DELETE ?uploadId=u1')).toHaveLength(1)
     expect(calls.some((call) => call.startsWith('PUT ?partNumber'))).toBe(false)
   })
 
