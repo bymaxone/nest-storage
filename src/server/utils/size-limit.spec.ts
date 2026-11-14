@@ -42,6 +42,14 @@ describe('withSizeLimit', () => {
     expect(source.destroyed).toBe(true)
   })
 
+  it('names itself and states the limit in its message', () => {
+    // A log line or a caller reading the error sees the limit; the name tells it from other read errors.
+    const error = new SizeLimitError(4, 'max')
+
+    expect(error.name).toBe('SizeLimitError')
+    expect(error.message).toBe('The upload body is longer than 4 bytes')
+  })
+
   it('counts a string chunk in bytes, not characters', async () => {
     // A source in string mode delivers text; three 3-byte characters are 9 bytes.
     const source = Readable.from(['€€€'])
