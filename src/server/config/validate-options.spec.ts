@@ -212,6 +212,12 @@ describe('validateOptions', () => {
         'https:\t//AKIAEXAMPLE@cdn.example.com',
         'https://AKIAEXAMPLE\t@cdn.example.com',
         ' AKIAEXAMPLE:SECRETEXAMPLE@cdn.example.com:8443',
+        // Values a URL parser reads without a user, so only the string reading of the authority refuses them.
+        'abc:/AKIAEXAMPLE@cdn.example.com',
+        '  abc:/AKIAEXAMPLE@cdn.example.com',
+        '\u0001 abc:/AKIAEXAMPLE@cdn.example.com',
+        'ab\nc:/AKIAEXAMPLE@cdn.example.com',
+        'AKIAEXAMPLE@',
       ]) {
         const reason = reasonOf(() => {
           validateOptions({ ...valid, [name]: value })
@@ -234,11 +240,28 @@ describe('validateOptions', () => {
       'https://cdn.example.com/media/a@b',
       'https://cdn.example.com?mail=a@b',
       'https://cdn.example.com#@x',
+      // Only leading spaces and control characters are dropped, so a space inside is no scheme.
+      'ab c:/x@y',
     ]) {
       expect(() => {
         validateOptions({ ...valid, [name]: value })
       }).not.toThrow()
     }
+  })
+
+  it.each([
+    ['requestTimeoutMs', 1, false],
+    ['uploadIdleTimeoutMs', 0, true],
+    ['bodyIdleTimeoutMs', 0, true],
+  ] as const)('should state the range of %s, and that 0 disables the guard only where it does', (name, min, zeroAllowed) => {
+    // A reader fixing a rejected option needs the exact range; promising 0 where it is refused would mislead.
+    const reason = reasonOf(() => {
+      validateOptions({ ...valid, [name]: -1 })
+    })
+
+    expect(reason).toBe(
+      `${name} must be an integer from ${String(min)} to 2147483647` + (zeroAllowed ? ' (0 disables the guard)' : ''),
+    )
   })
 
   it.each(['requestTimeoutMs', 'uploadIdleTimeoutMs', 'bodyIdleTimeoutMs'])(

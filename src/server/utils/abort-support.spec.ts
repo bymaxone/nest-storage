@@ -10,7 +10,7 @@ import {
 } from '@aws-sdk/client-s3'
 import { MAX_TIMER_MS } from '../constants/timer.constants'
 import { getEventListeners } from 'node:events'
-import { abortable, bindToSignal, CLEANUP_DEADLINE_MS, sendOptions, within } from './abort-support'
+import { abortable, bindToSignal, CLEANUP_DEADLINE_MS, sendOptions, throwIfAborted, within } from './abort-support'
 
 describe('abort-support', () => {
   it('keeps the cleanup deadline within what a timer can hold', () => {
@@ -25,6 +25,31 @@ describe('abort-support', () => {
 
     expect(sendOptions(signal)).toEqual({ abortSignal: signal })
     expect(sendOptions(undefined)).toBeUndefined()
+  })
+
+  describe('throwIfAborted', () => {
+    it('throws the typed error with the context and the reason once the signal has aborted', () => {
+      // The call must end before any request, and say which call and why.
+      const signal = AbortSignal.abort(new DOMException('x', 'TimeoutError'))
+
+      let thrown: unknown
+      try {
+        throwIfAborted(signal, { key: 'k', op: 'head' })
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
+      const body = (thrown as { getResponse: () => { error: { details: unknown } } }).getResponse()
+      expect(body.error.details).toEqual({ key: 'k', op: 'head', reason: 'TimeoutError' })
+    })
+
+    it('does nothing without a signal or while the signal has not aborted', () => {
+      expect(() => {
+        throwIfAborted(undefined, {})
+        throwIfAborted(new AbortController().signal, {})
+      }).not.toThrow()
+    })
   })
 
   describe('bindToSignal', () => {
@@ -91,6 +116,18 @@ describe('abort-support', () => {
     it('returns what settles in time', async () => {
       // A promise that is already settled is not held back by the deadline.
       expect(await within(Promise.resolve(5), 1000)).toBe(5)
+    })
+
+    it('leaves no timer behind once what it waits for has settled', async () => {
+      // A cleanup that finished at once must not keep the process alive until its deadline.
+      jest.useFakeTimers()
+      try {
+        await within(Promise.resolve(1), 10_000)
+
+        expect(jest.getTimerCount()).toBe(0)
+      } finally {
+        jest.useRealTimers()
+      }
     })
 
     it('gives up on what does not settle in time', async () => {

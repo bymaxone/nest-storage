@@ -217,6 +217,16 @@ describe('abortSignal', () => {
     expect(calls).toEqual([])
   })
 
+  it('names the key, the bucket and the operation of an upload refused before any request', async () => {
+    const service = await storage()
+
+    const error: unknown = await service
+      .upload({ key: 'k', body: Buffer.from('x'), contentType: 'x/y', abortSignal: AbortSignal.abort() })
+      .catch((err: unknown) => err)
+
+    expect(detailsOf(error)).toMatchObject({ key: 'k', bucket: 'b', op: 'upload' })
+  })
+
   it('names the reason by its type and never repeats its message', async () => {
     // A host tells its own timeout from a client disconnect by the name; the message is its business.
     const service = await storage()
@@ -287,7 +297,13 @@ describe('abortSignal', () => {
     const error = await pending
 
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
-    expect(detailsOf(error)).toMatchObject({ reason: 'AbortError', abort: 'completed' })
+    expect(detailsOf(error)).toMatchObject({
+      reason: 'AbortError',
+      abort: 'completed',
+      key: 'k',
+      bucket: 'b',
+      op: 'upload-multipart',
+    })
     expect(calls).toContain('DELETE ?uploadId=u1')
     expect(calls).not.toContain('POST ?uploadId=u1')
     // The part request that was held open is dropped, not left for the provider to time out.
@@ -407,8 +423,36 @@ describe('abortSignal', () => {
     const error = await Promise.race([pending, sleep(3000).then(() => 'STILL_PENDING')])
 
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
+    expect(detailsOf(error)).toMatchObject({ key: 'k', bucket: 'b', op: 'upload' })
     expect(body.destroyed).toBe(true)
     expect(calls).toEqual([])
+  })
+
+  it('ends a multipart upload at once when the signal fires while the body is silent between parts', async () => {
+    // No request is in flight then, so only the upload's own abort can end the wait; without it the
+    // call would last until the idle guard fires.
+    const service = await storageWith({ uploadIdleTimeoutMs: 20_000 })
+    const controller = new AbortController()
+    let pulled = 0
+    const body = new Readable({
+      read() {
+        if (pulled < 12) {
+          pulled += 1
+          this.push(Buffer.alloc(MIB, 7))
+        }
+      },
+    })
+    const pending = service
+      .upload({ key: 'k', body, contentType: 'x/y', abortSignal: controller.signal })
+      .catch((err: unknown) => err)
+    for (let i = 0; i < 100 && pulled < 12; i += 1) await sleep(25)
+    await sleep(300)
+    controller.abort()
+
+    const error = await Promise.race([pending, sleep(3000).then(() => 'STILL_PENDING')])
+
+    expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
+    expect(body.destroyed).toBe(true)
   })
 
   it('leaves no listener on a signal reused across a completed, a failed and an aborted call', async () => {

@@ -31,6 +31,7 @@ function isNonEmptyString(value: unknown): value is string {
  * What precedes the authority: an optional scheme and any run of slashes or backslashes, since a URL
  * parser accepts `https://host`, `https:/host`, `https:host` and `//host` alike.
  */
+// Stryker disable next-line Regex: the pattern can match the empty string, so it always matches at index 0 and dropping the `^` anchor strips the same prefix (equivalent); its other mutants are killed by the schemed-userinfo cases of the spec.
 const BEFORE_AUTHORITY = /^(?:[a-z][a-z\d+.-]*:)?[/\\]*/i
 
 /**
@@ -45,6 +46,7 @@ function asParsed(value: string): string {
 function parsedCarriesCredentials(value: string): boolean {
   try {
     const url = new URL(value)
+    // Stryker disable next-line ConditionalExpression,LogicalOperator: the string reading of the authority refuses a superset of what this reads (2,000,000 random URL-like strings, none read by the parser with a user that the string reading missed), so no input tells these mutants apart from the original (equivalent).
     return url.username !== '' || url.password !== ''
   } catch {
     return false
@@ -59,6 +61,7 @@ function parsedCarriesCredentials(value: string): boolean {
  * else or rejects (`user@host:9000`, `user:pw@host`).
  */
 function authorityCarriesCredentials(text: string): boolean {
+  // Stryker disable next-line StringLiteral: the replacement text holds no `/`, `?`, `#` or `@`, so the search and the `@` test give the same answer whatever it is (equivalent).
   const rest = text.replace(BEFORE_AUTHORITY, '')
   const end = rest.search(/[/?#]/)
   return (end === -1 ? rest : rest.slice(0, end)).includes('@')

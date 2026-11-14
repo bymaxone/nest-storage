@@ -627,6 +627,7 @@ export class StorageService {
     const abortUpload = (): void => {
       void uploader.abort()
     }
+    // Stryker disable next-line BooleanLiteral,ObjectLiteral: the listener is removed in the `finally` below and a signal aborts once, so whether it removes itself on firing is not observable (equivalent).
     signal?.addEventListener('abort', abortUpload, { once: true })
     try {
       const response = await uploader.done()

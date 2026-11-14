@@ -181,6 +181,7 @@ export async function abortable<T>(
       () => {
         reject(requestAborted(signal, context))
       },
+      // Stryker disable next-line BooleanLiteral: `release.abort()` in the `finally` removes the listener, and a signal aborts once, so `once` is not observable (equivalent).
       { once: true, signal: release.signal },
     )
   })
