@@ -76,6 +76,13 @@ jobs:
           done
           echo "Both subpaths produced ESM + CJS + .d.ts + .d.cts"
 
+      - name: Published surface
+        # The README snippets are compiled against the built package, and its links, its CHANGELOG
+        # sections and its tags are cross-checked. The release build runs this gate too, so a
+        # snippet that does not compile has to fail the pull request that introduces it, not the
+        # release.
+        run: pnpm check:published
+
       - name: Verify published type resolution
         # A source-level typecheck compiles `src`, so it cannot catch a broken
         # `exports` map: a consumer resolving through the packed tarball may

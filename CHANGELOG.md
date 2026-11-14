@@ -71,6 +71,16 @@ note on each entry is the compatibility contract — read it, not the number.
   moves. A host that matches `504` or `502` to retry must match `503`, and one that maps
   `STORAGE_PROVIDER_ERROR` to a fixed status by code must read `error.getStatus()` instead.
 
+- **Development and CI tooling updated; the published code does not change by it.** The release
+  workflow follows the organisation's template: the build job installs, runs the gates and packs the
+  tarball once without a credential, and the publish job, which holds the token and runs no code
+  from the package, publishes only that tarball after checking its digest. `glob` and `minimatch`
+  are raised above their advisory floors, so their OSV ignores are gone, the timing assertions of
+  the test suite no longer depend on how loaded the machine is, and the pull request check now
+  compiles the README snippets against the built package, as the release already did.
+
+  **Apply to a derived backend:** nothing to change.
+
 ### Fixed
 
 - **`requestTimeoutMs`, `uploadIdleTimeoutMs` and `bodyIdleTimeoutMs` are refused above 2147483647.**
