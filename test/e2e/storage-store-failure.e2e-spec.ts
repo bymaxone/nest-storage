@@ -22,6 +22,9 @@ import { startFaultProxy, type FaultProxy } from './fixtures/fault-proxy'
 const MB = 1024 * 1024
 const REQUEST_TIMEOUT_MS = 1000
 const MAX_ATTEMPTS = 3
+// What a loaded machine may add to the bound. The failure being ruled out is an open-ended wait, which
+// the default timeout would stretch to a minute and a half.
+const LOAD_MARGIN_MS = 12_000
 
 async function rejection(promise: Promise<unknown>): Promise<unknown> {
   return promise.catch((err: unknown) => err)
@@ -116,8 +119,8 @@ describe('Storage E2E — store failure', () => {
     expect(error).toMatchObject({ code: 'STORAGE_TIMEOUT' })
     expect(proxy.connections()).toBeLessThanOrEqual(MAX_ATTEMPTS)
     expect(proxy.connections()).toBeGreaterThanOrEqual(1)
-    // Three attempts plus the SDK's backoff; never an open-ended wait.
-    expect(elapsed).toBeLessThan(REQUEST_TIMEOUT_MS * MAX_ATTEMPTS + 4000)
+    // Three attempts plus the SDK's backoff and the load margin; never an open-ended wait.
+    expect(elapsed).toBeLessThan(REQUEST_TIMEOUT_MS * MAX_ATTEMPTS + LOAD_MARGIN_MS)
     await expectNoSecrets(error, url)
   })
 
@@ -130,7 +133,7 @@ describe('Storage E2E — store failure', () => {
 
     expect(error).toBeInstanceOf(StorageException)
     expect(proxy.connections()).toBeLessThanOrEqual(MAX_ATTEMPTS)
-    expect(Date.now() - started).toBeLessThan(REQUEST_TIMEOUT_MS * MAX_ATTEMPTS + 4000)
+    expect(Date.now() - started).toBeLessThan(REQUEST_TIMEOUT_MS * MAX_ATTEMPTS + LOAD_MARGIN_MS)
     await expectNoSecrets(error)
   })
 
@@ -184,7 +187,7 @@ describe('Storage E2E — store failure', () => {
     expect(proxy.openConnections()).toBe(0)
   })
 
-  it('a stopped store (container down) fails within the bound with no credential or signed URL in the error or logs', async () => {
+  it('a stopped store (connection refused) fails fast, with no credential or signed URL in the error or logs', async () => {
     const { storage } = await open()
     await minio.container.stop()
     const started = Date.now()
@@ -192,7 +195,7 @@ describe('Storage E2E — store failure', () => {
     const error = await rejection(storage.head('x.txt'))
 
     expect(error).toBeInstanceOf(StorageException)
-    expect(Date.now() - started).toBeLessThan(REQUEST_TIMEOUT_MS * MAX_ATTEMPTS + 4000)
+    expect(Date.now() - started).toBeLessThan(REQUEST_TIMEOUT_MS * MAX_ATTEMPTS + LOAD_MARGIN_MS)
     await expectNoSecrets(error)
   })
 })

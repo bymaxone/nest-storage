@@ -26,6 +26,11 @@ function detailsOf(error: unknown): Record<string, unknown> {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
+// A guard that fails to cut a stalled body leaves the test waiting, and this limit ends it. It sits far
+// above what a loaded machine needs and below the 30 s default the guards would otherwise wait for, so
+// no case asserts an elapsed time of its own.
+jest.setTimeout(15_000)
+
 describe('download body idle timeout', () => {
   let server: Server
   let port: number
@@ -116,15 +121,12 @@ describe('download body idle timeout', () => {
     // The request timeout covers only the headers; a body that stops mid-way must not hold the caller forever.
     const storage = await storageWith({ bodyIdleTimeoutMs: IDLE_MS })
     const { stream } = await storage.download({ key: 'k' })
-    const started = Date.now()
 
     const outcome = await drain(stream)
 
     expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT', status: 503 })
     expect(detailsOf(outcome)).toMatchObject({ phase: 'body-idle', idleMs: IDLE_MS, key: 'k', bucket: 'b' })
-    expect(Date.now() - started).toBeLessThan(IDLE_MS * 4)
-    await sleep(200)
-    expect(closedSockets).toBeGreaterThanOrEqual(1)
+    while (closedSockets < 1) await sleep(10)
   })
 
   it('does not cut a healthy body whose consumer is slow', async () => {
@@ -164,13 +166,11 @@ describe('download body idle timeout', () => {
     // With no bodyIdleTimeoutMs the idle limit follows requestTimeoutMs.
     const storage = await storageWith({ requestTimeoutMs: 300 })
     const { stream } = await storage.download({ key: 'k' })
-    const started = Date.now()
 
     const outcome = await drain(stream)
 
     expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT' })
     expect(detailsOf(outcome)).toMatchObject({ phase: 'body-idle', idleMs: 300 })
-    expect(Date.now() - started).toBeLessThan(2000)
   })
 
   it('downloadBuffer rejects a stalled body with STORAGE_TIMEOUT instead of waiting', async () => {

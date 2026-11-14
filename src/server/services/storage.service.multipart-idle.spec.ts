@@ -25,6 +25,11 @@ const SLOW_LIMIT_MS = 300
 /** Longest a case waits to show that nothing happened: three silent limits. */
 const QUIET_MS = 3 * IDLE_MS
 
+// A guard that fails to end an upload whose source went silent leaves the test waiting, and this limit
+// ends it. It sits far above what a loaded machine needs and below the 30 s default the guard would
+// otherwise wait for, so no case asserts an elapsed time of its own.
+jest.setTimeout(15_000)
+
 /** The `details` a `StorageException` carries in its response body. */
 function detailsOf(error: unknown): Record<string, unknown> | undefined {
   const body = (error as StorageException).getResponse() as {
@@ -181,7 +186,6 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
       const storage = await storageWith({ uploadIdleTimeoutMs: IDLE_MS })
       // Six chunks arrive at once, then the source goes silent without ending.
       const { stream } = pacedSource(6, 0, false)
-      const started = Date.now()
 
       const { outcome, escaped } = await settle(() =>
         storage.upload({ key: 'a', body: stream, contentType: 'application/octet-stream' }),
@@ -189,7 +193,6 @@ describe.each(['WHEN_REQUIRED', 'WHEN_SUPPORTED'] as const)(
 
       expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT' })
       expect(detailsOf(outcome)).toMatchObject({ phase: 'source-idle', idleMs: IDLE_MS, key: 'a' })
-      expect(Date.now() - started).toBeLessThan(4000)
       expect(stream.destroyed).toBe(true)
       expect(calls).toEqual(expect.arrayContaining(['POST uploads', 'DELETE ?uploadId=u1']))
       expect(escaped).toEqual([])

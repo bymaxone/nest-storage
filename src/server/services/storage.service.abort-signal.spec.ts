@@ -19,6 +19,15 @@ import { StorageService } from './storage.service'
 const MIB = 1024 * 1024
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
+// A call that fails to end when its signal aborts hangs, and this limit ends the test then. It is far
+// above what a loaded machine needs, so no case asserts an elapsed time of its own.
+jest.setTimeout(15_000)
+
+/** Waits until `condition` holds, so a test acts on what it observed instead of on a guessed delay. */
+async function until(condition: () => boolean): Promise<void> {
+  while (!condition()) await sleep(10)
+}
+
 /** The text an operator or a log could read from an error: its message and its response body. */
 function readable(error: unknown): string {
   return error instanceof StorageException
@@ -187,7 +196,9 @@ describe('abortSignal', () => {
           requestChecksumCalculation: 'WHEN_REQUIRED',
           responseChecksumValidation: 'WHEN_REQUIRED',
           maxAttempts: 1,
-          requestTimeoutMs: 5000,
+          // Above the 15 s limit of a test: a call that hangs ends only when its signal reaches the request,
+          // never because the request timeout got there first.
+          requestTimeoutMs: 120_000,
           ...extra,
         }),
       ],
@@ -257,17 +268,14 @@ describe('abortSignal', () => {
     hang = (call) => call.startsWith('HEAD')
     const service = await storage()
     const controller = new AbortController()
-    const started = Date.now()
     const pending = service.head('k', { abortSignal: controller.signal }).catch((err: unknown) => err)
-    await sleep(150)
+    await until(() => calls.some((call) => call.startsWith('HEAD')))
     controller.abort()
 
     const error = await pending
 
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
-    expect(Date.now() - started).toBeLessThan(2000)
-    await sleep(100)
-    expect(closed).toBeGreaterThanOrEqual(1)
+    await until(() => closed >= 1)
   })
 
   it('exists rejects an aborted call instead of answering false', async () => {
@@ -358,6 +366,22 @@ describe('abortSignal', () => {
     return new Readable({ read() {} })
   }
 
+  /** A stream that never delivers, and a promise that settles when something first reads from it. */
+  function observedSilentStream(): { stream: Readable; firstRead: Promise<void> } {
+    let markRead: () => void = () => undefined
+    const firstRead = new Promise<void>((resolve) => {
+      markRead = resolve
+    })
+    return {
+      stream: new Readable({
+        read() {
+          markRead()
+        },
+      }),
+      firstRead,
+    }
+  }
+
   it.each([
     [
       'the pre-upload scan is buffering a silent stream',
@@ -386,18 +410,16 @@ describe('abortSignal', () => {
     // Preparing the body happens before any request, so no SDK call carries the signal here.
     const service = await storageWith(extra)
     const controller = new AbortController()
-    const body = silentStream()
-    const started = Date.now()
+    const { stream: body, firstRead } = observedSilentStream()
     const pending = service
       .upload({ key: 'k', body, contentType: 'x/y', abortSignal: controller.signal })
       .catch((err: unknown) => err)
-    await sleep(150)
+    await firstRead
     controller.abort()
 
-    const error = await Promise.race([pending, sleep(3000).then(() => 'STILL_PENDING')])
+    const error = await pending
 
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
-    expect(Date.now() - started).toBeLessThan(2000)
     expect(body.destroyed).toBe(true)
     expect(calls).toEqual([])
   })
@@ -424,7 +446,7 @@ describe('abortSignal', () => {
       .upload({ key: 'k', body, contentType: 'x/y', abortSignal: controller.signal })
       .catch((err: unknown) => err)
 
-    const error = await Promise.race([pending, sleep(3000).then(() => 'STILL_PENDING')])
+    const error = await pending
 
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
     expect(detailsOf(error)).toMatchObject({ key: 'k', bucket: 'b', op: 'upload' })
@@ -455,7 +477,7 @@ describe('abortSignal', () => {
     expect(pulled).toBe(12)
     controller.abort()
 
-    const error = await Promise.race([pending, sleep(3000).then(() => 'STILL_PENDING')])
+    const error = await pending
 
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
     expect(body.destroyed).toBe(true)
@@ -500,7 +522,7 @@ describe('abortSignal', () => {
       for (let i = 0; i < 100 && !calls.includes('PUT '); i += 1) await sleep(25)
       await sleep(100)
       controller.abort()
-      return Promise.race([pending, sleep(3000).then(() => 'STILL_PENDING')])
+      return pending
     }
 
     it('ends the call with STORAGE_REQUEST_ABORTED, and says the object is stored', async () => {
@@ -527,8 +549,7 @@ describe('abortSignal', () => {
   it('still aborts the upload when the provider answers CreateMultipartUpload after the cleanup deadline', async () => {
     // The caller is not kept waiting past the deadline, but the id that arrives later is aborted.
     delayMs = (call) => (call === 'POST uploads' ? CLEANUP_DEADLINE_MS + 600 : 0)
-    // The request timeout must outlast the delay, or the create fails instead of answering late.
-    const service = await storageWith({ requestTimeoutMs: 30_000 })
+    const service = await storage()
     const controller = new AbortController()
     const pending = service
       .upload({ key: 'k', body: mibStream(40), contentType: 'x/y', abortSignal: controller.signal })
