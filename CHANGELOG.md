@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.12] - 2026-11-14
+
 ### Added
 
 - **`abortSignal` ends a call.** `upload`, `download`, `downloadBuffer`, `list`, `head`, `exists`,
@@ -823,4 +825,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.9]: https://github.com/bymaxone/nest-storage/compare/v1.1.8...v1.1.9
 [1.1.10]: https://github.com/bymaxone/nest-storage/compare/v1.1.9...v1.1.10
 [1.1.11]: https://github.com/bymaxone/nest-storage/compare/v1.1.10...v1.1.11
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.11...HEAD
+[1.1.12]: https://github.com/bymaxone/nest-storage/compare/v1.1.11...v1.1.12
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.12...HEAD
