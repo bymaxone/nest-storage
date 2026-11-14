@@ -430,15 +430,14 @@ await this.storage.upload({ key, body, contentType, abortSignal: controller.sign
 - An **upload** that is aborted mid-flight drops its request. For a multipart upload the library
   aborts it on the provider (`AbortMultipartUpload`) so no part stays stored, and `details.abort`
   says whether that worked. That cleanup runs with a deadline of its own (10 seconds), never the
-  caller's signal, which would cancel it. A request that does not complete creates no object on S3.
+  caller's signal, which would cancel it.
   As with any rejected upload, **a stream you passed as `body` is destroyed**.
 - A **download** body that is being read when the signal aborts errors as `STORAGE_REQUEST_ABORTED`
   while the idle guard is on (the default `bodyIdleTimeoutMs`); with `bodyIdleTimeoutMs: 0` it
   errors as the raw `AbortError`.
 - The library keeps no listener on your signal after a call, so one signal can be reused across many
   calls. (The AWS SDK holds one for the length of a request and releases it as the connection closes.)
-- `copy`, `deleteMany` and the signed-URL methods take no `abortSignal`: the first two are one
-  server-side request, and signing makes none.
+- `copy`, `deleteMany` and the signed-URL methods take no `abortSignal`.
 
 ---
 

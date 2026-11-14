@@ -60,8 +60,7 @@ note on each entry is the compatibility contract — read it, not the number.
   Each feeds a timer, and Node clamps a timer above 2**31 - 1 milliseconds to 1 ms, so a larger value
   made every request or read fail at once instead of waiting longer. `validateOptions` now throws
   `STORAGE_INVALID_CONFIG` naming the option for a value above the ceiling (about 24.8 days); the
-  ceiling itself is accepted. The cleanup deadline of an aborted call (10 seconds) is checked
-  against the same ceiling.
+  ceiling itself is accepted.
 
   **Apply to a derived backend:** if you set one of these three above `2147483647` (to mean "very
   long"), lower it, or for the two idle guards use `0` to turn the guard off; the module now refuses
