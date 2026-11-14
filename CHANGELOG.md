@@ -23,7 +23,9 @@ note on each entry is the compatibility contract — read it, not the number.
   (`details.abort` reports the outcome); a download body being read errors as the same
   code while the idle guard is on, and as the raw `AbortError` with `bodyIdleTimeoutMs: 0`. The
   library adds no listener to the signal that outlives the call, so one signal can be reused.
-  `exists` rejects an aborted call instead of answering `false`.
+  `exists` rejects an aborted call instead of answering `false`. An abort during a post-upload scan
+  ends the call with `details.stored: true` (the object is stored; the scan carries on and still
+  deletes an infected one).
 
   **Apply to a derived backend:** nothing changes unless you pass a signal. The new code is part of
   the shared `STORAGE_ERROR_CODES` table: a host that maps every code exhaustively needs a case for

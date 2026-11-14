@@ -48,3 +48,22 @@ export async function closeMultipartUpload(
     return { abort: 'failed', abortError: describeError(err) }
   }
 }
+
+/**
+ * Aborts the upload that a `CreateMultipartUpload` still in flight creates, once it answers. For a
+ * caller that gave up waiting for the id: the provider may answer after that and the upload it
+ * created would otherwise stay open for ever.
+ *
+ * @param client - The S3 client.
+ * @param bucket - The bucket of the upload.
+ * @param key - The final object key.
+ * @param created - The id the create answers with, or `undefined` if it fails; it never rejects.
+ */
+export function closeWhenCreated(
+  client: S3Client,
+  bucket: string,
+  key: string,
+  created: Promise<string | undefined>,
+): void {
+  void created.then((uploadId) => closeMultipartUpload(client, bucket, key, uploadId))
+}

@@ -38,7 +38,7 @@ import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
 import { withCleanupFailure } from '../errors/scan-cleanup-error'
-import { closeMultipartUpload } from '../utils/multipart-abort'
+import { closeMultipartUpload, closeWhenCreated } from '../utils/multipart-abort'
 import { deleteObjectsChunk } from '../utils/delete-objects'
 import { mapBucketCheckError } from '../errors/bucket-check-error-mapper'
 import { describeError } from '../utils/describe-error'
@@ -201,15 +201,12 @@ export class StorageService {
         ? await this.uploadMultipart(validatedOptions, finalKey, bucket)
         : await this.uploadSingleShot(validatedOptions, finalKey, bucket)
 
-    // Post-upload scan: runs after the object is written; infected → delete and re-throw.
-    await this.runPostUploadScan(finalKey, bucket, options)
+    // Post-upload scan: runs after the object is written; infected → delete and re-throw. An abort ends
+    // the wait, not the scan: the object is stored, and an infected one is still deleted.
+    const stored = { ...context, stored: true }
+    await abortable(this.runPostUploadScan(finalKey, bucket, options), signal, stored)
 
-    if (options.idempotencyKey) {
-      this.idempotencyCache.set(
-        this.idempotencyCache.computeKey(options.idempotencyKey, finalKey),
-        result,
-      )
-    }
+    this.rememberUpload(options, finalKey, result)
     return result
   }
 
@@ -267,6 +264,15 @@ export class StorageService {
       contentType: options.contentType,
       ...(options.size !== undefined ? { size: options.size } : {}),
     })
+  }
+
+  /** Remembers the result of an upload under its idempotency key, when it has one. */
+  private rememberUpload(options: UploadOptions, finalKey: string, result: UploadResult): void {
+    if (!options.idempotencyKey) return
+    this.idempotencyCache.set(
+      this.idempotencyCache.computeKey(options.idempotencyKey, finalKey),
+      result,
+    )
   }
 
   /**
@@ -638,17 +644,15 @@ export class StorageService {
     // Decided before the cleanup, which can take a while: a signal that fires during it must not turn
     // a real failure into an abort.
     const abortedBy = upload.signal?.aborted === true ? upload.signal : undefined
-    const uploadId =
-      upload.uploadId ??
-      (abortedBy && upload.createdUploadId
-        ? await within(upload.createdUploadId(), CLEANUP_DEADLINE_MS)
-        : undefined)
-    const abort = await closeMultipartUpload(
-      this.s3Provider.getClient(),
-      bucket,
-      finalKey,
-      uploadId,
-    )
+    const client = this.s3Provider.getClient()
+    const lookup = abortedBy ? upload.createdUploadId?.() : undefined
+    let uploadId = upload.uploadId
+    if (uploadId === undefined && lookup) {
+      uploadId = await within(lookup, CLEANUP_DEADLINE_MS)
+      // The caller does not wait longer, but an id that arrives later is still aborted.
+      if (uploadId === undefined) closeWhenCreated(client, bucket, finalKey, lookup)
+    }
+    const abort = await closeMultipartUpload(client, bucket, finalKey, uploadId)
     const context = { key: finalKey, bucket, op: 'upload-multipart', ...abort }
     throw abortedBy ? requestAborted(abortedBy, context) : mapMultipartError(err, context)
   }

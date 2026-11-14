@@ -430,11 +430,14 @@ await this.storage.upload({ key, body, contentType, abortSignal: controller.sign
 - An **upload** that is aborted mid-flight drops its request. For a multipart upload the library
   aborts it on the provider (`AbortMultipartUpload`), and `details.abort` says whether that
   worked. That cleanup runs with a deadline of its own, never the
-  caller's signal, which would cancel it. A signal that fires while `CreateMultipartUpload` is in flight does not cancel that request, so the upload id it returns can still be aborted (the library waits for it, within the same deadline).
+  caller's signal, which would cancel it. A signal that fires while `CreateMultipartUpload` is in flight does not cancel that request, so the upload id it returns can still be aborted: the library waits for it within the same deadline, and aborts an id that arrives later without keeping the caller waiting.
   As with any rejected upload, **a stream you passed as `body` is destroyed**.
 - **Preparing an upload body is watched too**: while a validator reads the head of a stream, or the
   pre-upload scan buffers it, an abort ends the call at once with the same error and destroys the
   stream, even if the stream never delivers another byte.
+- A **post-upload scan** that is still running when the signal aborts ends the call too, with the
+  same error and `details.stored: true`: the object is already stored. The scan carries on, and an
+  object it finds infected is still deleted.
 - A **download** body that is being read when the signal aborts errors as `STORAGE_REQUEST_ABORTED`
   while the idle guard is on (the default `bodyIdleTimeoutMs`); with `bodyIdleTimeoutMs: 0` it
   errors as the raw `AbortError`.

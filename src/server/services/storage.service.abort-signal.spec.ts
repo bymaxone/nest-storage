@@ -13,6 +13,7 @@ import { Test, type TestingModule } from '@nestjs/testing'
 import { BymaxStorageModule } from '../bymax-storage.module'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 import { StorageException } from '../errors/storage-exception'
+import { CLEANUP_DEADLINE_MS } from '../utils/abort-support'
 import { StorageService } from './storage.service'
 
 const MIB = 1024 * 1024
@@ -457,6 +458,89 @@ describe('abortSignal', () => {
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
     expect(body.destroyed).toBe(true)
   })
+
+  describe('a post-upload scan that is still running when the signal fires', () => {
+    /** A scanner whose verdict the test gives when it chooses. */
+    function deferredScanner(): {
+      options: Partial<BymaxStorageModuleOptions>
+      settle: (outcome: 'clean' | 'infected') => void
+    } {
+      let settle: (outcome: 'clean' | 'infected') => void = () => undefined
+      const verdict = new Promise<'clean' | 'infected'>((resolve) => {
+        settle = resolve
+      })
+      return {
+        settle: (outcome) => {
+          settle(outcome)
+        },
+        options: {
+          scanner: {
+            mode: 'post-upload',
+            impl: {
+              scan: async () => {
+                const outcome = await verdict
+                return outcome === 'clean'
+                  ? { status: 'clean' as const, engine: 'e' }
+                  : { status: 'infected' as const, engine: 'e', threat: 't' }
+              },
+            },
+          },
+        },
+      }
+    }
+
+    async function abortedDuringScan(extra: Partial<BymaxStorageModuleOptions>): Promise<unknown> {
+      const service = await storageWith(extra)
+      const controller = new AbortController()
+      const pending = service
+        .upload({ key: 'k', body: Buffer.from('x'), contentType: 'x/y', abortSignal: controller.signal })
+        .catch((err: unknown) => err)
+      for (let i = 0; i < 100 && !calls.includes('PUT '); i += 1) await sleep(25)
+      await sleep(100)
+      controller.abort()
+      return Promise.race([pending, sleep(3000).then(() => 'STILL_PENDING')])
+    }
+
+    it('ends the call with STORAGE_REQUEST_ABORTED, and says the object is stored', async () => {
+      const scanner = deferredScanner()
+
+      const error = await abortedDuringScan(scanner.options)
+      scanner.settle('clean')
+
+      expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
+      expect(detailsOf(error)).toMatchObject({ key: 'k', bucket: 'b', op: 'upload', stored: true })
+    })
+
+    it('still deletes the object when the scan then finds it infected', async () => {
+      const scanner = deferredScanner()
+
+      await abortedDuringScan(scanner.options)
+      scanner.settle('infected')
+      for (let i = 0; i < 40 && !calls.some((call) => call.startsWith('DELETE')); i += 1) await sleep(25)
+
+      expect(calls.some((call) => call.startsWith('DELETE'))).toBe(true)
+    })
+  })
+
+  it('still aborts the upload when the provider answers CreateMultipartUpload after the cleanup deadline', async () => {
+    // The caller is not kept waiting past the deadline, but the id that arrives later is aborted.
+    delayMs = (call) => (call === 'POST uploads' ? CLEANUP_DEADLINE_MS + 600 : 0)
+    // The request timeout must outlast the delay, or the create fails instead of answering late.
+    const service = await storageWith({ requestTimeoutMs: 30_000 })
+    const controller = new AbortController()
+    const pending = service
+      .upload({ key: 'k', body: mibStream(40), contentType: 'x/y', abortSignal: controller.signal })
+      .catch((err: unknown) => err)
+    for (let i = 0; i < 40 && !calls.includes('POST uploads'); i += 1) await sleep(25)
+    controller.abort()
+
+    const error = await pending
+
+    expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
+    expect(calls).not.toContain('DELETE ?uploadId=u1')
+    for (let i = 0; i < 120 && !calls.includes('DELETE ?uploadId=u1'); i += 1) await sleep(25)
+    expect(calls).toContain('DELETE ?uploadId=u1')
+  }, 30_000)
 
   it('leaves no listener on a signal reused across a completed, a failed and an aborted call', async () => {
     const service = await storage()
