@@ -194,7 +194,14 @@ jobs:
           export PACKAGE_TARBALL="$RUNNER_TEMP/gate/$TARBALL"
           pnpm exec attw "$PACKAGE_TARBALL" --profile strict
           pnpm check:runtime
+          # `pnpm size` reads `dist/` and ran in the verify step, together with the published-surface
+          # check. They speak for the tarball only if its `dist/` is that directory, byte for byte, so
+          # that is checked here.
           pnpm size
+          extracted="$RUNNER_TEMP/gate/extracted"
+          mkdir -p "$extracted"
+          tar -xzf "$PACKAGE_TARBALL" -C "$extracted"
+          diff -r dist "$extracted/package/dist"
 
       - name: Upload the package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
