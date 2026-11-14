@@ -27,7 +27,7 @@ describe('assertMaxBytes', () => {
     }).not.toThrow()
   })
 
-  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])('refuses %p before any request', (value) => {
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])('refuses %p', (value) => {
     // Zero, negative, fractional and non-finite limits cannot bound a body.
     expect(refusal(() => {
       assertMaxBytes(value)
