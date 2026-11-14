@@ -37,11 +37,14 @@ const UNREACHABLE_CODES: ReadonlySet<string> = new Set([
 
 /**
  * A network failure that reached the SDK as an error from another realm (a test runner's sandbox, for
- * one) is re-thrown as a wrapper that keeps the message and drops the code, so the code is looked for
- * in the message too. That is only read when there is no HTTP answer: a message the provider wrote
- * belongs to an answer, and may say anything.
+ * one) is re-thrown as a wrapper that keeps the message and drops the code, so the failure is read from
+ * the message too: Node's own wording (`connect ECONNREFUSED 127.0.0.1:9000`, `read ECONNRESET`,
+ * `socket hang up`), at the start of the message or right after the wrapper's prefix. That is only read
+ * when there is no HTTP answer: a message the provider wrote belongs to an answer, and may say anything.
  */
-const UNREACHABLE_IN_MESSAGE = new RegExp(`\\b(?:${[...UNREACHABLE_CODES].join('|')})\\b`)
+const UNREACHABLE_IN_MESSAGE = new RegExp(
+  `^(?:AWS SDK error wrapper for \\w+: )?(?:(?:connect|read|write|getaddrinfo) (?:${[...UNREACHABLE_CODES].join('|')})\\b|socket hang up)`,
+)
 
 /** The SDK's wrapper for the error a dual-stack connection ends with when every address fails. */
 const ADDRESSES_FAILED = 'AWS SDK error wrapper for AggregateError'
@@ -75,7 +78,8 @@ function cutConnection(failure: FailureLike, noAnswer: boolean): boolean {
 export function classifyProviderFailure(err: unknown): ProviderFailure {
   const failure = (err ?? {}) as FailureLike
   const status = failure.$metadata?.httpStatusCode
-  if (cutConnection(failure, status === undefined)) {
+  // The SDK's own timeouts (`requestTimeoutMs`, a socket that went silent) carry this name and no code.
+  if (failure.name === 'TimeoutError' || cutConnection(failure, status === undefined)) {
     return 'unavailable'
   }
   // 501 is the provider saying it does not implement the call: asking again will not change that.

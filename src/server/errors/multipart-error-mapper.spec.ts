@@ -26,6 +26,7 @@ describe('mapMultipartError', () => {
   it.each([
     ['a refused connection', { name: 'Error', code: 'ECONNREFUSED' }, 503],
     ['an answer of 503 SlowDown', { name: 'SlowDown', Code: 'SlowDown', $metadata: { httpStatusCode: 503 } }, 503],
+    ['an SDK timeout, which has a name and no code', { name: 'TimeoutError', message: 'the request socket timed out' }, 503],
     ['refused credentials', { name: 'InvalidAccessKeyId', Code: 'InvalidAccessKeyId', $metadata: { httpStatusCode: 403 } }, 500],
     ['a failure of our own', new Error('boom'), 500],
   ])('answers for %s as the cause says, keeping STORAGE_MULTIPART_ABORTED and the abort outcome', (_label, cause, status) => {

@@ -114,6 +114,18 @@ describe('Storage E2E — status of an unavailable store', () => {
     expect(['STORAGE_MULTIPART_ABORTED', 'STORAGE_TIMEOUT', 'STORAGE_PROVIDER_ERROR']).toContain(result.code)
   })
 
+  it('answers 503 for a multipart upload against a store that never answers', async () => {
+    const storage = await open()
+    proxy.setMode('blackhole')
+    const body = Readable.from([Buffer.alloc(8 * MB, 1)])
+
+    const result = await outcome(
+      storage.upload({ key: 'big.bin', body, contentType: 'application/octet-stream', size: 8 * MB }),
+    )
+
+    expect(result.status).toBe(503)
+  })
+
   it('answers 500 for credentials the store refuses, where the answer says so, and not 503', async () => {
     const storage = await open({
       credentials: { accessKeyId: minio.accessKeyId, secretAccessKey: 'a-wrong-secret' },
