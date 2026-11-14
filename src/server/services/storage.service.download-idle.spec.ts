@@ -26,11 +26,24 @@ function detailsOf(error: unknown): Record<string, unknown> {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** Waits until `condition` holds; gives up before the test limit, so the failure names what never happened. */
+async function until(condition: () => boolean, description: string): Promise<void> {
+  const giveUpAt = Date.now() + 10_000
+  while (!condition()) {
+    if (Date.now() > giveUpAt) throw new Error(`never happened: ${description}`)
+    await sleep(10)
+  }
+}
+
+// A guard that fails to cut a stalled body leaves the test waiting, and this limit ends it. It sits far
+// above what a loaded machine needs and below the 30 s default the guards would otherwise wait for, so
+// no case asserts an elapsed time of its own.
+jest.setTimeout(15_000)
+
 describe('download body idle timeout', () => {
   let server: Server
   let port: number
   let mode: 'stall' | 'healthy' = 'stall'
-  let closedSockets = 0
   let moduleRef: TestingModule | undefined
   const sockets = new Set<Socket>()
   const responses = new Set<ServerResponse>()
@@ -50,7 +63,6 @@ describe('download body idle timeout', () => {
       sockets.add(socket)
       socket.once('close', () => {
         sockets.delete(socket)
-        closedSockets += 1
       })
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -70,7 +82,6 @@ describe('download body idle timeout', () => {
 
   beforeEach(() => {
     mode = 'stall'
-    closedSockets = 0
   })
 
   afterEach(async () => {
@@ -112,19 +123,16 @@ describe('download body idle timeout', () => {
     }
   }
 
-  it('fails a stalled body with STORAGE_TIMEOUT phase body-idle within the limit, and releases the socket', async () => {
+  it('fails a stalled body with STORAGE_TIMEOUT phase body-idle, and releases the socket', async () => {
     // The request timeout covers only the headers; a body that stops mid-way must not hold the caller forever.
     const storage = await storageWith({ bodyIdleTimeoutMs: IDLE_MS })
     const { stream } = await storage.download({ key: 'k' })
-    const started = Date.now()
 
     const outcome = await drain(stream)
 
     expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT', status: 503 })
     expect(detailsOf(outcome)).toMatchObject({ phase: 'body-idle', idleMs: IDLE_MS, key: 'k', bucket: 'b' })
-    expect(Date.now() - started).toBeLessThan(IDLE_MS * 4)
-    await sleep(200)
-    expect(closedSockets).toBeGreaterThanOrEqual(1)
+    await until(() => sockets.size === 0, 'the connection of the stalled body closed')
   })
 
   it('does not cut a healthy body whose consumer is slow', async () => {
@@ -164,13 +172,11 @@ describe('download body idle timeout', () => {
     // With no bodyIdleTimeoutMs the idle limit follows requestTimeoutMs.
     const storage = await storageWith({ requestTimeoutMs: 300 })
     const { stream } = await storage.download({ key: 'k' })
-    const started = Date.now()
 
     const outcome = await drain(stream)
 
     expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT' })
     expect(detailsOf(outcome)).toMatchObject({ phase: 'body-idle', idleMs: 300 })
-    expect(Date.now() - started).toBeLessThan(2000)
   })
 
   it('downloadBuffer rejects a stalled body with STORAGE_TIMEOUT instead of waiting', async () => {

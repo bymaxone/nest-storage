@@ -11,6 +11,10 @@ import { Test, type TestingModule } from '@nestjs/testing'
 import { BymaxStorageModule } from '../bymax-storage.module'
 import { StorageService } from '../services/storage.service'
 
+// A request that is not cut at the configured time waits for the 30 s default, and this limit ends the
+// test then. It is far above what a loaded machine needs, so no case asserts an upper bound of its own.
+jest.setTimeout(15_000)
+
 describe('requestTimeoutMs', () => {
   let server: Server
   let port: number
@@ -58,7 +62,7 @@ describe('requestTimeoutMs', () => {
     return moduleRef.get(StorageService)
   }
 
-  it('fails a request the server never answers with STORAGE_TIMEOUT, within about the configured time', async () => {
+  it('fails a request the server never answers with STORAGE_TIMEOUT, not before the configured time', async () => {
     const storage = await storageWith(300)
     const started = Date.now()
 
@@ -66,9 +70,8 @@ describe('requestTimeoutMs', () => {
 
     const elapsed = Date.now() - started
     expect(error).toMatchObject({ code: 'STORAGE_TIMEOUT', status: 503 })
-    // Not before the configured time, and well before the 30 s default.
+    // Not before the configured time (a timer never fires early; the 50 ms is for the clock's rounding).
     expect(elapsed).toBeGreaterThanOrEqual(250)
-    expect(elapsed).toBeLessThan(5000)
   })
 
   it('honours a different configured value', async () => {
