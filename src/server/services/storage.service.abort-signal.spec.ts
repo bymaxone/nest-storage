@@ -23,9 +23,17 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 // above what a loaded machine needs, so no case asserts an elapsed time of its own.
 jest.setTimeout(15_000)
 
-/** Waits until `condition` holds, so a test acts on what it observed instead of on a guessed delay. */
-async function until(condition: () => boolean): Promise<void> {
-  while (!condition()) await sleep(10)
+/**
+ * Waits until `condition` holds, so a test acts on what it observed instead of on a guessed delay. It
+ * gives up before the test limit, so a condition that never holds fails the test with its own message
+ * and does not leave a polling loop running behind it.
+ */
+async function until(condition: () => boolean, description: string): Promise<void> {
+  const giveUpAt = Date.now() + 10_000
+  while (!condition()) {
+    if (Date.now() > giveUpAt) throw new Error(`never happened: ${description}`)
+    await sleep(10)
+  }
 }
 
 /** The text an operator or a log could read from an error: its message and its response body. */
@@ -77,7 +85,6 @@ describe('abortSignal', () => {
   let server: Server
   let port: number
   let calls: string[] = []
-  let closed = 0
   /** Requests the client cut off before the stand-in answered them, by `METHOD search`. */
   let dropped: string[] = []
   /** Requests for which the stand-in never answers, picked by `METHOD search`. */
@@ -116,7 +123,6 @@ describe('abortSignal', () => {
       sockets.add(socket)
       socket.once('close', () => {
         sockets.delete(socket)
-        closed += 1
       })
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -166,7 +172,6 @@ describe('abortSignal', () => {
 
   beforeEach(() => {
     calls = []
-    closed = 0
     dropped = []
     hang = () => false
     fail = () => false
@@ -269,13 +274,13 @@ describe('abortSignal', () => {
     const service = await storage()
     const controller = new AbortController()
     const pending = service.head('k', { abortSignal: controller.signal }).catch((err: unknown) => err)
-    await until(() => calls.some((call) => call.startsWith('HEAD')))
+    await until(() => calls.some((call) => call.startsWith('HEAD')), 'the HEAD reached the stand-in')
     controller.abort()
 
     const error = await pending
 
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
-    await until(() => closed >= 1)
+    await until(() => sockets.size === 0, 'the connection of the dropped request closed')
   })
 
   it('exists rejects an aborted call instead of answering false', async () => {
@@ -454,7 +459,7 @@ describe('abortSignal', () => {
     expect(calls).toEqual([])
   })
 
-  it('ends a multipart upload within 3 s when the signal fires while its body is silent', async () => {
+  it('ends a multipart upload with STORAGE_REQUEST_ABORTED when the signal fires while its body is silent', async () => {
     // Nothing more arrives from the body, so the upload's own abort is what ends the wait; without it the
     // call would last until the idle guard fires.
     const service = await storageWith({ uploadIdleTimeoutMs: 20_000 })
@@ -594,25 +599,24 @@ describe('abortSignal', () => {
     const service = await storage()
     const controller = new AbortController()
     const { stream } = await service.download({ key: 'k', abortSignal: controller.signal })
+    let received = 0
     const reading = (async (): Promise<unknown> => {
       try {
-        let bytes = 0
         for await (const chunk of stream) {
-          bytes += chunk.length
+          received += chunk.length
         }
-        return bytes
+        return received
       } catch (err) {
         return err
       }
     })()
-    await sleep(150)
+    await until(() => received > 0, 'the first bytes of the body arrived')
     controller.abort()
 
     const outcome = await reading
 
     expect(outcome).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
     expect(detailsOf(outcome)).toMatchObject({ reason: 'AbortError', key: 'k', bucket: 'b' })
-    await sleep(100)
-    expect(closed).toBeGreaterThanOrEqual(1)
+    await until(() => sockets.size === 0, 'the connection of the stalled body closed')
   })
 })

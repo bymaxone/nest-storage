@@ -107,7 +107,7 @@ describe('Storage E2E — store failure', () => {
     await Promise.resolve()
   }
 
-  it('a hung store ends in STORAGE_TIMEOUT within requestTimeoutMs x maxAttempts, no more attempts than allowed', async () => {
+  it('a hung store ends in STORAGE_TIMEOUT with no more attempts than allowed, and not in an open-ended wait', async () => {
     const { storage, signed } = await open()
     const url = (await signed.getDownloadUrl({ key: 'x.txt' })).url
     proxy.setMode('blackhole')
@@ -187,7 +187,7 @@ describe('Storage E2E — store failure', () => {
     expect(proxy.openConnections()).toBe(0)
   })
 
-  it('a stopped store (connection refused) fails fast, with no credential or signed URL in the error or logs', async () => {
+  it('a refused connection (stopped store) ends with a typed error and no credential or signed URL in the error or logs', async () => {
     const { storage } = await open()
     await minio.container.stop()
     const started = Date.now()
