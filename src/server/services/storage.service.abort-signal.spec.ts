@@ -6,11 +6,12 @@
  * @layer server/services
  */
 import { createServer, type Server, type ServerResponse } from 'node:http'
-import type { AddressInfo, Socket } from 'node:net'
+import type { Socket } from 'node:net'
 import { Readable } from 'node:stream'
 import { getEventListeners } from 'node:events'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { BymaxStorageModule } from '../bymax-storage.module'
+import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 import { StorageException } from '../errors/storage-exception'
 import { StorageService } from './storage.service'
 
@@ -67,10 +68,14 @@ describe('abortSignal', () => {
   let port: number
   let calls: string[] = []
   let closed = 0
+  /** Requests the client cut off before the stand-in answered them, by `METHOD search`. */
+  let dropped: string[] = []
   /** Requests for which the stand-in never answers, picked by `METHOD search`. */
   let hang: (call: string) => boolean = () => false
   /** Requests the stand-in answers with a 500. */
   let fail: (call: string) => boolean = () => false
+  /** How long the stand-in waits before answering a request, picked by `METHOD search`. */
+  let delayMs: (call: string) => number = () => 0
   /** Answers a GET with two bytes of a five-byte body and then goes silent. */
   let stallBody = false
   let moduleRef: TestingModule | undefined
@@ -81,6 +86,9 @@ describe('abortSignal', () => {
       const url = new URL(req.url ?? '/', 'http://stand-in')
       const call = `${req.method ?? ''} ${url.searchParams.has('uploads') ? 'uploads' : (url.search.split('&')[0] ?? '')}`
       req.resume()
+      res.on('close', () => {
+        if (!res.writableFinished) dropped.push(call)
+      })
       req.on('end', () => {
         calls.push(call)
         if (hang(call)) return
@@ -89,7 +97,9 @@ describe('abortSignal', () => {
           res.end()
           return
         }
-        respond(req.method ?? '', url, res)
+        setTimeout(() => {
+          respond(req.method ?? '', url, res)
+        }, delayMs(call))
       })
     })
     server.on('connection', (socket) => {
@@ -100,7 +110,8 @@ describe('abortSignal', () => {
       })
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    port = (server.address() as AddressInfo).port
+    const address = server.address()
+    port = typeof address === 'object' && address !== null ? address.port : 0
   })
 
   /** A minimal S3: enough of the protocol for the calls under test. */
@@ -146,8 +157,10 @@ describe('abortSignal', () => {
   beforeEach(() => {
     calls = []
     closed = 0
+    dropped = []
     hang = () => false
     fail = () => false
+    delayMs = () => 0
     stallBody = false
   })
 
@@ -158,6 +171,10 @@ describe('abortSignal', () => {
   })
 
   async function storage(): Promise<StorageService> {
+    return storageWith({})
+  }
+
+  async function storageWith(extra: Partial<BymaxStorageModuleOptions>): Promise<StorageService> {
     moduleRef = await Test.createTestingModule({
       imports: [
         BymaxStorageModule.forRoot({
@@ -170,6 +187,7 @@ describe('abortSignal', () => {
           responseChecksumValidation: 'WHEN_REQUIRED',
           maxAttempts: 1,
           requestTimeoutMs: 5000,
+          ...extra,
         }),
       ],
     }).compile()
@@ -272,9 +290,47 @@ describe('abortSignal', () => {
     expect(detailsOf(error)).toMatchObject({ reason: 'AbortError', abort: 'completed' })
     expect(calls).toContain('DELETE ?uploadId=u1')
     expect(calls).not.toContain('POST ?uploadId=u1')
+    // The part request that was held open is dropped, not left for the provider to time out.
+    await sleep(150)
+    expect(dropped).toContain('PUT ?partNumber=1')
     expect(timeout).toHaveBeenCalled()
     expect(body.destroyed).toBe(true)
     expect(await listenersAt(controller.signal, baseline)).toBe(baseline)
+  })
+
+  it('still aborts the upload on the provider when the signal fires while CreateMultipartUpload is in flight', async () => {
+    // The provider creates the upload and answers late; the id arrives after the caller gave up.
+    delayMs = (call) => (call === 'POST uploads' ? 400 : 0)
+    const service = await storage()
+    const controller = new AbortController()
+    const pending = service
+      .upload({ key: 'k', body: mibStream(40), contentType: 'x/y', abortSignal: controller.signal })
+      .catch((err: unknown) => err)
+    for (let i = 0; i < 40 && !calls.includes('POST uploads'); i += 1) await sleep(25)
+    controller.abort()
+
+    const error = await pending
+
+    expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
+    expect(detailsOf(error)).toMatchObject({ abort: 'completed' })
+    expect(calls).toContain('DELETE ?uploadId=u1')
+    expect(calls.some((call) => call.startsWith('PUT ?partNumber'))).toBe(false)
+  })
+
+  it('reports a real failure as itself when the signal only fires during its cleanup', async () => {
+    // The stream passes maxSizeBytes after one part; the signal fires while the cleanup DELETE is held.
+    delayMs = (call) => (call.startsWith('DELETE') ? 400 : 0)
+    const service = await storageWith({ validation: { maxSizeBytes: 6 * MIB } })
+    const controller = new AbortController()
+    const pending = service
+      .upload({ key: 'k', body: mibStream(40), contentType: 'x/y', abortSignal: controller.signal })
+      .catch((err: unknown) => err)
+    for (let i = 0; i < 200 && !calls.some((c) => c.startsWith('DELETE')); i += 1) await sleep(25)
+    controller.abort()
+
+    const error = await pending
+
+    expect(error).toMatchObject({ code: 'STORAGE_SIZE_EXCEEDED' })
   })
 
   it('leaves no listener on a signal reused across a completed, a failed and an aborted call', async () => {

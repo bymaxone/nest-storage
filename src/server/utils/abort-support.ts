@@ -4,6 +4,7 @@
  * abort error, and the cleanup of an abandoned call runs on a deadline of its own.
  * @layer server/utils
  */
+import { CreateMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -83,4 +84,67 @@ export function failureOrAbort(
   mapped: StorageException,
 ): StorageException {
   return signal?.aborted ? requestAborted(signal, context) : mapped
+}
+
+/** An S3 client whose requests carry a caller's signal, and the upload id its multipart create returned. */
+export interface SignalBoundClient {
+  client: S3Client
+  /** The upload id `CreateMultipartUpload` answered, once it has answered; `undefined` if it never did. */
+  createdUploadId: () => Promise<string | undefined>
+}
+
+/**
+ * Wraps a client so that every request sent through it ends when `signal` aborts, which
+ * `@aws-sdk/lib-storage` does not do by itself: its `abort()` only rejects `done()` and leaves the
+ * part requests it has in flight open. `CreateMultipartUpload` is the exception: it is sent without
+ * the signal so that, however late the provider answers, its upload id reaches the cleanup that
+ * has to abort it.
+ *
+ * @param client - The module's S3 client; it is not modified.
+ * @param signal - The caller's signal.
+ * @returns The wrapped client and a way to read the upload id the create returned.
+ */
+export function bindToSignal(client: S3Client, signal: AbortSignal): SignalBoundClient {
+  let created: Promise<string | undefined> = Promise.resolve(undefined)
+  const bound = new Proxy(client, {
+    get(target, property) {
+      if (property !== 'send') {
+        const value: unknown = Reflect.get(target, property, target)
+        return value
+      }
+      return (command: Parameters<S3Client['send']>[0], options?: object) => {
+        if (command instanceof CreateMultipartUploadCommand) {
+          const sent = target.send(command, options)
+          created = sent.then(
+            (response) => response.UploadId,
+            () => undefined,
+          )
+          return sent
+        }
+        return target.send(command, { ...options, abortSignal: signal })
+      }
+    },
+  })
+  return { client: bound, createdUploadId: () => created }
+}
+
+/**
+ * Waits for `promise` for at most `ms`, so that cleanup never waits longer than its deadline.
+ *
+ * @param promise - What to wait for.
+ * @param ms - The longest wait.
+ * @returns The settled value, or `undefined` when `ms` passed first.
+ */
+export async function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  let timer: NodeJS.Timeout | undefined
+  const late = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(undefined)
+    }, ms)
+  })
+  try {
+    return await Promise.race([promise, late])
+  } finally {
+    clearTimeout(timer)
+  }
 }

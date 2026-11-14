@@ -63,10 +63,13 @@ import { boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { logValue } from '../utils/log-value'
 import {
+  bindToSignal,
   CLEANUP_DEADLINE_MS,
   failureOrAbort,
+  requestAborted,
   sendOptions,
   throwIfAborted,
+  within,
 } from '../utils/abort-support'
 import { buildPublicUrl } from '../utils/public-url'
 import {
@@ -605,15 +608,16 @@ export class StorageService {
       Metadata: options.metadata,
       ...buildSSE(options.serverSideEncryption, options.kmsKeyId, this.options),
     }
+    const signal = options.abortSignal
+    const bound = signal ? bindToSignal(this.s3Provider.getClient(), signal) : undefined
     const uploader = new Upload({
-      client: this.s3Provider.getClient(),
+      client: bound?.client ?? this.s3Provider.getClient(),
       params,
       queueSize: this.options.multipart.queueSize,
       partSize: this.options.multipart.partSizeBytes,
       leavePartsOnError: true,
     })
     forwardProgress(uploader, options.onProgress)
-    const signal = options.abortSignal
     const abortUpload = (): void => {
       void uploader.abort()
     }
@@ -630,20 +634,40 @@ export class StorageService {
         multipart: true,
       })
     } catch (err) {
-      return await this.failMultipart(err, finalKey, bucket, uploader.uploadId, signal)
+      return await this.failMultipart(err, finalKey, bucket, {
+        uploadId: uploader.uploadId,
+        signal,
+        createdUploadId: bound?.createdUploadId,
+      })
     } finally {
       signal?.removeEventListener('abort', abortUpload)
     }
   }
 
-  /** Aborts the multipart upload that failed, then throws the original failure with the outcome. */
+  /**
+   * Aborts the multipart upload that failed, then throws the original failure with the outcome. Whether
+   * the failure is an abort is decided first: a signal that fires during the cleanup does not turn a
+   * real failure into one. An upload id the provider answered late is waited for, within the cleanup
+   * deadline, so that an abort during `CreateMultipartUpload` still aborts the upload it created.
+   */
   private async failMultipart(
     err: unknown,
     finalKey: string,
     bucket: string,
-    uploadId: string | undefined,
-    signal: AbortSignal | undefined,
+    upload: {
+      uploadId: string | undefined
+      signal: AbortSignal | undefined
+      createdUploadId: (() => Promise<string | undefined>) | undefined
+    },
   ): Promise<never> {
+    // Decided before the cleanup, which can take a while: a signal that fires during it must not turn
+    // a real failure into an abort.
+    const abortedBy = upload.signal?.aborted === true ? upload.signal : undefined
+    const uploadId =
+      upload.uploadId ??
+      (abortedBy && upload.createdUploadId
+        ? await within(upload.createdUploadId(), CLEANUP_DEADLINE_MS)
+        : undefined)
     const abort = await closeMultipartUpload(
       this.s3Provider.getClient(),
       bucket,
@@ -651,7 +675,7 @@ export class StorageService {
       uploadId,
     )
     const context = { key: finalKey, bucket, op: 'upload-multipart', ...abort }
-    throw failureOrAbort(signal, context, mapMultipartError(err, context))
+    throw abortedBy ? requestAborted(abortedBy, context) : mapMultipartError(err, context)
   }
 
   /**
