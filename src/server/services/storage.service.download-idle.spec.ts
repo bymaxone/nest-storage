@@ -120,7 +120,7 @@ describe('download body idle timeout', () => {
 
     const outcome = await drain(stream)
 
-    expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT', status: 504 })
+    expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT', status: 503 })
     expect(detailsOf(outcome)).toMatchObject({ phase: 'body-idle', idleMs: IDLE_MS, key: 'k', bucket: 'b' })
     expect(Date.now() - started).toBeLessThan(IDLE_MS * 4)
     await sleep(200)

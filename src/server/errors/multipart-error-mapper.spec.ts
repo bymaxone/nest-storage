@@ -15,12 +15,26 @@ function detailsOf(error: { getResponse(): unknown }): Record<string, unknown> |
 }
 
 describe('mapMultipartError', () => {
-  it('maps an idle source to STORAGE_TIMEOUT (504) with the phase and the limit', () => {
+  it('maps an idle source to STORAGE_TIMEOUT (503) with the phase and the limit', () => {
     const error = mapMultipartError(new SourceIdleError(250), { key: 'k', bucket: 'b' })
 
     expect(error.code).toBe('STORAGE_TIMEOUT')
-    expect(error.getStatus()).toBe(504)
+    expect(error.getStatus()).toBe(503)
     expect(detailsOf(error)).toEqual({ key: 'k', bucket: 'b', phase: 'source-idle', idleMs: 250 })
+  })
+
+  it.each([
+    ['a refused connection', { name: 'Error', code: 'ECONNREFUSED' }, 503],
+    ['an answer of 503 SlowDown', { name: 'SlowDown', Code: 'SlowDown', $metadata: { httpStatusCode: 503 } }, 503],
+    ['an SDK timeout, which has a name and no code', { name: 'TimeoutError', message: 'the request socket timed out' }, 503],
+    ['refused credentials', { name: 'InvalidAccessKeyId', Code: 'InvalidAccessKeyId', $metadata: { httpStatusCode: 403 } }, 500],
+    ['a failure of our own', new Error('boom'), 500],
+  ])('answers for %s as the cause says, keeping STORAGE_MULTIPART_ABORTED and the abort outcome', (_label, cause, status) => {
+    const error = mapMultipartError(cause, { key: 'k', bucket: 'b', abort: 'completed' })
+
+    expect(error.code).toBe('STORAGE_MULTIPART_ABORTED')
+    expect(error.getStatus()).toBe(status)
+    expect(detailsOf(error)).toMatchObject({ abort: 'completed' })
   })
 
   it.each([null, undefined, Object.create(null) as object])(

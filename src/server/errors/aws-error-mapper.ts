@@ -6,6 +6,7 @@
  */
 import { HttpStatus } from '@nestjs/common'
 import { StorageException } from './storage-exception'
+import { providerFailureStatus } from './provider-failure'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
 interface AwsLikeError {
@@ -23,7 +24,9 @@ interface AwsLikeError {
  *   - `name === 'NotFound'` or HTTP 404 → `STORAGE_OBJECT_NOT_FOUND` (404)
  *   - HTTP 304 (`If-None-Match` matched) → `STORAGE_NOT_MODIFIED` (304)
  *   - HTTP 412 (`If-Match` failed)       → `STORAGE_PRECONDITION_FAILED` (412)
- *   - `name === 'TimeoutError'`          → `STORAGE_TIMEOUT` (504)
+ *   - `name === 'TimeoutError'`          → `STORAGE_TIMEOUT` (503)
+ *   - unreachable or a server error      → `STORAGE_PROVIDER_ERROR` (503)
+ *   - credentials refused (403)          → `STORAGE_PROVIDER_ERROR` (500)
  *   - anything else                      → `STORAGE_PROVIDER_ERROR` (502)
  *
  * @param err - The error thrown by the AWS SDK (typed as `unknown`).
@@ -68,11 +71,11 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
     )
   }
   if (e.name === 'TimeoutError') {
-    return new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, HttpStatus.GATEWAY_TIMEOUT, details)
+    return new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, details)
   }
   return new StorageException(
     STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR,
-    HttpStatus.BAD_GATEWAY,
+    providerFailureStatus(err),
     details,
   )
 }
