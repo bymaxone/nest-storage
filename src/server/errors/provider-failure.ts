@@ -58,6 +58,7 @@ function cutConnection(failure: FailureLike, noAnswer: boolean): boolean {
   if (codes.some((code) => typeof code === 'string' && UNREACHABLE_CODES.has(code))) {
     return true
   }
+  // Stryker disable next-line StringLiteral: the fallback only has to match neither check below, and no text a mutant could put there is a socket error code or the wrapper's prefix (equivalent).
   const message = typeof failure.message === 'string' ? failure.message : ''
   return noAnswer && (UNREACHABLE_IN_MESSAGE.test(message) || message.startsWith(ADDRESSES_FAILED))
 }

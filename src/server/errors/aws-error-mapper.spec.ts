@@ -94,6 +94,8 @@ describe('mapAwsError', () => {
       ['a reset connection, as the SDK reports it from inside a test runner', { name: 'Error', message: 'AWS SDK error wrapper for TimeoutError: connect ECONNRESET 127.0.0.1:9000' }],
       ['every address of a host refused (the dual-stack error)', { name: 'AggregateError', code: 'ECONNREFUSED', errors: [{ code: 'ECONNREFUSED' }, { code: 'ECONNREFUSED' }] }],
       ['every address of a host refused, as the SDK reports it from inside a test runner', { name: 'Error', message: 'AWS SDK error wrapper for AggregateError' }],
+      ['a dual-stack error that carries its codes only in errors', { name: 'AggregateError', errors: [{ code: 'ECONNREFUSED' }] }],
+      ['a wrapper for the dual-stack error with more text after it', { name: 'Error', message: 'AWS SDK error wrapper for AggregateError: all failed' }],
       ['a failure whose cause is a reset', { name: 'Error', cause: { code: 'ECONNRESET' } }],
       ['an answer of 503 SlowDown', { name: 'SlowDown', Code: 'SlowDown', $metadata: { httpStatusCode: 503 } }],
       ['an answer of 500', { name: 'InternalError', Code: 'InternalError', $metadata: { httpStatusCode: 500 } }],
@@ -124,6 +126,7 @@ describe('mapAwsError', () => {
       ['an error with an unrelated code', { name: 'Error', code: 'ERR_INVALID_ARG_TYPE' }],
       ['an error whose code is not a string', { name: 'Error', code: 7 }],
       ['an answer whose own message names a socket error', { name: 'Conflict', message: 'ECONNRESET was in our log', $metadata: { httpStatusCode: 409 } }],
+      ['a message that only ends with the dual-stack wrapper text', { name: 'Error', message: 'see: AWS SDK error wrapper for AggregateError' }],
       ['an error whose message names no socket error', { name: 'Error', message: 'the request is malformed' }],
       ['an error whose message is not text', { name: 'Error', message: 7 }],
       ['errors that carry no code', { name: 'AggregateError', errors: [{}, {}] }],
@@ -132,6 +135,13 @@ describe('mapAwsError', () => {
 
       expect(e.code).toBe('STORAGE_PROVIDER_ERROR')
       expect(e.getStatus()).toBe(HttpStatus.BAD_GATEWAY)
+    })
+
+    it('reads the credentials code from Code before name', () => {
+      // The provider's own code is `Code`; `name` is what the SDK called the error.
+      const e = mapAwsError({ name: 'Error', Code: 'SignatureDoesNotMatch', $metadata: { httpStatusCode: 403 } })
+
+      expect(e.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
     })
 
     it('cannot tell refused credentials on a HEAD answer, which has no body, so it keeps 502', () => {
