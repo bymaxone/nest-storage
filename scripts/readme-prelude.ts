@@ -27,6 +27,8 @@ declare global {
   const lifecycle: BucketLifecycleService
 
   const buf: Buffer
+  /** The incoming request of a handler: it says when the client went away. */
+  const req: { on(event: 'close', listener: () => void): unknown }
   const fileBuffer: Buffer
   const file: Blob
   const folder: string
