@@ -423,7 +423,12 @@ than answering `false`.
 ```typescript
 const controller = new AbortController()
 req.on('close', () => controller.abort())
-await this.storage.upload({ key, body, contentType, abortSignal: controller.signal })
+await this.storage.upload({
+  key: `${folder}/report.pdf`,
+  body: buf,
+  contentType,
+  abortSignal: controller.signal,
+})
 ```
 
 - A signal that is **already aborted** makes no request at all, not even `CreateMultipartUpload`.
