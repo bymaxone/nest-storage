@@ -19,8 +19,8 @@ note on each entry is the compatibility contract — read it, not the number.
   `delete` and `checkBucket` take an optional `abortSignal`. When it aborts the call rejects the new
   `STORAGE_REQUEST_ABORTED` (HTTP 499), with `details.reason` set to the name of the signal's
   reason, never its message; a signal that is already aborted makes no request. A multipart upload
-  is aborted on the provider, with a deadline of its own and not the caller's signal, so no part
-  stays stored (`details.abort` reports the outcome); a download body being read errors as the same
+  is aborted on the provider, with a deadline of its own and not the caller's signal
+  (`details.abort` reports the outcome); a download body being read errors as the same
   code while the idle guard is on, and as the raw `AbortError` with `bodyIdleTimeoutMs: 0`. The
   library adds no listener to the signal that outlives the call, so one signal can be reused.
   `exists` rejects an aborted call instead of answering `false`.
