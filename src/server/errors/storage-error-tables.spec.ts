@@ -43,6 +43,7 @@ describe('STORAGE_ERROR_MESSAGES', () => {
         'The bucket cannot be accessed with these credentials (it may also not exist)',
       STORAGE_BUCKET_REGION_MISMATCH:
         'The bucket belongs to a different region than the configured one',
+      STORAGE_REQUEST_ABORTED: 'The call was aborted by its AbortSignal',
     })
   })
 
@@ -84,6 +85,7 @@ describe('STORAGE_ERROR_STATUS', () => {
       STORAGE_BUCKET_NOT_FOUND: HttpStatus.NOT_FOUND,
       STORAGE_BUCKET_ACCESS_DENIED: HttpStatus.FORBIDDEN,
       STORAGE_BUCKET_REGION_MISMATCH: HttpStatus.INTERNAL_SERVER_ERROR,
+      STORAGE_REQUEST_ABORTED: 499,
     })
   })
 

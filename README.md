@@ -412,6 +412,34 @@ and a failing `If-Match` with 412, and the library turns them into typed errors:
 A 304 is therefore thrown, not returned: catch `StorageException` and branch on `code`. A `range`
 (`'bytes=0-99'`) returns the requested bytes, and the metadata describes the whole object.
 
+### Cancelling a call (`abortSignal`)
+
+`upload`, `download`, `downloadBuffer`, `list`, `head`, `exists`, `delete` and `checkBucket` accept an
+`abortSignal`. When it aborts, the call rejects `STORAGE_REQUEST_ABORTED` (HTTP 499) with
+`details.reason` set to the **name** of the signal's reason (`AbortError`, `TimeoutError`), never its
+message, so a host can tell its own timeout from a client disconnect. `exists` rejects too, rather
+than answering `false`.
+
+```typescript
+const controller = new AbortController()
+req.on('close', () => controller.abort())
+await this.storage.upload({ key, body, contentType, abortSignal: controller.signal })
+```
+
+- A signal that is **already aborted** makes no request at all, not even `CreateMultipartUpload`.
+- An **upload** that is aborted mid-flight drops its request. For a multipart upload the library
+  aborts it on the provider (`AbortMultipartUpload`) so no part stays stored, and `details.abort`
+  says whether that worked. That cleanup runs with a deadline of its own (10 seconds), never the
+  caller's signal, which would cancel it. A request that does not complete creates no object on S3.
+  As with any rejected upload, **a stream you passed as `body` is destroyed**.
+- A **download** body that is being read when the signal aborts errors as `STORAGE_REQUEST_ABORTED`
+  while the idle guard is on (the default `bodyIdleTimeoutMs`); with `bodyIdleTimeoutMs: 0` it
+  errors as the raw `AbortError`.
+- The library keeps no listener on your signal after a call, so one signal can be reused across many
+  calls. (The AWS SDK holds one for the length of a request and releases it as the connection closes.)
+- `copy`, `deleteMany` and the signed-URL methods take no `abortSignal`: the first two are one
+  server-side request, and signing makes none.
+
 ---
 
 ## 🔗 Signed URLs (GET / PUT / Multipart)
@@ -738,6 +766,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_BUCKET_REGION_MISMATCH` | 500  | `checkBucket()` got a 301 or `PermanentRedirect`: the bucket lives in another region than the configured one |
 | `STORAGE_NOT_MODIFIED`           | 304  | `download()` with `ifNoneMatch` equal to the current ETag |
 | `STORAGE_PRECONDITION_FAILED`    | 412  | `download()` with `ifMatch` different from the current ETag |
+| `STORAGE_REQUEST_ABORTED`        | 499  | The call's `abortSignal` aborted, before or during the call (`details.reason` is the name of the signal's reason: `AbortError`, `TimeoutError`, ...; for a multipart upload `details.abort` says whether the upload was aborted on the provider) |
 
 ```typescript
 import { StorageException, STORAGE_ERROR_CODES } from '@bymax-one/nest-storage'

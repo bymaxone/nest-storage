@@ -62,6 +62,12 @@ import {
 import { boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { logValue } from '../utils/log-value'
+import {
+  CLEANUP_DEADLINE_MS,
+  failureOrAbort,
+  sendOptions,
+  throwIfAborted,
+} from '../utils/abort-support'
 import { buildPublicUrl } from '../utils/public-url'
 import {
   buildUploadResult,
@@ -90,6 +96,8 @@ interface S3ObjectResponse {
 /** Per-call options that only need to override the target bucket. */
 interface BucketScopedOptions {
   bucket?: string
+  /** Ends the call when it aborts, rejecting `STORAGE_REQUEST_ABORTED`; an aborted signal makes no request. */
+  abortSignal?: AbortSignal
 }
 
 /** S3's hard cap on the number of keys returned by one `ListObjectsV2` request. */
@@ -153,6 +161,7 @@ export class StorageService {
     }
     const finalKey = this.keyResolver.normalize(options.key)
     const bucket = this.resolveBucket(options.bucket)
+    throwIfAborted(options.abortSignal, { key: finalKey, bucket, op: 'upload' })
 
     if (options.idempotencyKey) {
       const cacheKey = this.idempotencyCache.computeKey(options.idempotencyKey, finalKey)
@@ -183,6 +192,7 @@ export class StorageService {
     // Pre-upload scan: runs before the S3 PutObject.
     await this.runPreUploadScan(body, finalKey, bucket, options)
 
+    throwIfAborted(options.abortSignal, { key: finalKey, bucket, op: 'upload' })
     const strategy = pickUploadStrategy(
       validatedOptions.body,
       validatedOptions.size,
@@ -285,7 +295,8 @@ export class StorageService {
       // `delete()` takes the caller's key and prefixes it, so it is given the relative key.
       const key = this.keyResolver.stripPrefix(finalKey)
       try {
-        await this.delete(key, { bucket })
+        // Its own deadline, never the caller's signal: that one may be what ended the upload.
+        await this.delete(key, { bucket, abortSignal: AbortSignal.timeout(CLEANUP_DEADLINE_MS) })
       } catch (deleteErr) {
         this.logger.error(
           `STORAGE_SCAN_CLEANUP_FAILED: the rejected object is still stored: ${logValue(finalKey)}`,
@@ -309,13 +320,15 @@ export class StorageService {
     this.assertConfigured()
     const finalKey = this.keyResolver.normalize(key)
     const bucket = this.resolveBucket(options?.bucket)
+    const context = { key: finalKey, bucket, op: 'head' }
+    throwIfAborted(options?.abortSignal, context)
     try {
       const response = await this.s3Provider
         .getClient()
-        .send(new HeadObjectCommand({ Bucket: bucket, Key: finalKey }))
+        .send(new HeadObjectCommand({ Bucket: bucket, Key: finalKey }), sendOptions(options?.abortSignal))
       return this.toObjectMetadata(response, finalKey, bucket)
     } catch (err) {
-      throw mapAwsError(err, { key: finalKey, bucket, op: 'head' })
+      throw failureOrAbort(options?.abortSignal, context, mapAwsError(err, context))
     }
   }
 
@@ -337,6 +350,9 @@ export class StorageService {
         err.code === STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND
       ) {
         return false
+      }
+      if (err instanceof StorageException && err.code === STORAGE_ERROR_CODES.STORAGE_REQUEST_ABORTED) {
+        throw err
       }
       this.logger.warn(`exists() — treating a non-404 error as "false": ${logValue(describeError(err))}`)
       return false
@@ -373,6 +389,8 @@ export class StorageService {
     assertHeaderValues({ range: options.range, ifNoneMatch: options.ifNoneMatch, ifMatch: options.ifMatch })
     const finalKey = this.keyResolver.normalize(options.key)
     const bucket = this.resolveBucket(options.bucket)
+    const context = { key: finalKey, bucket, op: 'download' }
+    throwIfAborted(options.abortSignal, context)
     try {
       const response = await this.s3Provider.getClient().send(
         new GetObjectCommand({
@@ -382,6 +400,7 @@ export class StorageService {
           IfNoneMatch: options.ifNoneMatch,
           IfMatch: options.ifMatch,
         }),
+        sendOptions(options.abortSignal),
       )
       if (!response.Body) {
         throw new StorageException(STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND, undefined, {
@@ -396,13 +415,14 @@ export class StorageService {
         response.Body as unknown as NodeJS.ReadableStream,
         this.options.bodyIdleTimeoutMs,
         { key: finalKey, bucket },
+        options.abortSignal,
       )
       return { stream, metadata: this.toObjectMetadata(response, finalKey, bucket) }
     } catch (err) {
       if (err instanceof StorageException) {
         throw err
       }
-      throw mapAwsError(err, { key: finalKey, bucket, op: 'download' })
+      throw failureOrAbort(options.abortSignal, context, mapAwsError(err, context))
     }
   }
 
@@ -434,12 +454,14 @@ export class StorageService {
     this.assertConfigured()
     const finalKey = this.keyResolver.normalize(key)
     const bucket = this.resolveBucket(options?.bucket)
+    const context = { key: finalKey, bucket, op: 'delete' }
+    throwIfAborted(options?.abortSignal, context)
     try {
       await this.s3Provider
         .getClient()
-        .send(new DeleteObjectCommand({ Bucket: bucket, Key: finalKey }))
+        .send(new DeleteObjectCommand({ Bucket: bucket, Key: finalKey }), sendOptions(options?.abortSignal))
     } catch (err) {
-      const mapped = mapAwsError(err, { key: finalKey, bucket, op: 'delete' })
+      const mapped = failureOrAbort(options?.abortSignal, context, mapAwsError(err, context))
       if (mapped.code !== STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND) {
         throw mapped
       }
@@ -463,10 +485,14 @@ export class StorageService {
   async checkBucket(options?: BucketScopedOptions): Promise<void> {
     this.assertConfigured()
     const bucket = this.resolveBucket(options?.bucket)
+    const context = { bucket, op: 'checkBucket' }
+    throwIfAborted(options?.abortSignal, context)
     try {
-      await this.s3Provider.getClient().send(new HeadBucketCommand({ Bucket: bucket }))
+      await this.s3Provider
+        .getClient()
+        .send(new HeadBucketCommand({ Bucket: bucket }), sendOptions(options?.abortSignal))
     } catch (err) {
-      throw mapBucketCheckError(err, { bucket, op: 'checkBucket' })
+      throw failureOrAbort(options?.abortSignal, context, mapBucketCheckError(err, context))
     }
   }
 
@@ -533,7 +559,9 @@ export class StorageService {
       ...buildSSE(options.serverSideEncryption, options.kmsKeyId, this.options),
     }
     try {
-      const response = await this.s3Provider.getClient().send(new PutObjectCommand(input))
+      const response = await this.s3Provider
+        .getClient()
+        .send(new PutObjectCommand(input), sendOptions(options.abortSignal))
       if (options.onProgress) {
         emitProgress(options.onProgress, total, total)
       }
@@ -547,7 +575,8 @@ export class StorageService {
         multipart: false,
       })
     } catch (err) {
-      throw mapAwsError(err, { key: finalKey, bucket, op: 'upload-single' })
+      const context = { key: finalKey, bucket, op: 'upload-single' }
+      throw failureOrAbort(options.abortSignal, context, mapAwsError(err, context))
     }
   }
 
@@ -584,6 +613,11 @@ export class StorageService {
       leavePartsOnError: true,
     })
     forwardProgress(uploader, options.onProgress)
+    const signal = options.abortSignal
+    const abortUpload = (): void => {
+      void uploader.abort()
+    }
+    signal?.addEventListener('abort', abortUpload, { once: true })
     try {
       const response = await uploader.done()
       return buildUploadResult(this.keyResolver, this.options, {
@@ -596,7 +630,9 @@ export class StorageService {
         multipart: true,
       })
     } catch (err) {
-      return this.failMultipart(err, finalKey, bucket, uploader.uploadId)
+      return await this.failMultipart(err, finalKey, bucket, uploader.uploadId, signal)
+    } finally {
+      signal?.removeEventListener('abort', abortUpload)
     }
   }
 
@@ -606,6 +642,7 @@ export class StorageService {
     finalKey: string,
     bucket: string,
     uploadId: string | undefined,
+    signal: AbortSignal | undefined,
   ): Promise<never> {
     const abort = await closeMultipartUpload(
       this.s3Provider.getClient(),
@@ -613,7 +650,8 @@ export class StorageService {
       finalKey,
       uploadId,
     )
-    throw mapMultipartError(err, { key: finalKey, bucket, ...abort })
+    const context = { key: finalKey, bucket, op: 'upload-multipart', ...abort }
+    throw failureOrAbort(signal, context, mapMultipartError(err, context))
   }
 
   /**
@@ -632,6 +670,8 @@ export class StorageService {
     const prefix = options.prefix
       ? this.keyResolver.normalize(options.prefix)
       : this.keyResolver.getPrefix()
+    const context = { bucket, prefix, op: 'list' }
+    throwIfAborted(options.abortSignal, context)
     try {
       const response = await this.s3Provider.getClient().send(
         new ListObjectsV2Command({
@@ -641,10 +681,11 @@ export class StorageService {
           ContinuationToken: options.continuationToken,
           Delimiter: options.delimiter,
         }),
+        sendOptions(options.abortSignal),
       )
       return toListResult(response, (key) => this.keyResolver.stripPrefix(key))
     } catch (err) {
-      throw mapAwsError(err, { bucket, prefix, op: 'list' })
+      throw failureOrAbort(options.abortSignal, context, mapAwsError(err, context))
     }
   }
 

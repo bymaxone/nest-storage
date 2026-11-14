@@ -9,11 +9,14 @@ import {
   type StorageErrorCode,
 } from '../../shared/constants/error-codes.constants'
 
+/** 499 Client Closed Request (nginx): the caller ended the call, which no standard status says. */
+const CLIENT_CLOSED_REQUEST = 499
+
 /**
- * Status per error code. `Record<StorageErrorCode, HttpStatus>` forces
+ * Status per error code. `Record<StorageErrorCode, number>` forces
  * exhaustiveness at compile time.
  */
-export const STORAGE_ERROR_STATUS: Record<StorageErrorCode, HttpStatus> = {
+export const STORAGE_ERROR_STATUS: Record<StorageErrorCode, number> = {
   [STORAGE_ERROR_CODES.STORAGE_NOT_CONFIGURED]: HttpStatus.SERVICE_UNAVAILABLE,
   [STORAGE_ERROR_CODES.STORAGE_KEY_INVALID]: HttpStatus.BAD_REQUEST,
   [STORAGE_ERROR_CODES.STORAGE_BODY_MISSING]: HttpStatus.BAD_REQUEST,
@@ -40,4 +43,5 @@ export const STORAGE_ERROR_STATUS: Record<StorageErrorCode, HttpStatus> = {
   [STORAGE_ERROR_CODES.STORAGE_BUCKET_NOT_FOUND]: HttpStatus.NOT_FOUND,
   [STORAGE_ERROR_CODES.STORAGE_BUCKET_ACCESS_DENIED]: HttpStatus.FORBIDDEN,
   [STORAGE_ERROR_CODES.STORAGE_BUCKET_REGION_MISMATCH]: HttpStatus.INTERNAL_SERVER_ERROR,
+  [STORAGE_ERROR_CODES.STORAGE_REQUEST_ABORTED]: CLIENT_CLOSED_REQUEST,
 }

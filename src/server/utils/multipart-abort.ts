@@ -3,6 +3,7 @@
  * @layer server/utils
  */
 import { AbortMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
+import { CLEANUP_DEADLINE_MS } from './abort-support'
 import { describeError } from './describe-error'
 
 /** What happened to the multipart upload after a failure; empty when none had been created. */
@@ -33,8 +34,11 @@ export async function closeMultipartUpload(
     return {}
   }
   try {
+    // A deadline of its own, never the caller's signal: that one may be what ended the upload, and an
+    // aborted signal would cancel this request and leave the parts stored.
     await client.send(
       new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId }),
+      { abortSignal: AbortSignal.timeout(CLEANUP_DEADLINE_MS) },
     )
     return { abort: 'completed' }
   } catch (err) {

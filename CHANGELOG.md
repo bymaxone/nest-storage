@@ -15,6 +15,20 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Added
 
+- **`abortSignal` ends a call.** `upload`, `download`, `downloadBuffer`, `list`, `head`, `exists`,
+  `delete` and `checkBucket` take an optional `abortSignal`. When it aborts the call rejects the new
+  `STORAGE_REQUEST_ABORTED` (HTTP 499), with `details.reason` set to the name of the signal's
+  reason, never its message; a signal that is already aborted makes no request. A multipart upload
+  is aborted on the provider, with a deadline of its own and not the caller's signal, so no part
+  stays stored (`details.abort` reports the outcome); a download body being read errors as the same
+  code while the idle guard is on, and as the raw `AbortError` with `bodyIdleTimeoutMs: 0`. The
+  library adds no listener to the signal that outlives the call, so one signal can be reused.
+  `exists` rejects an aborted call instead of answering `false`.
+
+  **Apply to a derived backend:** nothing changes unless you pass a signal. The new code is part of
+  the shared `STORAGE_ERROR_CODES` table: a host that maps every code exhaustively needs a case for
+  it, and an HTTP layer should not answer 5xx for it, since the caller ended the call.
+
 - **`downloadBuffer({ maxBytes })` bounds what a buffered download holds.** `downloadBuffer` read the
   whole object into memory whatever its size, so one large or hostile object could exhaust the
   process. With `maxBytes`, an object whose `Content-Length` is larger is refused before its body is

@@ -13,6 +13,15 @@ export interface DownloadOptions {
   ifNoneMatch?: string
   /** Conditional GET — only return if the ETag matches. */
   ifMatch?: string
+  /**
+   * Ends the call when it aborts: the request is dropped and the call rejects
+   * `STORAGE_REQUEST_ABORTED` with `details.reason` set to the signal's reason name. A signal that is
+   * already aborted makes no request. A body stream already returned errors too: as
+   * `STORAGE_REQUEST_ABORTED` while the idle guard is on (the default `bodyIdleTimeoutMs`), as the
+   * raw `AbortError` when `bodyIdleTimeoutMs` is `0`. The library keeps no listener on the signal
+   * after the call.
+   */
+  abortSignal?: AbortSignal
 }
 
 /** Options for a single `downloadBuffer()` call. */
