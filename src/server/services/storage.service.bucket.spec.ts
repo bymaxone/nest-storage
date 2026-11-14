@@ -157,10 +157,10 @@ describe('StorageService.checkBucket', () => {
       500,
     ],
     ['PermanentRedirect', { name: 'PermanentRedirect' }, 'STORAGE_BUCKET_REGION_MISMATCH', 500],
-    ['a timeout', { name: 'TimeoutError' }, 'STORAGE_TIMEOUT', 504],
+    ['a timeout', { name: 'TimeoutError' }, 'STORAGE_TIMEOUT', 503],
     [
       'any other failure',
-      { name: 'InternalError', $metadata: { httpStatusCode: 500 } },
+      { name: 'AccessControlListNotSupported', $metadata: { httpStatusCode: 400 } },
       'STORAGE_PROVIDER_ERROR',
       502,
     ],

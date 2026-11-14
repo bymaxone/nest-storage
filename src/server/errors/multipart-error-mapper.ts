@@ -3,11 +3,11 @@
  * silent is a timeout, anything else is an aborted multipart upload.
  * @layer server/errors
  */
-import { HttpStatus } from '@nestjs/common'
 import { StorageException } from './storage-exception'
 import { describeError } from '../utils/describe-error'
 import { SourceIdleError } from '../utils/idle-timeout'
 import { mapAwsError } from './aws-error-mapper'
+import { providerFailureStatus } from './provider-failure'
 import { mapSizeLimitError } from './size-limit-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -17,7 +17,7 @@ const ABORT_FAILED_MESSAGE = 'Multipart upload failed and could not be aborted'
 /**
  * @param err - What the uploader rejected with.
  * @param context - Non-sensitive context merged into `details`.
- * @returns `STORAGE_TIMEOUT` (504, `phase: 'source-idle'`) for an idle source,
+ * @returns `STORAGE_TIMEOUT` (503, `phase: 'source-idle'`) for an idle source,
  *   `STORAGE_BUCKET_NOT_FOUND` when the provider answered `NoSuchBucket`, else
  *   `STORAGE_MULTIPART_ABORTED` (whose message says the abort did not complete when
  *   `context.abort` is `'failed'`).
@@ -27,7 +27,7 @@ export function mapMultipartError(
   context: Record<string, unknown>,
 ): StorageException {
   if (err instanceof SourceIdleError) {
-    return new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, HttpStatus.GATEWAY_TIMEOUT, {
+    return new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, {
       ...context,
       phase: 'source-idle',
       idleMs: err.idleMs,
@@ -43,7 +43,8 @@ export function mapMultipartError(
   }
   return new StorageException(
     STORAGE_ERROR_CODES.STORAGE_MULTIPART_ABORTED,
-    undefined,
+    // An outage ends the upload as an outage; any other cause is a failure of the upload itself.
+    providerFailureStatus(err),
     { ...context, awsMessage: describeError(err) },
     // The code's message says the upload was aborted; it is not, when the abort itself failed.
     context.abort === 'failed' ? ABORT_FAILED_MESSAGE : undefined,

@@ -4,7 +4,6 @@
  * slow to read is left alone.
  * @layer server/utils
  */
-import { HttpStatus } from '@nestjs/common'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { requestAborted } from './abort-support'
@@ -32,7 +31,7 @@ export function guardDownloadBody(
   }
   return withIdleTimeout(body, idleMs, (error) => {
     if (error instanceof SourceIdleError) {
-      return new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, HttpStatus.GATEWAY_TIMEOUT, {
+      return new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, {
         ...context,
         phase: 'body-idle',
         idleMs: error.idleMs,

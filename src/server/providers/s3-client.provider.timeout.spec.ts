@@ -65,7 +65,7 @@ describe('requestTimeoutMs', () => {
     const error: unknown = await storage.head('never-answered.txt').catch((err: unknown) => err)
 
     const elapsed = Date.now() - started
-    expect(error).toMatchObject({ code: 'STORAGE_TIMEOUT', status: 504 })
+    expect(error).toMatchObject({ code: 'STORAGE_TIMEOUT', status: 503 })
     // Not before the configured time, and well before the 30 s default.
     expect(elapsed).toBeGreaterThanOrEqual(250)
     expect(elapsed).toBeLessThan(5000)

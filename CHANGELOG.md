@@ -56,6 +56,21 @@ note on each entry is the compatibility contract — read it, not the number.
   while the guard is on the stream returned by `download` is a wrapper, so code that read SDK-only
   members from it (such as `transformToByteArray`) must read it as a stream instead.
 
+### Changed
+
+- **An unavailable provider answers 503, not 502, 504 or 500.** `STORAGE_TIMEOUT` was HTTP 504 and is
+  now **503**. `STORAGE_PROVIDER_ERROR` keeps its code and stays 502 for a request the provider
+  rejected, but is **503** when the provider could not be reached (connection refused or reset, DNS
+  failure) or answered with a server error (`SlowDown`, 500, 502, 504; not 501), and **500** when it
+  refused the credentials (`InvalidAccessKeyId`, `SignatureDoesNotMatch`: a deployment fault a retry
+  does not fix; the `HEAD` calls carry no error body, so for them the credentials case is not told
+  apart). `STORAGE_MULTIPART_ABORTED` is **503** when the cause is an outage and stays 500 otherwise.
+  A client then has one status, 503, to treat as "retry later" whichever library answered.
+
+  **Apply to a derived backend:** the codes are unchanged; only the HTTP status of the cases above
+  moves. A host that matches `504` or `502` to retry must match `503`, and one that maps
+  `STORAGE_PROVIDER_ERROR` to a fixed status by code must read `error.getStatus()` instead.
+
 ### Fixed
 
 - **`requestTimeoutMs`, `uploadIdleTimeoutMs` and `bodyIdleTimeoutMs` are refused above 2147483647.**

@@ -1006,7 +1006,7 @@ export class StorageException extends HttpException {
 | `STORAGE_SCAN_INFECTED`           | 422  | Scanner returned `'infected'` (`details.threat`)                                           |
 | `STORAGE_SCAN_INCONCLUSIVE`       | 422  | Scanner returned `'unknown'` and `rejectOnUnknown: true`                                   |
 | `STORAGE_OBJECT_NOT_FOUND`        | 404  | `head()`, `download()`, or `copy()` on a nonexistent key                                   |
-| `STORAGE_PROVIDER_ERROR`          | 502  | AWS SDK error (network, 5xx, throttling); `details.awsCode`, `httpStatus`, `requestId`     |
+| `STORAGE_PROVIDER_ERROR`          | 502  | The provider rejected the request; 503 when it was unreachable or answered a server error (not 501), 500 when it refused the credentials; `details.awsCode`, `httpStatus`, `requestId` |
 | `STORAGE_SIGNED_URL_TTL_INVALID`  | 400  | Per-request `ttlSeconds` ≤ 0. (A `ttlSeconds` above `maxTtlSeconds` is silently clamped, not rejected; the configured `maxTtlSeconds` is itself clamped to the 604800s SigV4 cap at init.) |
 | `STORAGE_PART_TOO_SMALL`          | 400  | Reserved; not thrown today (a `multipart.partSizeBytes` under 5 MB fails at init as `STORAGE_INVALID_CONFIG`) |
 | `STORAGE_INVALID_PART_COUNT`      | 400  | `getMultipartUploadUrls()` called with `parts` not an integer from 1 to 10 000             |
@@ -1017,9 +1017,9 @@ export class StorageException extends HttpException {
 | `STORAGE_PRECONDITION_FAILED`     | 412  | `download()` with `ifMatch` different from the current ETag                                |
 | `STORAGE_REQUEST_ABORTED`         | 499  | The call's `abortSignal` aborted, before or during the call (`details.reason` is its name)  |
 | `STORAGE_BUCKET_UNDEFINED`        | 400  | Operation without a bucket and no default bucket in the config                                 |
-| `STORAGE_MULTIPART_ABORTED`       | 500  | Multipart upload failed and was aborted. With `@aws-sdk/lib-storage` (`leavePartsOnError: false`) the abort is automatic; on the raw presigned-multipart path the lib issues `AbortMultipartUpload` to avoid orphan parts being billed |
+| `STORAGE_MULTIPART_ABORTED`       | 500  | Multipart upload failed and was aborted (503 when the cause is an outage). With `@aws-sdk/lib-storage` (`leavePartsOnError: false`) the abort is automatic; on the raw presigned-multipart path the lib issues `AbortMultipartUpload` to avoid orphan parts being billed |
 | `STORAGE_INVALID_CONFIG`          | 500  | `BymaxStorageModuleOptions` validation failed at initialization                            |
-| `STORAGE_TIMEOUT`                 | 504  | Request exceeded `requestTimeoutMs`, a multipart source was silent for `uploadIdleTimeoutMs` (`details.phase: 'source-idle'`), or a download body was silent for `bodyIdleTimeoutMs` (`details.phase: 'body-idle'`) |
+| `STORAGE_TIMEOUT`                 | 503  | Request exceeded `requestTimeoutMs`, a multipart source was silent for `uploadIdleTimeoutMs` (`details.phase: 'source-idle'`), or a download body was silent for `bodyIdleTimeoutMs` (`details.phase: 'body-idle'`) |
 
 ### 12.3 AWS SDK → `StorageException` mapping
 
@@ -1027,9 +1027,10 @@ export class StorageException extends HttpException {
 - `NotFound` / 404 → `STORAGE_OBJECT_NOT_FOUND` (a `HEAD` 404 carries no body, so a missing bucket reads as a missing object there)
 - `AccessDenied` (403) → `STORAGE_PROVIDER_ERROR`
 - `AccessControlListNotSupported` (400) → `STORAGE_PROVIDER_ERROR` (bucket has ACLs disabled — see §16.1; surface a clear hint that `publicRead` requires a bucket policy / CDN / signed URL)
-- `SlowDown` (503) → `STORAGE_PROVIDER_ERROR` + retry
+- `SlowDown` (503) → `STORAGE_PROVIDER_ERROR` (503, retry)
 - `TimeoutError` → `STORAGE_TIMEOUT`
-- Other 5xx → `STORAGE_PROVIDER_ERROR`
+- Other 5xx except 501, and a connection that could not be made or was cut → `STORAGE_PROVIDER_ERROR` (503)
+- `InvalidAccessKeyId` or `SignatureDoesNotMatch` (403) → `STORAGE_PROVIDER_ERROR` (500)
 
 ---
 

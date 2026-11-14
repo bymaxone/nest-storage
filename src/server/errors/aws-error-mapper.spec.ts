@@ -62,7 +62,7 @@ describe('mapAwsError', () => {
     // Second condition branch.
     const e = mapAwsError({ name: 'TimeoutError' })
     expect(e.code).toBe('STORAGE_TIMEOUT')
-    expect(e.getStatus()).toBe(HttpStatus.GATEWAY_TIMEOUT)
+    expect(e.getStatus()).toBe(HttpStatus.SERVICE_UNAVAILABLE)
   })
 
   it('should map any other error to STORAGE_PROVIDER_ERROR and preserve metadata', () => {
@@ -79,6 +79,76 @@ describe('mapAwsError', () => {
     expect(details.requestId).toBe('req-1')
     expect(details.awsMessage).toBe('denied')
     expect(details.scope).toBe('upload')
+  })
+
+  describe('a provider that is unavailable, or that refused the credentials', () => {
+    // The error shapes below are what the SDK throws for each condition, measured against local servers.
+    it.each([
+      ['a refused connection', { name: 'Error', code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 127.0.0.1:9000' }],
+      ['an unknown host', { name: 'Error', code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND minio' }],
+      ['a temporary DNS failure', { name: 'Error', code: 'EAI_AGAIN' }],
+      ['an unreachable host', { name: 'Error', code: 'EHOSTUNREACH' }],
+      ['a reset connection', { name: 'Error', code: 'ECONNRESET' }],
+      ['a broken pipe', { name: 'Error', code: 'EPIPE' }],
+      ['a refused connection, as the SDK reports it from inside a test runner', { name: 'Error', message: 'AWS SDK error wrapper for Error: connect ECONNREFUSED 127.0.0.1:9000' }],
+      ['a reset connection, as the SDK reports it from inside a test runner', { name: 'Error', message: 'AWS SDK error wrapper for TimeoutError: connect ECONNRESET 127.0.0.1:9000' }],
+      ['every address of a host refused (the dual-stack error)', { name: 'AggregateError', code: 'ECONNREFUSED', errors: [{ code: 'ECONNREFUSED' }, { code: 'ECONNREFUSED' }] }],
+      ['every address of a host refused, as the SDK reports it from inside a test runner', { name: 'Error', message: 'AWS SDK error wrapper for AggregateError' }],
+      ['a failure whose cause is a reset', { name: 'Error', cause: { code: 'ECONNRESET' } }],
+      ['an answer of 503 SlowDown', { name: 'SlowDown', Code: 'SlowDown', $metadata: { httpStatusCode: 503 } }],
+      ['an answer of 500', { name: 'InternalError', Code: 'InternalError', $metadata: { httpStatusCode: 500 } }],
+      ['an answer of 502 with no body', { name: 'Unknown', $metadata: { httpStatusCode: 502 } }],
+      ['an answer of 504 with no body', { name: 'Unknown', $metadata: { httpStatusCode: 504 } }],
+    ])('answers 503 for %s, keeping STORAGE_PROVIDER_ERROR', (_label, failure) => {
+      const e = mapAwsError(failure)
+
+      expect(e.code).toBe('STORAGE_PROVIDER_ERROR')
+      expect(e.getStatus()).toBe(HttpStatus.SERVICE_UNAVAILABLE)
+    })
+
+    it.each(['InvalidAccessKeyId', 'SignatureDoesNotMatch'])(
+      'answers 500 for a 403 %s: the credentials are a deployment fault, not a retryable outage',
+      (code) => {
+        const e = mapAwsError({ name: code, Code: code, $metadata: { httpStatusCode: 403 } })
+
+        expect(e.code).toBe('STORAGE_PROVIDER_ERROR')
+        expect(e.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
+      },
+    )
+
+    it.each([
+      ['a 403 AccessDenied on an object', { name: 'AccessDenied', Code: 'AccessDenied', $metadata: { httpStatusCode: 403 } }],
+      ['a 400', { name: 'BadRequest', Code: 'BadRequest', $metadata: { httpStatusCode: 400 } }],
+      ['a 409', { name: 'Conflict', Code: 'Conflict', $metadata: { httpStatusCode: 409 } }],
+      ['a 501 the provider does not implement', { name: 'NotImplemented', $metadata: { httpStatusCode: 501 } }],
+      ['an error with an unrelated code', { name: 'Error', code: 'ERR_INVALID_ARG_TYPE' }],
+      ['an error whose code is not a string', { name: 'Error', code: 7 }],
+      ['an answer whose own message names a socket error', { name: 'Conflict', message: 'ECONNRESET was in our log', $metadata: { httpStatusCode: 409 } }],
+      ['an error whose message names no socket error', { name: 'Error', message: 'the request is malformed' }],
+      ['an error whose message is not text', { name: 'Error', message: 7 }],
+      ['errors that carry no code', { name: 'AggregateError', errors: [{}, {}] }],
+    ])('keeps 502 for %s', (_label, failure) => {
+      const e = mapAwsError(failure)
+
+      expect(e.code).toBe('STORAGE_PROVIDER_ERROR')
+      expect(e.getStatus()).toBe(HttpStatus.BAD_GATEWAY)
+    })
+
+    it('cannot tell refused credentials on a HEAD answer, which has no body, so it keeps 502', () => {
+      // A HEAD response carries no error code: the SDK names the failure after the status alone, so a
+      // refused credential and a 403 on an object look the same there.
+      const e = mapAwsError({ name: 'Forbidden', $metadata: { httpStatusCode: 403 } })
+
+      expect(e.code).toBe('STORAGE_PROVIDER_ERROR')
+      expect(e.getStatus()).toBe(HttpStatus.BAD_GATEWAY)
+    })
+
+    it('keeps a 403 InvalidAccessKeyId that is not a 403 as an ordinary rejection', () => {
+      // Only the answer of the provider refuses credentials: the name alone, with another status, does not.
+      expect(mapAwsError({ name: 'InvalidAccessKeyId', $metadata: { httpStatusCode: 400 } }).getStatus()).toBe(
+        HttpStatus.BAD_GATEWAY,
+      )
+    })
   })
 
   it('should fall back to the error name as awsCode when Code is absent', () => {
