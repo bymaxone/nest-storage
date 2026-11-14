@@ -225,6 +225,7 @@ describe('abortSignal', () => {
       .catch((err: unknown) => err)
 
     expect(detailsOf(error)).toMatchObject({ key: 'k', bucket: 'b', op: 'upload' })
+    expect(calls).toEqual([])
   })
 
   it('names the reason by its type and never repeats its message', async () => {
@@ -428,8 +429,8 @@ describe('abortSignal', () => {
     expect(calls).toEqual([])
   })
 
-  it('ends a multipart upload at once when the signal fires while the body is silent between parts', async () => {
-    // No request is in flight then, so only the upload's own abort can end the wait; without it the
+  it('ends a multipart upload within 3 s when the signal fires while its body is silent', async () => {
+    // Nothing more arrives from the body, so the upload's own abort is what ends the wait; without it the
     // call would last until the idle guard fires.
     const service = await storageWith({ uploadIdleTimeoutMs: 20_000 })
     const controller = new AbortController()
