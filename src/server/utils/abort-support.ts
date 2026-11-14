@@ -169,6 +169,11 @@ export async function abortable<T>(
   if (!signal) {
     return work
   }
+  if (signal.aborted) {
+    // No event will come: the work may have started, and aborted the signal, before this wait began.
+    work.catch(() => undefined)
+    throw requestAborted(signal, context)
+  }
   const release = new AbortController()
   const aborted = new Promise<never>((_resolve, reject) => {
     signal.addEventListener(

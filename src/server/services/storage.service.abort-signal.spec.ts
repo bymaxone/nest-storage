@@ -382,6 +382,35 @@ describe('abortSignal', () => {
     expect(calls).toEqual([])
   })
 
+  it('ends an upload whose validator aborts the signal itself before waiting on a silent stream', async () => {
+    // The abort happens inside the validator, before the library starts watching the signal.
+    const controller = new AbortController()
+    const service = await storageWith({
+      validation: {
+        customValidators: [
+          {
+            name: 'abort-then-peek',
+            validate: async (context: { readBytes?: (maxBytes: number) => Promise<Buffer> }) => {
+              controller.abort()
+              await context.readBytes?.(16)
+              return { ok: true as const }
+            },
+          },
+        ],
+      },
+    })
+    const body = silentStream()
+    const pending = service
+      .upload({ key: 'k', body, contentType: 'x/y', abortSignal: controller.signal })
+      .catch((err: unknown) => err)
+
+    const error = await Promise.race([pending, sleep(3000).then(() => 'STILL_PENDING')])
+
+    expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
+    expect(body.destroyed).toBe(true)
+    expect(calls).toEqual([])
+  })
+
   it('leaves no listener on a signal reused across a completed, a failed and an aborted call', async () => {
     const service = await storage()
     const controller = new AbortController()

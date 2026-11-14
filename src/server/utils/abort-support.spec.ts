@@ -118,6 +118,20 @@ describe('abort-support', () => {
       expect(getEventListeners(signal, 'abort')).toHaveLength(0)
     })
 
+    it('rejects STORAGE_REQUEST_ABORTED at once when the signal has already aborted, and drops what the work later rejects', async () => {
+      // The work may have started, and aborted the signal itself, before the wait began; no event is coming.
+      let fail: (error: Error) => void = () => undefined
+      const work = new Promise<number>((_resolve, reject) => {
+        fail = reject
+      })
+
+      await expect(abortable(work, AbortSignal.abort(), context)).rejects.toMatchObject({
+        code: 'STORAGE_REQUEST_ABORTED',
+      })
+      fail(new Error('Premature close'))
+      await new Promise((resolve) => setImmediate(resolve))
+    })
+
     it('rejects STORAGE_REQUEST_ABORTED at once when the signal aborts, and drops what the work later rejects', async () => {
       // A body read that nobody can finish is not waited for, and its eventual failure is not an unhandled rejection.
       const controller = new AbortController()
