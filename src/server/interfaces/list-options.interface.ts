@@ -18,6 +18,12 @@ export interface ListOptions {
    * sub-prefixes are aggregated into `commonPrefixes`.
    */
   delimiter?: string
+  /**
+   * Ends the call when it aborts: the request is dropped, a multipart upload is aborted and the call
+   * rejects `STORAGE_REQUEST_ABORTED` with `details.reason` set to the signal's reason name. A signal
+   * that is already aborted makes no request. The library keeps no listener on it after the call.
+   */
+  abortSignal?: AbortSignal
 }
 
 /** Result of a single list call. */

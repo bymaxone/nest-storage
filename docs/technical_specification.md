@@ -510,7 +510,7 @@ export class StorageService {
   downloadBuffer(options: DownloadBufferOptions): Promise<{ buffer: Buffer; metadata: ObjectMetadata }>
 
   /** Idempotent delete: does not throw if the object does not exist, just logs a warning. */
-  delete(key: string, options?: { bucket?: string }): Promise<void>
+  delete(key: string, options?: { bucket?: string; abortSignal?: AbortSignal }): Promise<void>
 
   /** Batch delete (up to 1000 keys — S3 API limit). Returns failures individually. */
   deleteMany(keys: string[], options?: { bucket?: string }): Promise<{
@@ -522,13 +522,13 @@ export class StorageService {
   list(options: ListOptions): Promise<ListResult>
 
   /** HEAD — metadata without downloading. @throws STORAGE_OBJECT_NOT_FOUND. */
-  head(key: string, options?: { bucket?: string }): Promise<ObjectMetadata>
+  head(key: string, options?: { bucket?: string; abortSignal?: AbortSignal }): Promise<ObjectMetadata>
 
   /** False on 404; a warning and false on any other error (403, 5xx, timeout), so a transient failure reads as absent. A missing bucket also reads as false (HEAD has no body). */
-  exists(key: string, options?: { bucket?: string }): Promise<boolean>
+  exists(key: string, options?: { bucket?: string; abortSignal?: AbortSignal }): Promise<boolean>
 
   /** One HeadBucket for a readiness check. Resolves when reachable; otherwise rejects STORAGE_BUCKET_NOT_FOUND (404), STORAGE_BUCKET_ACCESS_DENIED (403), STORAGE_BUCKET_REGION_MISMATCH (301) or STORAGE_TIMEOUT. Needs s3:ListBucket. */
-  checkBucket(options?: { bucket?: string }): Promise<void>
+  checkBucket(options?: { bucket?: string; abortSignal?: AbortSignal }): Promise<void>
 
   /** Server-side copy (same bucket or cross-bucket); does not transfer bytes through the client. @throws STORAGE_OBJECT_NOT_FOUND when the source key does not exist. */
   copy(options: {
@@ -581,6 +581,8 @@ export interface DownloadOptions {
   ifNoneMatch?: string
   /** Conditional GET — maps to the GetObject `IfMatch` header. */
   ifMatch?: string
+  /** Ends the call when it aborts: rejects `STORAGE_REQUEST_ABORTED`; an aborted signal makes no request. */
+  abortSignal?: AbortSignal
 }
 
 /** Parameters for `downloadBuffer()`: those of `download()` plus a size bound. */
@@ -1013,6 +1015,7 @@ export class StorageException extends HttpException {
 | `STORAGE_BUCKET_REGION_MISMATCH`  | 500  | `checkBucket()` got a 301 / `PermanentRedirect` (the bucket is in another region)           |
 | `STORAGE_NOT_MODIFIED`            | 304  | `download()` with `ifNoneMatch` equal to the current ETag                                  |
 | `STORAGE_PRECONDITION_FAILED`     | 412  | `download()` with `ifMatch` different from the current ETag                                |
+| `STORAGE_REQUEST_ABORTED`         | 499  | The call's `abortSignal` aborted, before or during the call (`details.reason` is its name)  |
 | `STORAGE_BUCKET_UNDEFINED`        | 400  | Operation without a bucket and no default bucket in the config                                 |
 | `STORAGE_MULTIPART_ABORTED`       | 500  | Multipart upload failed and was aborted. With `@aws-sdk/lib-storage` (`leavePartsOnError: false`) the abort is automatic; on the raw presigned-multipart path the lib issues `AbortMultipartUpload` to avoid orphan parts being billed |
 | `STORAGE_INVALID_CONFIG`          | 500  | `BymaxStorageModuleOptions` validation failed at initialization                            |

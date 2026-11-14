@@ -46,4 +46,5 @@ export const STORAGE_ERROR_MESSAGES: Record<StorageErrorCode, string> = {
     'The bucket cannot be accessed with these credentials (it may also not exist)',
   [STORAGE_ERROR_CODES.STORAGE_BUCKET_REGION_MISMATCH]:
     'The bucket belongs to a different region than the configured one',
+  [STORAGE_ERROR_CODES.STORAGE_REQUEST_ABORTED]: 'The call was aborted by its AbortSignal',
 }

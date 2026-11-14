@@ -288,7 +288,8 @@ describe('StorageService — single-shot upload', () => {
     const captured: Record<string, unknown>[] = []
     const validate = jest.fn().mockImplementation((input: Record<string, unknown>) => {
       captured.push(input)
-      return Promise.resolve({ body: input.body })
+      // The third upload only needs its validation input recorded; it ends there.
+      return captured.length === 3 ? Promise.reject(new Error('stop')) : Promise.resolve({ body: input.body })
     })
     const resolved = applyDefaults({
       endpoint: 'https://s3.example.com',
@@ -317,7 +318,9 @@ describe('StorageService — single-shot upload', () => {
       uploadOf({ key: 'a.txt', body: Readable.from([Buffer.from('hello')]), size: 9, metadata: { owner: 'alice' } }),
     )
     await service.upload(uploadOf({ key: 'a.txt' }))
+    await service.upload(uploadOf({ key: 'a.txt', body: Readable.from([Buffer.from('x')]) })).catch(() => undefined)
 
+    expect('size' in (captured[2] ?? {})).toBe(false)
     expect(captured[0]?.size).toBe(9)
     expect(captured[0]?.metadata).toEqual({ owner: 'alice' })
     expect(captured[1]?.size).toBe(5)

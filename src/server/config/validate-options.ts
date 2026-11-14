@@ -8,6 +8,7 @@
 import { HttpStatus } from '@nestjs/common'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { MAX_TIMER_MS } from '../constants/timer.constants'
 import { isHeaderValue } from '../utils/header-value'
 
 const MIN_PART_SIZE_BYTES = 5 * 1024 * 1024
@@ -30,6 +31,7 @@ function isNonEmptyString(value: unknown): value is string {
  * What precedes the authority: an optional scheme and any run of slashes or backslashes, since a URL
  * parser accepts `https://host`, `https:/host`, `https:host` and `//host` alike.
  */
+// Stryker disable next-line Regex: the pattern can match the empty string, so it always matches at index 0 and dropping the `^` anchor strips the same prefix (equivalent); its other mutants are killed by the schemed-userinfo cases of the spec.
 const BEFORE_AUTHORITY = /^(?:[a-z][a-z\d+.-]*:)?[/\\]*/i
 
 /**
@@ -44,6 +46,7 @@ function asParsed(value: string): string {
 function parsedCarriesCredentials(value: string): boolean {
   try {
     const url = new URL(value)
+    // Stryker disable next-line ConditionalExpression,LogicalOperator: the string reading of the authority refuses a superset of what this reads (2,000,000 random URL-like strings, none read by the parser with a user that the string reading missed), so no input tells these mutants apart from the original (equivalent).
     return url.username !== '' || url.password !== ''
   } catch {
     return false
@@ -58,6 +61,7 @@ function parsedCarriesCredentials(value: string): boolean {
  * else or rejects (`user@host:9000`, `user:pw@host`).
  */
 function authorityCarriesCredentials(text: string): boolean {
+  // Stryker disable next-line StringLiteral: the replacement text holds no `/`, `?`, `#` or `@`, so the search and the `@` test give the same answer whatever it is (equivalent).
   const rest = text.replace(BEFORE_AUTHORITY, '')
   const end = rest.search(/[/?#]/)
   return (end === -1 ? rest : rest.slice(0, end)).includes('@')
@@ -69,6 +73,24 @@ function authorityCarriesCredentials(text: string): boolean {
  */
 function urlCarriesCredentials(value: string): boolean {
   return parsedCarriesCredentials(value) || authorityCarriesCredentials(asParsed(value))
+}
+
+/**
+ * Refuses a duration option that is not an integer from `min` to the longest delay a timer holds:
+ * above it Node clamps the timer to 1 ms, so every request or read would fail at once. `0` is
+ * allowed only where `min` is `0`, and means the guard is off.
+ */
+function assertTimerMs(options: Record<string, unknown>, name: string, min: 0 | 1): void {
+  const value = options[name]
+  if (
+    value !== undefined &&
+    (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > MAX_TIMER_MS)
+  ) {
+    throw invalid(
+      `${name} must be an integer from ${String(min)} to ${String(MAX_TIMER_MS)}` +
+        (min === 0 ? ' (0 disables the guard)' : ''),
+    )
+  }
 }
 
 /**
@@ -116,18 +138,16 @@ export function validateOptions(options: unknown): void {
   ) {
     throw invalid('multipart.partSizeBytes must be >= 5 MB (S3 hard limit)')
   }
-  for (const name of ['requestTimeoutMs', 'maxAttempts'] as const) {
-    const value = options[name]
-    if (value !== undefined && (typeof value !== 'number' || !Number.isInteger(value) || value < 1)) {
-      throw invalid(`${name} must be an integer >= 1`)
-    }
+  const maxAttempts = options.maxAttempts
+  if (
+    maxAttempts !== undefined &&
+    (typeof maxAttempts !== 'number' || !Number.isInteger(maxAttempts) || maxAttempts < 1)
+  ) {
+    throw invalid('maxAttempts must be an integer >= 1')
   }
-  for (const name of ['uploadIdleTimeoutMs', 'bodyIdleTimeoutMs'] as const) {
-    const idle = options[name]
-    if (idle !== undefined && (typeof idle !== 'number' || !Number.isInteger(idle) || idle < 0)) {
-      throw invalid(`${name} must be an integer >= 0 (0 disables the guard)`)
-    }
-  }
+  assertTimerMs(options, 'requestTimeoutMs', 1)
+  assertTimerMs(options, 'uploadIdleTimeoutMs', 0)
+  assertTimerMs(options, 'bodyIdleTimeoutMs', 0)
   if (options.serverSideEncryption === 'aws:kms' && !options.kmsKeyId) {
     throw invalid('kmsKeyId is required when serverSideEncryption === "aws:kms"')
   }

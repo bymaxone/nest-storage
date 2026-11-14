@@ -3,7 +3,7 @@
  * `HttpException` so it integrates with host global exception filters.
  * @layer server/errors
  */
-import { HttpException, type HttpStatus } from '@nestjs/common'
+import { HttpException } from '@nestjs/common'
 import type { StorageErrorCode } from '../../shared/constants/error-codes.constants'
 import { STORAGE_ERROR_MESSAGES } from './storage-error-messages'
 import { STORAGE_ERROR_STATUS } from './storage-error-status'
@@ -22,7 +22,7 @@ export class StorageException extends HttpException {
   constructor(
     code: StorageErrorCode,
     /** Defaults to `STORAGE_ERROR_STATUS[code]`. Pass only to override. */
-    statusCode: HttpStatus = STORAGE_ERROR_STATUS[code],
+    statusCode: number = STORAGE_ERROR_STATUS[code],
     details?: Record<string, unknown>,
     /** Defaults to the message of `code`. Pass only when the situation is more specific than the code. */
     message: string = STORAGE_ERROR_MESSAGES[code],

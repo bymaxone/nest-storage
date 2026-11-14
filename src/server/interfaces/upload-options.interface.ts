@@ -27,6 +27,14 @@ export interface UploadOptions {
    * cached `UploadResult` is returned without re-uploading.
    */
   idempotencyKey?: string
+  /**
+   * Ends the upload when it aborts: the request is dropped, a multipart upload is aborted so no part
+   * stays stored, and the call rejects `STORAGE_REQUEST_ABORTED` with `details.reason` set to the
+   * signal's reason name and, for multipart, `details.abort`. A signal that is already aborted makes
+   * no request. As for any rejected upload, a stream `body` is destroyed. The library keeps no
+   * listener on the signal after the call.
+   */
+  abortSignal?: AbortSignal
   /** Progress callback fired after each multipart part (or once for single). */
   onProgress?: (event: { loaded: number; total?: number; part?: number }) => void
 }

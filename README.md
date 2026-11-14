@@ -223,9 +223,9 @@ Options accepted by `forRoot` and `forRootAsync`:
 | `defaultPublicRead`            | `boolean`                                         | `false`           | ACL `public-read` on uploads; see Public Access / ACLs |
 | `defaultCacheControl`          | `string`                                          | `public, max-age=31536000, immutable` | Default `Cache-Control` on uploads |
 | `defaultContentDisposition`    | `'inline' \| 'attachment'`                        | `inline`          | Default `Content-Disposition` on uploads       |
-| `requestTimeoutMs`             | `number`                                          | `30000`           | Per attempt, until the response headers arrive; an integer of at least `1`; see below the table |
-| `uploadIdleTimeoutMs`          | `number`                                          | `30000`           | Longest silence from a stream body during a multipart upload; follows `requestTimeoutMs` unless set, `0` disables; see below the table |
-| `bodyIdleTimeoutMs`            | `number`                                          | `30000`           | Longest silence from a download body while the caller is reading it; follows `requestTimeoutMs` unless set, `0` disables; see below the table |
+| `requestTimeoutMs`             | `number`                                          | `30000`           | Per attempt, until the response headers arrive; an integer from `1` to `2147483647`; see below the table |
+| `uploadIdleTimeoutMs`          | `number`                                          | `30000`           | Longest silence from a stream body during a multipart upload; follows `requestTimeoutMs` unless set, `0` disables, at most `2147483647`; see below the table |
+| `bodyIdleTimeoutMs`            | `number`                                          | `30000`           | Longest silence from a download body while the caller is reading it; follows `requestTimeoutMs` unless set, `0` disables, at most `2147483647`; see below the table |
 | `signedUrls.defaultGetTtlSeconds` | `number`                                       | `300`             | Default TTL for `getDownloadUrl`               |
 | `signedUrls.defaultPutTtlSeconds` | `number`                                       | `300`             | Default TTL for `getUploadUrl`                 |
 | `signedUrls.maxTtlSeconds`     | `number`                                          | `604800`          | Per-request TTLs above this are clamped; a larger value is reduced to 604800 (the 7-day SigV4 limit) at init |
@@ -411,6 +411,39 @@ and a failing `If-Match` with 412, and the library turns them into typed errors:
 
 A 304 is therefore thrown, not returned: catch `StorageException` and branch on `code`. A `range`
 (`'bytes=0-99'`) returns the requested bytes, and the metadata describes the whole object.
+
+### Cancelling a call (`abortSignal`)
+
+`upload`, `download`, `downloadBuffer`, `list`, `head`, `exists`, `delete` and `checkBucket` accept an
+`abortSignal`. When it aborts, the call rejects `STORAGE_REQUEST_ABORTED` (HTTP 499) with
+`details.reason` set to the **name** of the signal's reason (`AbortError`, `TimeoutError`), never its
+message, so a host can tell its own timeout from a client disconnect. `exists` rejects too, rather
+than answering `false`.
+
+```typescript
+const controller = new AbortController()
+req.on('close', () => controller.abort())
+await this.storage.upload({ key, body, contentType, abortSignal: controller.signal })
+```
+
+- A signal that is **already aborted** makes no request at all, not even `CreateMultipartUpload`.
+- An **upload** that is aborted mid-flight drops its request. For a multipart upload the library
+  aborts it on the provider (`AbortMultipartUpload`), and `details.abort` says whether that
+  worked. That cleanup runs with a deadline of its own, never the
+  caller's signal, which would cancel it. A signal that fires while `CreateMultipartUpload` is in flight does not cancel that request, so the upload id it returns can still be aborted: the library waits for it within the same deadline, and aborts an id that arrives later without keeping the caller waiting.
+  As with any rejected upload, **a stream you passed as `body` is destroyed**.
+- **Preparing an upload body is watched too**: while a validator reads the head of a stream, or the
+  pre-upload scan buffers it, an abort ends the call at once with the same error and destroys the
+  stream, even if the stream never delivers another byte.
+- A **post-upload scan** that is still running when the signal aborts ends the call too, with the
+  same error and `details.stored: true`: the object is already stored. The scan carries on, and an
+  object it finds infected is still deleted.
+- A **download** body that is being read when the signal aborts errors as `STORAGE_REQUEST_ABORTED`
+  while the idle guard is on (the default `bodyIdleTimeoutMs`); with `bodyIdleTimeoutMs: 0` it
+  errors as the raw `AbortError`.
+- The library keeps no listener on your signal after a call, so one signal can be reused across many
+  calls.
+- `copy`, `deleteMany` and the signed-URL methods take no `abortSignal`.
 
 ---
 
@@ -738,6 +771,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_BUCKET_REGION_MISMATCH` | 500  | `checkBucket()` got a 301 or `PermanentRedirect`: the bucket lives in another region than the configured one |
 | `STORAGE_NOT_MODIFIED`           | 304  | `download()` with `ifNoneMatch` equal to the current ETag |
 | `STORAGE_PRECONDITION_FAILED`    | 412  | `download()` with `ifMatch` different from the current ETag |
+| `STORAGE_REQUEST_ABORTED`        | 499  | The call's `abortSignal` aborted, before or during the call (`details.reason` is the name of the signal's reason: `AbortError`, `TimeoutError`, ...; for a multipart upload `details.abort` says whether the upload was aborted on the provider) |
 
 ```typescript
 import { StorageException, STORAGE_ERROR_CODES } from '@bymax-one/nest-storage'

@@ -102,19 +102,19 @@ export interface BymaxStorageModuleOptions {
   responseChecksumValidation?: 'WHEN_SUPPORTED' | 'WHEN_REQUIRED'
   /** Total attempts including the first try (maps to `maxAttempts`). An integer of at least `1`. Default: `3`. */
   maxAttempts?: number
-  /** Per-attempt timeout until the response headers arrive. An integer of at least `1`. Default: `30000` ms. */
+  /** Per-attempt timeout until the response headers arrive. An integer from `1` to `2147483647` (the longest a timer holds). Default: `30000` ms. */
   requestTimeoutMs?: number
   /**
    * Longest silence, in milliseconds, tolerated from a stream body while a multipart upload
    * waits for its next bytes; past it the upload is aborted and rejects `STORAGE_TIMEOUT`.
-   * An integer of at least `0`; `0` turns the guard off. Default: `requestTimeoutMs`.
+   * An integer from `0` to `2147483647` (the longest a timer holds); `0` turns the guard off. Default: `requestTimeoutMs`.
    */
   uploadIdleTimeoutMs?: number
   /**
    * Longest silence, in milliseconds, tolerated from a download body while the caller is waiting
    * for its next bytes; past it the stream fails with `STORAGE_TIMEOUT` (`details.phase` is
    * `'body-idle'`) and the connection is released. The clock runs only while a read is pending, so
-   * a consumer that is slow to read never trips it. An integer of at least `0`; `0` turns the guard
+   * a consumer that is slow to read never trips it. An integer from `0` to `2147483647` (the longest a timer holds); `0` turns the guard
    * off. Default: `requestTimeoutMs`.
    */
   bodyIdleTimeoutMs?: number

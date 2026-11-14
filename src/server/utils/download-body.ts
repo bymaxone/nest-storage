@@ -7,6 +7,7 @@
 import { HttpStatus } from '@nestjs/common'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { requestAborted } from './abort-support'
 import { SourceIdleError, withIdleTimeout } from './idle-timeout'
 
 /**
@@ -17,26 +18,27 @@ import { SourceIdleError, withIdleTimeout } from './idle-timeout'
  * @param body - The body the SDK returned.
  * @param idleMs - Longest silence allowed; `0` returns `body` unchanged.
  * @param context - Non-sensitive details to carry on the error (key, bucket).
+ * @param signal - The caller's `abortSignal`: a body that ends because it aborted ends as the typed abort error.
  * @returns The guarded stream, or `body` when the guard is off.
  */
 export function guardDownloadBody(
   body: NodeJS.ReadableStream,
   idleMs: number,
   context: Record<string, unknown>,
+  signal?: AbortSignal,
 ): NodeJS.ReadableStream {
   if (idleMs === 0) {
     return body
   }
-  return withIdleTimeout(
-    body,
-    idleMs,
-    (error) =>
-      error instanceof SourceIdleError
-        ? new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, HttpStatus.GATEWAY_TIMEOUT, {
-            ...context,
-            phase: 'body-idle',
-            idleMs: error.idleMs,
-          })
-        : error,
-  )
+  return withIdleTimeout(body, idleMs, (error) => {
+    if (error instanceof SourceIdleError) {
+      return new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, HttpStatus.GATEWAY_TIMEOUT, {
+        ...context,
+        phase: 'body-idle',
+        idleMs: error.idleMs,
+      })
+    }
+    // The SDK ends a body it is reading with an AbortError when the caller's signal aborts.
+    return signal?.aborted ? requestAborted(signal, context) : error
+  })
 }
