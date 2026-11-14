@@ -46,12 +46,7 @@ import { toListResult } from '../utils/list-result'
 import { assertHeaderValues } from '../utils/header-value'
 import { guardIdleBody } from '../utils/idle-timeout'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
-import {
-  buildACL,
-  buildCacheControl,
-  buildContentDisposition,
-  buildSSE,
-} from '../utils/header-utils'
+import { buildACL } from '../utils/header-utils'
 import {
   destroyStream,
   getBodySize,
@@ -75,6 +70,8 @@ import {
 import { buildPublicUrl } from '../utils/public-url'
 import {
   buildUploadResult,
+  putObjectHeaders,
+  validationInput,
   emitProgress,
   forwardProgress,
   normalizeScanBody,
@@ -183,16 +180,8 @@ export class StorageService {
     const signal = options.abortSignal
 
     // Validation pipeline: MIME → size → custom validators.
-    const validated = await abortable(this.validation.validate({
-      key: finalKey,
-      body: options.body,
-      contentType: options.contentType,
-      ...(options.size !== undefined ? { size: options.size } : {}),
-      ...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
-      cacheControl: options.cacheControl,
-      contentDisposition: options.contentDisposition,
-      kmsKeyId: options.kmsKeyId,
-    }), signal, context)
+    const input = validationInput(options, finalKey)
+    const validated = await abortable(this.validation.validate(input), signal, context)
     // A stream cannot be read by the scanner and then sent: buffer it first, bounded.
     const scanned = await abortable(this.bufferForPreUploadScan(validated.body, finalKey), signal, context)
     const body = boundStreamSize(scanned, options.size, this.options)
@@ -552,20 +541,9 @@ export class StorageService {
   ): Promise<UploadResult> {
     const total = options.size ?? getBodySize(options.body)
     const input: PutObjectCommandInput = {
-      Bucket: bucket,
-      Key: finalKey,
+      ...putObjectHeaders(options, this.options, finalKey, bucket),
       Body: normalizeSingleShotBody(options.body),
-      ContentType: options.contentType,
       ContentLength: total,
-      CacheControl: buildCacheControl(options.cacheControl, this.options.defaultCacheControl),
-      ContentDisposition: buildContentDisposition(
-        options.contentDisposition,
-        this.options.defaultContentDisposition,
-      ),
-      // `public-read` only takes effect on buckets that allow ACLs (see header-utils).
-      ACL: buildACL(options.publicRead, this.options.defaultPublicRead),
-      Metadata: options.metadata,
-      ...buildSSE(options.serverSideEncryption, options.kmsKeyId, this.options),
     }
     try {
       const response = await this.s3Provider
@@ -601,18 +579,8 @@ export class StorageService {
     bucket: string,
   ): Promise<UploadResult> {
     const params: PutObjectCommandInput = {
-      Bucket: bucket,
-      Key: finalKey,
+      ...putObjectHeaders(options, this.options, finalKey, bucket),
       Body: guardIdleBody(options.body, this.options.uploadIdleTimeoutMs),
-      ContentType: options.contentType,
-      CacheControl: buildCacheControl(options.cacheControl, this.options.defaultCacheControl),
-      ContentDisposition: buildContentDisposition(
-        options.contentDisposition,
-        this.options.defaultContentDisposition,
-      ),
-      ACL: buildACL(options.publicRead, this.options.defaultPublicRead),
-      Metadata: options.metadata,
-      ...buildSSE(options.serverSideEncryption, options.kmsKeyId, this.options),
     }
     const signal = options.abortSignal
     const bound = signal ? bindToSignal(this.s3Provider.getClient(), signal) : undefined

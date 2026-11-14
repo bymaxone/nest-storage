@@ -9,6 +9,8 @@ import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
 import type { KeyResolverService } from '../services/key-resolver.service'
 import type { UploadResult } from '../../shared/types/storage-types'
+import type { ValidationService } from '../services/validation.service'
+import { buildACL, buildCacheControl, buildContentDisposition, buildSSE } from './header-utils'
 import { buildPublicUrl } from './public-url'
 import { isBufferLike, type UploadBody } from './stream-utils'
 
@@ -76,4 +78,44 @@ export function emitProgress(
     ...(total !== undefined ? { total } : {}),
     ...(part !== undefined ? { part } : {}),
   })
+}
+
+/** What a single-shot and a multipart upload send alike: the target, the headers, the ACL and the encryption. */
+export function putObjectHeaders(
+  options: UploadOptions & { contentType: string },
+  resolved: ResolvedBymaxStorageOptions,
+  finalKey: string,
+  bucket: string,
+): PutObjectCommandInput {
+  return {
+    Bucket: bucket,
+    Key: finalKey,
+    ContentType: options.contentType,
+    CacheControl: buildCacheControl(options.cacheControl, resolved.defaultCacheControl),
+    ContentDisposition: buildContentDisposition(
+      options.contentDisposition,
+      resolved.defaultContentDisposition,
+    ),
+    // `public-read` only takes effect on buckets that allow ACLs (see header-utils).
+    ACL: buildACL(options.publicRead, resolved.defaultPublicRead),
+    Metadata: options.metadata,
+    ...buildSSE(options.serverSideEncryption, options.kmsKeyId, resolved),
+  }
+}
+
+/** What the validation pipeline is told about an upload: its size and metadata only when it declares them. */
+export function validationInput(
+  options: UploadOptions & { contentType: string },
+  finalKey: string,
+): Parameters<ValidationService['validate']>[0] {
+  return {
+    key: finalKey,
+    body: options.body,
+    contentType: options.contentType,
+    ...(options.size !== undefined ? { size: options.size } : {}),
+    ...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
+    cacheControl: options.cacheControl,
+    contentDisposition: options.contentDisposition,
+    kmsKeyId: options.kmsKeyId,
+  }
 }
