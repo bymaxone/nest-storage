@@ -9,7 +9,8 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { MAX_TIMER_MS } from '../constants/timer.constants'
-import { bindToSignal, CLEANUP_DEADLINE_MS, sendOptions, within } from './abort-support'
+import { getEventListeners } from 'node:events'
+import { abortable, bindToSignal, CLEANUP_DEADLINE_MS, sendOptions, within } from './abort-support'
 
 describe('abort-support', () => {
   it('keeps the cleanup deadline within what a timer can hold', () => {
@@ -95,6 +96,42 @@ describe('abort-support', () => {
     it('gives up on what does not settle in time', async () => {
       // A cleanup that waits for an id that never comes ends at its deadline.
       expect(await within(new Promise<number>(() => undefined), 20)).toBeUndefined()
+    })
+  })
+
+  describe('abortable', () => {
+    const context = { key: 'k', op: 'upload' }
+
+    it('is exactly the work when there is no signal', async () => {
+      // Without a signal a call behaves as it did without the option.
+      await expect(abortable(Promise.resolve(1), undefined, context)).resolves.toBe(1)
+      await expect(abortable(Promise.reject(new Error('boom')), undefined, context)).rejects.toThrow('boom')
+    })
+
+    it('settles as the work does and leaves no listener behind, on success and on failure', async () => {
+      // The signal is reused by the host across calls; nothing of the library stays on it.
+      const signal = new AbortController().signal
+
+      await expect(abortable(Promise.resolve(7), signal, context)).resolves.toBe(7)
+      const failure = new Error('boom')
+      await expect(abortable(Promise.reject(failure), signal, context)).rejects.toBe(failure)
+      expect(getEventListeners(signal, 'abort')).toHaveLength(0)
+    })
+
+    it('rejects STORAGE_REQUEST_ABORTED at once when the signal aborts, and drops what the work later rejects', async () => {
+      // A body read that nobody can finish is not waited for, and its eventual failure is not an unhandled rejection.
+      const controller = new AbortController()
+      let fail: (error: Error) => void = () => undefined
+      const work = new Promise<number>((_resolve, reject) => {
+        fail = reject
+      })
+      const waiting = abortable(work, controller.signal, context)
+      controller.abort()
+
+      await expect(waiting).rejects.toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
+      fail(new Error('Premature close'))
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
     })
   })
 })

@@ -333,6 +333,55 @@ describe('abortSignal', () => {
     expect(error).toMatchObject({ code: 'STORAGE_SIZE_EXCEEDED' })
   })
 
+  /** A stream that never delivers a byte and never ends. */
+  function silentStream(): Readable {
+    return new Readable({ read() {} })
+  }
+
+  it.each([
+    [
+      'the pre-upload scan is buffering a silent stream',
+      {
+        validation: { maxSizeBytes: 10 * MIB },
+        scanner: { impl: { scan: () => Promise.resolve({ status: 'clean' as const, engine: 'e' }) }, mode: 'pre-upload' as const },
+      },
+    ],
+    [
+      'a custom validator is reading the head of a silent stream',
+      {
+        validation: {
+          customValidators: [
+            {
+              name: 'peek',
+              validate: async (context: { readBytes?: (maxBytes: number) => Promise<Buffer> }) => {
+                await context.readBytes?.(16)
+                return { ok: true as const }
+              },
+            },
+          ],
+        },
+      },
+    ],
+  ])('ends an upload and releases its stream when the signal fires while %s', async (_label, extra) => {
+    // Preparing the body happens before any request, so no SDK call carries the signal here.
+    const service = await storageWith(extra)
+    const controller = new AbortController()
+    const body = silentStream()
+    const started = Date.now()
+    const pending = service
+      .upload({ key: 'k', body, contentType: 'x/y', abortSignal: controller.signal })
+      .catch((err: unknown) => err)
+    await sleep(150)
+    controller.abort()
+
+    const error = await Promise.race([pending, sleep(3000).then(() => 'STILL_PENDING')])
+
+    expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
+    expect(Date.now() - started).toBeLessThan(2000)
+    expect(body.destroyed).toBe(true)
+    expect(calls).toEqual([])
+  })
+
   it('leaves no listener on a signal reused across a completed, a failed and an aborted call', async () => {
     const service = await storage()
     const controller = new AbortController()

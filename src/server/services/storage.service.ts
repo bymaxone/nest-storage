@@ -63,6 +63,7 @@ import { boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { logValue } from '../utils/log-value'
 import {
+  abortable,
   bindToSignal,
   CLEANUP_DEADLINE_MS,
   failureOrAbort,
@@ -176,8 +177,13 @@ export class StorageService {
       }
     }
 
+    // Reading the body (a validator peeking at it, the pre-upload scan buffering it) happens before any
+    // request, so the signal is watched here: a silent stream must not hold the call.
+    const context = { key: finalKey, bucket, op: 'upload' }
+    const signal = options.abortSignal
+
     // Validation pipeline: MIME → size → custom validators.
-    const validated = await this.validation.validate({
+    const validated = await abortable(this.validation.validate({
       key: finalKey,
       body: options.body,
       contentType: options.contentType,
@@ -186,16 +192,16 @@ export class StorageService {
       cacheControl: options.cacheControl,
       contentDisposition: options.contentDisposition,
       kmsKeyId: options.kmsKeyId,
-    })
+    }), signal, context)
     // A stream cannot be read by the scanner and then sent: buffer it first, bounded.
-    const scanned = await this.bufferForPreUploadScan(validated.body, finalKey)
+    const scanned = await abortable(this.bufferForPreUploadScan(validated.body, finalKey), signal, context)
     const body = boundStreamSize(scanned, options.size, this.options)
     const validatedOptions = { ...options, body }
 
     // Pre-upload scan: runs before the S3 PutObject.
-    await this.runPreUploadScan(body, finalKey, bucket, options)
+    await abortable(this.runPreUploadScan(body, finalKey, bucket, options), signal, context)
 
-    throwIfAborted(options.abortSignal, { key: finalKey, bucket, op: 'upload' })
+    throwIfAborted(signal, context)
     const strategy = pickUploadStrategy(
       validatedOptions.body,
       validatedOptions.size,

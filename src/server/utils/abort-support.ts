@@ -148,3 +148,42 @@ export async function within<T>(promise: Promise<T>, ms: number): Promise<T | un
     clearTimeout(timer)
   }
 }
+
+/**
+ * Ends a wait on `work` as soon as `signal` aborts. For work that reads a body before any request is
+ * made (a validator peeking at a stream, the pre-upload scan buffering it): nothing there carries the
+ * signal, and a silent stream would otherwise hold the call forever. `work` is not cancelled; the
+ * caller releases what it reads, and whatever `work` then rejects with is dropped.
+ *
+ * @param work - What is being waited for.
+ * @param signal - The caller's signal, if any; without one `work` is returned as it is.
+ * @param context - Details to carry on the abort error.
+ * @returns `work`'s outcome, its own rejection reason unchanged, or a rejection with
+ *   `STORAGE_REQUEST_ABORTED` once the signal aborted.
+ */
+export async function abortable<T>(
+  work: Promise<T>,
+  signal: AbortSignal | undefined,
+  context: Record<string, unknown>,
+): Promise<T> {
+  if (!signal) {
+    return work
+  }
+  const release = new AbortController()
+  const aborted = new Promise<never>((_resolve, reject) => {
+    signal.addEventListener(
+      'abort',
+      () => {
+        reject(requestAborted(signal, context))
+      },
+      { once: true, signal: release.signal },
+    )
+  })
+  try {
+    return await Promise.race([work, aborted])
+  } finally {
+    release.abort()
+    // If the signal won, whatever `work` rejects with later is of no interest to anyone.
+    work.catch(() => undefined)
+  }
+}
