@@ -448,6 +448,8 @@ describe('abortSignal', () => {
       .catch((err: unknown) => err)
     for (let i = 0; i < 100 && pulled < 12; i += 1) await sleep(25)
     await sleep(300)
+    // The body has delivered everything it will: from here it is silent.
+    expect(pulled).toBe(12)
     controller.abort()
 
     const error = await Promise.race([pending, sleep(3000).then(() => 'STILL_PENDING')])
