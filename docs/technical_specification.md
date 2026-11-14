@@ -247,9 +247,9 @@ export interface BymaxStorageModuleOptions {
   }
   /** false = virtual-hosted (AWS, DO, R2, Wasabi). true = path-style (MinIO). Default: false. */
   forcePathStyle?: boolean
-  /** Public base URL for direct links. Fallback: endpoint + bucket. */
+  /** Public base URL for direct links. Fallback: endpoint + bucket. Must not carry credentials. */
   publicBaseUrl?: string
-  /** When defined, getPublicUrl() returns via CDN. */
+  /** When defined, getPublicUrl() returns via CDN. Must not carry credentials. */
   cdnBaseUrl?: string
   /**
    * Apply ACL `public-read` on uploads. Default: false. NOTE: modern AWS S3 buckets

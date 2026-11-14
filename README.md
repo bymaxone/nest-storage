@@ -213,8 +213,8 @@ Options accepted by `forRoot` and `forRootAsync`:
 | `bucket`                       | `string`                                          | —                 | Default bucket (can be overridden per-call)    |
 | `credentials`                  | `{ accessKeyId, secretAccessKey, sessionToken? }` | —                 | Load from env / Secrets Manager                |
 | `forcePathStyle`               | `boolean`                                         | `false`           | Set to `true` for MinIO and self-hosted        |
-| `publicBaseUrl`                | `string`                                          | —                 | Base URL for public `getPublicUrl()` results   |
-| `cdnBaseUrl`                   | `string`                                          | —                 | CDN edge URL (preferred over `publicBaseUrl`)  |
+| `publicBaseUrl`                | `string`                                          | —                 | Base URL for public `getPublicUrl()` results; it must not carry credentials (a user or password is refused) |
+| `cdnBaseUrl`                   | `string`                                          | —                 | CDN edge URL (preferred over `publicBaseUrl`); it must not carry credentials either |
 | `keyPrefix`                    | `string`                                          | —                 | Prepended to every key before it reaches the provider; fixed per module instance |
 | `maxAttempts`                  | `number`                                          | `3`               | SDK v3 retry count; an integer of at least `1` |
 | `serverSideEncryption`         | `'AES256' \| 'aws:kms'`                           | —                 | Global SSE policy; `aws:kms` needs `kmsKeyId`. `'NONE'` is accepted per upload only |

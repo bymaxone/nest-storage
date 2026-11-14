@@ -27,18 +27,48 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 /**
- * Whether an endpoint holds a user or a password. A value without `//` after its scheme, such as
- * `user:pw@host:9000`, parses as an opaque path under the scheme `user:`, so an `@` in that path is
- * userinfo too. A value that is not a URL holds none.
+ * What precedes the authority: an optional scheme and any run of slashes or backslashes, since a URL
+ * parser accepts `https://host`, `https:/host`, `https:host` and `//host` alike.
  */
-function endpointCarriesCredentials(endpoint: string): boolean {
+const BEFORE_AUTHORITY = /^(?:[a-z][a-z\d+.-]*:)?[/\\]*/i
+
+/**
+ * The value as a URL parser reads it before parsing: leading control characters and spaces are
+ * dropped (trailing ones cannot matter here) and tabs and line breaks are removed wherever they are.
+ */
+function asParsed(value: string): string {
+  return value.replace(/[\t\n\r]/g, '').replace(/^[\p{Cc} ]+/u, '')
+}
+
+/** Whether a URL parser reads the value as having a user or a password. */
+function parsedCarriesCredentials(value: string): boolean {
   try {
-    const url = new URL(endpoint)
-    const opaquePath = !url.pathname.startsWith('/')
-    return url.username !== '' || url.password !== '' || (opaquePath && url.pathname.includes('@'))
+    const url = new URL(value)
+    return url.username !== '' || url.password !== ''
   } catch {
     return false
   }
+}
+
+/**
+ * Whether the text holds userinfo read as a string: the authority is what follows
+ * {@link BEFORE_AUTHORITY} up to the first `/`, `?` or `#` (a backslash is not one: only a special
+ * scheme reads it as a slash, so counting it as part of the authority can only refuse more), and an
+ * `@` in it separates userinfo from the host. This covers values a URL parser reads as something
+ * else or rejects (`user@host:9000`, `user:pw@host`).
+ */
+function authorityCarriesCredentials(text: string): boolean {
+  const rest = text.replace(BEFORE_AUTHORITY, '')
+  const end = rest.search(/[/?#]/)
+  return (end === -1 ? rest : rest.slice(0, end)).includes('@')
+}
+
+/**
+ * Whether a URL option holds userinfo, by either reading: the URL parser's own, which normalizes
+ * whatever it normalizes, or the string reading of the value as the parser would see it.
+ */
+function urlCarriesCredentials(value: string): boolean {
+  return parsedCarriesCredentials(value) || authorityCarriesCredentials(asParsed(value))
 }
 
 /**
@@ -55,8 +85,13 @@ export function validateOptions(options: unknown): void {
   if (!isNonEmptyString(options.endpoint)) {
     throw invalid('options.endpoint must be a non-empty string')
   }
-  if (endpointCarriesCredentials(options.endpoint)) {
-    throw invalid('options.endpoint must not carry credentials; pass them in options.credentials')
+  // The endpoint is logged and is the base of the derived public URL; the two public URLs are
+  // returned to callers in every `publicUrl`. A secret in any of them reaches logs or clients.
+  for (const name of ['endpoint', 'publicBaseUrl', 'cdnBaseUrl'] as const) {
+    const value = options[name]
+    if (typeof value === 'string' && urlCarriesCredentials(value)) {
+      throw invalid(`options.${name} must not carry credentials; pass them in options.credentials`)
+    }
   }
   if (!isNonEmptyString(options.region)) {
     throw invalid('options.region must be a non-empty string')

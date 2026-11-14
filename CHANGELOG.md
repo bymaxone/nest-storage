@@ -42,6 +42,17 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Fixed
 
+- **`publicBaseUrl` and `cdnBaseUrl` are refused when they carry credentials.** Either is returned to
+  callers as the base of every `publicUrl`, so a user or password in either, including one given
+  through a provider recipe's `customDomain`, reached clients and anything that stores or logs those
+  URLs. `validateOptions` now throws `STORAGE_INVALID_CONFIG` naming the option and repeating neither
+  the user nor the password, from `forRoot` and `forRootAsync` alike. The same check now applies to
+  `endpoint`, `publicBaseUrl` and `cdnBaseUrl`: an `@` in the host part (the text after an optional
+  scheme and slashes, up to the first `/`, `?` or `#`) is refused, with or without a password.
+
+  **Apply to a derived backend:** if one of these URLs embeds `user@` or `user:password@`, remove it before upgrading;
+  the module now refuses to start with such a value.
+
 - **A key or a provider message in a log line is written as one escaped token.** The scanner warnings
   (`Infected file detected`, `Inconclusive scan result accepted`), the idempotent-delete warning, the
   `exists` warning and the `STORAGE_SCAN_CLEANUP_FAILED` error repeated the object key, the scanner's
