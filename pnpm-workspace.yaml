@@ -111,3 +111,12 @@ overrides:
   # `@stryker-mutator/core`, i.e. the manual mutation gate; nothing here ships it. 4.6.6 is the
   # first patched release. Remove once `mutation-server-protocol` resolves it at or above that.
   'zod@4': '^4.6.6'
+  # GHSA-3g3m-2fjr-6pw4 (glob >=9 <14.0.2) and GHSA-g3hv-75wg-m249 (minimatch >=7 <11.0.1).
+  # Arrive only through the test, mutation and lint tooling (`archiver` under `testcontainers`,
+  # `test-exclude` under jest's coverage); `dependencies` is empty, so nothing here ships them.
+  # Both majors on each line that resolves are raised to the first patched release. Remove
+  # once the parents' own ranges are above these floors.
+  'glob@10': '^14.0.2'
+  'glob@13': '^14.0.2'
+  'minimatch@9': '^11.0.1'
+  'minimatch@10': '^11.0.1'
