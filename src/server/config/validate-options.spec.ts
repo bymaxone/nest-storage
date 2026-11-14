@@ -241,6 +241,24 @@ describe('validateOptions', () => {
     }
   })
 
+  it.each(['requestTimeoutMs', 'uploadIdleTimeoutMs', 'bodyIdleTimeoutMs'])(
+    'should refuse a %s above the longest delay a timer holds, and accept that delay itself',
+    (name) => {
+      // Node clamps a timer above 2**31 - 1 ms to 1 ms, so a larger value would make every request or read fail at once.
+      const longest = 2 ** 31 - 1
+
+      expect(reasonOf(() => {
+        validateOptions({ ...valid, [name]: longest + 1 })
+      })).toContain(name)
+      expect(reasonOf(() => {
+        validateOptions({ ...valid, [name]: Number.MAX_SAFE_INTEGER })
+      })).toContain(name)
+      expect(() => {
+        validateOptions({ ...valid, [name]: longest })
+      }).not.toThrow()
+    },
+  )
+
   it('should accept aws:kms with a kmsKeyId', () => {
     // SSE `&&` right-false branch (kmsKeyId present).
     expect(() => {

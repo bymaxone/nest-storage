@@ -40,11 +40,12 @@ const EXCLUSIONS: readonly Exclusion[] = [
     kind: 'const-table',
     reason:
       'Frozen `as const` value tables and their derived types: Stryker generates 0 mutants for an `as const` ' +
-      'literal (measured on these files), so there is nothing to judge, and `src/shared/constants/constant-tables.spec.ts` and `src/server/constants/default-options.constants.spec.ts` ' +
+      'literal (measured on these files), so there is nothing to judge, and `src/shared/constants/constant-tables.spec.ts` `src/server/constants/default-options.constants.spec.ts` and `src/server/constants/timer.constants.spec.ts` ' +
       'pins every value by exact equality. A function, a computed key or a non-`as const` declaration added to one ' +
       'fails this spec.',
     files: [
       'src/server/constants/default-options.constants.ts',
+      'src/server/constants/timer.constants.ts',
       'src/shared/constants/*.constants.ts',
     ],
   },

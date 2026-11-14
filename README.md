@@ -223,9 +223,9 @@ Options accepted by `forRoot` and `forRootAsync`:
 | `defaultPublicRead`            | `boolean`                                         | `false`           | ACL `public-read` on uploads; see Public Access / ACLs |
 | `defaultCacheControl`          | `string`                                          | `public, max-age=31536000, immutable` | Default `Cache-Control` on uploads |
 | `defaultContentDisposition`    | `'inline' \| 'attachment'`                        | `inline`          | Default `Content-Disposition` on uploads       |
-| `requestTimeoutMs`             | `number`                                          | `30000`           | Per attempt, until the response headers arrive; an integer of at least `1`; see below the table |
-| `uploadIdleTimeoutMs`          | `number`                                          | `30000`           | Longest silence from a stream body during a multipart upload; follows `requestTimeoutMs` unless set, `0` disables; see below the table |
-| `bodyIdleTimeoutMs`            | `number`                                          | `30000`           | Longest silence from a download body while the caller is reading it; follows `requestTimeoutMs` unless set, `0` disables; see below the table |
+| `requestTimeoutMs`             | `number`                                          | `30000`           | Per attempt, until the response headers arrive; an integer from `1` to `2147483647`; see below the table |
+| `uploadIdleTimeoutMs`          | `number`                                          | `30000`           | Longest silence from a stream body during a multipart upload; follows `requestTimeoutMs` unless set, `0` disables, at most `2147483647`; see below the table |
+| `bodyIdleTimeoutMs`            | `number`                                          | `30000`           | Longest silence from a download body while the caller is reading it; follows `requestTimeoutMs` unless set, `0` disables, at most `2147483647`; see below the table |
 | `signedUrls.defaultGetTtlSeconds` | `number`                                       | `300`             | Default TTL for `getDownloadUrl`               |
 | `signedUrls.defaultPutTtlSeconds` | `number`                                       | `300`             | Default TTL for `getUploadUrl`                 |
 | `signedUrls.maxTtlSeconds`     | `number`                                          | `604800`          | Per-request TTLs above this are clamped; a larger value is reduced to 604800 (the 7-day SigV4 limit) at init |
