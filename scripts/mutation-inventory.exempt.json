@@ -16,6 +16,10 @@
     "reason": "Checks that the server whitelist constants are the shared arrays. The source is a re-export that yields 0 mutants (measured), so no mutant can select this spec."
   },
   {
+    "file": "src/server/constants/timer.constants.spec.ts",
+    "reason": "Checks the timer ceiling against what Node does with a timer: one at the ceiling stays pending and one a step above has fired within 50 ms. The source is one `as const` number under src/server/constants, outside the mutated files, so no mutant can select this spec; the cold run's inventory named exactly its two tests as the ones the run did not run."
+  },
+  {
     "file": "src/stryker-scope.spec.ts",
     "reason": "Reads stryker.config.json, tsup.config.ts and the source tree as text and with the TypeScript compiler API; it imports no module of src/ that a mutant could change, so no mutant selects it."
   },
