@@ -34,10 +34,17 @@ jobs:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
       inventory: enforce
-      # Measured cold: 55 min for 1476 mutants (run 41278242161); a later run (41348204194) was at
-      # 1511 of 1525 mutants when the 60-minute ceiling cancelled it. A mutant costs the time of
-      # the tests that cover it, so the run grows with the real-time waits in those specs, not
-      # with the mutant count. Generous on purpose — nothing blocks on this job, so an over-wide
-      # ceiling costs only the minutes it uses, while an under-tight one costs the whole run and
-      # leaves the week without a measured baseline.
-      timeout-minutes: 120
+      # The ceiling is per shard job. A single runner needed about 140 minutes for the whole run, so a
+      # shard, a quarter of the mutants plus its own dry run, needs about 40 to 60 minutes, and 150
+      # leaves about twice that worst case: hosted runner speed varies about 1.5x on the same work. A
+      # run the ceiling cancels leaves no score and no baseline for the week, while an over-wide
+      # ceiling costs only the minutes it uses and nothing blocks on this job.
+      timeout-minutes: 150
+      # Four shards of two workers each. A mutant costs the time of the tests that cover it, so the run
+      # grows with the real-time waits of those specs (sockets, idle and deadline timers) and is split
+      # across four runners instead of given a longer one. A worker grows to several GiB over a long
+      # run and the hosted runner has 16 GB, so two workers and their parent are what one runner holds.
+      # The count and the concurrency are passed here, not written into stryker.config.json, which
+      # the per-push incremental job and local runs share.
+      shards: 4
+      concurrency: 2
