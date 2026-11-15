@@ -34,9 +34,10 @@ jobs:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
       inventory: enforce
-      # The ceiling is per shard job. A single runner needed about 140 minutes for the whole run, so a
-      # shard, a quarter of the mutants plus its own dry run, needs about 40 to 60 minutes, and 150
-      # leaves about twice that worst case: hosted runner speed varies about 1.5x on the same work. A
+      # The ceiling is per shard job. A single runner would have needed about 140 minutes for the whole
+      # run (the 120-minute job was cancelled at 85% of its mutants), so a shard, a quarter of the
+      # mutants plus its own dry run, needs about 40 to 60 minutes, and 150 leaves about twice that
+      # worst case: hosted runner speed varies about 1.5x on the same work. A
       # run the ceiling cancels leaves no score and no baseline for the week, while an over-wide
       # ceiling costs only the minutes it uses and nothing blocks on this job.
       timeout-minutes: 150
