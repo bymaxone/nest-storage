@@ -20,16 +20,15 @@ note on each entry is the compatibility contract — read it, not the number.
   failed post-upload delete `cleanupError`, and `deleteMany` the text of each failure. For a provider
   that could not be reached that text is the driver's own, such as `connect ECONNREFUSED 10.0.3.7:9000`,
   and a host that returns `getResponse()` unchanged (Nest's default) handed a caller the address and
-  port of the storage service. The body now holds a fixed `details.reason` (`unreachable`, `timeout`,
-  `provider-error`, `credentials-refused` or `rejected`) beside `awsCode`, `httpStatus` and
+  port of the storage service. The body now holds a fixed `details.reason` beside `awsCode`, `httpStatus` and
   `requestId`, which stay. The original error is the exception's `cause`, and a failed abort or a failed
   scan cleanup is written to the log with its text. `deleteMany`'s `failed[].error` is the provider's
-  error code for a key it refused, or the fixed reason when the whole request failed. `StorageException`
-  takes an optional `cause` as its fifth constructor argument.
+  error code for a key it refused, or the fixed reason when the whole request failed.
 
-  **Apply to a derived backend:** a host that logged `details.awsMessage`, `abortError` or the text in
-  `cleanupError` reads `error.cause?.message` instead, for its own logs and never for a client. A host
-  that matched on that text matches `details.reason` or `awsCode`. The `StorageException` declaration
+  **Apply to a derived backend:** a host that logged `details.awsMessage` reads `error.cause?.message`
+  instead, for its own logs and never for a client; `abortError` and the text of `cleanupError` are in the log lines. A host
+  that matched on that text matches `details.reason` (`unreachable`, `timeout`, `provider-error`,
+  `credentials-refused` or `rejected`) or `awsCode`. The `StorageException` declaration
   gains an optional parameter. Send `error.getResponse()` to a client and never the exception object
   itself: Nest's `HttpException` makes `cause` an own property, so `JSON.stringify(error)` still carries
   the driver's text.
