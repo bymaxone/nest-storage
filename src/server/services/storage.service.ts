@@ -41,7 +41,11 @@ import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
 import { describeCleanupFailure, withCleanupFailure } from '../errors/scan-cleanup-error'
-import { closeMultipartUpload, closeWhenCreated } from '../utils/multipart-abort'
+import {
+  abortFailureLogger,
+  closeMultipartUpload,
+  closeWhenCreated,
+} from '../utils/multipart-abort'
 import { deleteObjectsChunk } from '../utils/delete-objects'
 import { mapBucketCheckError } from '../errors/bucket-check-error-mapper'
 import { describeError } from '../utils/describe-error'
@@ -647,15 +651,6 @@ export class StorageService {
     }
   }
 
-  /** Logs what a failed `AbortMultipartUpload` threw: the caller's error holds only that it failed. */
-  private abortFailureLogger(key: string): (err: unknown) => void {
-    return (err) => {
-      this.logger.warn(
-        `Multipart abort failed, the upload stays open on the provider: ${logValue(key)} ${logValue(describeError(err))}`,
-      )
-    }
-  }
-
   /**
    * Aborts the multipart upload that failed, then throws the original failure with the outcome. Whether
    * the failure is an abort is decided first: a signal that fires during the cleanup does not turn a
@@ -683,7 +678,7 @@ export class StorageService {
       uploadId = await within(lookup, CLEANUP_DEADLINE_MS)
       // The caller does not wait longer, but an id that arrives later is still aborted.
       if (uploadId === undefined) {
-        closeWhenCreated(client, bucket, finalKey, lookup, this.abortFailureLogger(finalKey))
+        closeWhenCreated(client, bucket, finalKey, lookup, abortFailureLogger(this.logger, finalKey))
       }
     }
     const abort = await closeMultipartUpload(
@@ -691,7 +686,7 @@ export class StorageService {
       bucket,
       finalKey,
       uploadId,
-      this.abortFailureLogger(finalKey),
+      abortFailureLogger(this.logger, finalKey),
     )
     const context = { key: finalKey, bucket, op: 'upload-multipart', ...abort }
     throw abortedBy ? requestAborted(abortedBy, context) : mapMultipartError(err, context)

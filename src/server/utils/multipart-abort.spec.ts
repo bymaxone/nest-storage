@@ -3,7 +3,8 @@
  * @layer server/utils
  */
 import { AbortMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
-import { closeMultipartUpload, closeWhenCreated } from './multipart-abort'
+import type { Logger } from '@nestjs/common'
+import { abortFailureLogger, closeMultipartUpload, closeWhenCreated } from './multipart-abort'
 
 function clientThatAnswers(send: jest.Mock): S3Client {
   return { send } as unknown as S3Client
@@ -98,5 +99,27 @@ describe('closeMultipartUpload', () => {
     await new Promise<void>((resolve) => setImmediate(resolve))
 
     expect(onFailure).toHaveBeenCalledWith(failure)
+  })
+})
+
+describe('abortFailureLogger', () => {
+  it('warns with the key and what the abort threw, for the logs', () => {
+    const logger = { warn: jest.fn() } as unknown as Logger
+
+    abortFailureLogger(logger, 'tenant/a.bin')(new Error('provider down'))
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Multipart abort failed'))
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('tenant/a.bin'))
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('provider down'))
+  })
+
+  it('escapes control characters in the key and in the failure, so a log line cannot be forged', () => {
+    const warn = jest.fn<undefined, [string]>()
+    const logger = { warn } as unknown as Logger
+
+    abortFailureLogger(logger, 'a\nFORGED')(new Error('x\ny'))
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0]?.[0]).not.toContain('\n')
   })
 })
