@@ -85,7 +85,7 @@ describe('mapAwsError', () => {
     expect(details.awsCode).toBe('AccessDenied')
     expect(details.httpStatus).toBe(403)
     expect(details.requestId).toBe('req-1')
-    // Triage: this asserted the provider's text in the body; the body now carries a fixed reason.
+    // The body carries a fixed reason, never the provider's text.
     expect(details.reason).toBe('rejected')
     expect(JSON.stringify(e.getResponse())).not.toContain('denied')
     expect(details.scope).toBe('upload')

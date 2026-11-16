@@ -32,7 +32,7 @@ describe('withCleanupFailure', () => {
       key: 'a/b.bin',
       storedKey: 'tenant/a/b.bin',
       cleanup: 'failed',
-      // Triage: this was the delete failure's message; the body now carries a fixed word.
+      // The body carries a fixed word for the delete failure, never its message.
       cleanupError: 'UNKNOWN',
     })
   })
@@ -91,8 +91,7 @@ describe('withCleanupFailure', () => {
   })
 
   it('names only the code to a client when the delete failed with a StorageException', () => {
-    // Triage: the body quoted the provider's message from the delete failure's details; it now holds
-    // the code, and the text is for the log.
+    // The body names the code of the delete failure; what the provider said is for the log.
     const refused = new StorageException(
       'STORAGE_PROVIDER_ERROR',
       undefined,

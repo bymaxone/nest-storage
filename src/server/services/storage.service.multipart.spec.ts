@@ -180,7 +180,7 @@ describe('StorageService — multipart upload', () => {
     ).error.details
     expect(details.key).toBe('big.bin')
     expect(details.bucket).toBe('test-bucket')
-    // Triage: this asserted the provider's message in the body; it is on the cause now.
+    // The body carries a fixed reason; the provider's message is not in it.
     expect(details.reason).toBe('rejected')
     expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('part failed')
     expect(((err as StorageException).cause as Error).message).toBe('part failed')

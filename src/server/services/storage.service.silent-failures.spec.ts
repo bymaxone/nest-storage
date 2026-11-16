@@ -236,7 +236,7 @@ describe('silent failures', () => {
         cleanup: 'failed',
         key: 'bad.bin',
         storedKey: 'bad.bin',
-        // Triage: the body held the provider's message; it holds the code, and the text is logged.
+        // The body names the code, and the provider's text is logged.
         cleanupError: 'STORAGE_PROVIDER_ERROR',
       })
       expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).not.toContain(
@@ -299,7 +299,7 @@ describe('silent failures', () => {
 
       expect(error).toMatchObject({ code: 'STORAGE_MULTIPART_ABORTED' })
       expect(detailsOf(error)).toMatchObject({ abort: 'failed' })
-      // Triage: the abort failure's text was in the body as `abortError`; it is logged instead.
+      // The abort failure's text is logged, not returned.
       expect(detailsOf(error)).not.toHaveProperty('abortError')
       expect(warned).toHaveBeenCalledWith(expect.stringContaining('Multipart abort failed'))
       // The message must not claim an abort the provider never carried out.

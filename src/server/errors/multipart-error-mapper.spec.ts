@@ -62,7 +62,7 @@ describe('mapMultipartError', () => {
       const error = mapMultipartError(value, { key: 'k', bucket: 'b' })
 
       expect(error.code).toBe('STORAGE_MULTIPART_ABORTED')
-      // Triage: this asserted a text in the body; the body now carries a fixed reason.
+      // The body carries a fixed reason for a value with no message.
       expect(detailsOf(error)?.reason).toBe('rejected')
     },
   )
@@ -97,7 +97,7 @@ describe('mapMultipartError', () => {
   })
 
   it('maps any other failure to STORAGE_MULTIPART_ABORTED, with the text on the cause only', () => {
-    // Triage: the body held the provider's message as `awsMessage`; it now holds a fixed reason.
+    // The body holds a fixed reason, never the provider's message.
     const original = new Error('part 2 failed')
     const error = mapMultipartError(original, { key: 'k', bucket: 'b' })
 

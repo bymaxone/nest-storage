@@ -38,8 +38,8 @@ describe('closeMultipartUpload', () => {
   })
 
   it('reports a failed abort, hands the failure to the caller, and does not throw', async () => {
-    // Triage: the outcome held the failure's text as `abortError`; it now holds only that the abort
-    // failed, and what it threw goes to `onFailure`, for the caller's logs.
+    // The outcome says only that the abort failed; what it threw goes to `onFailure`, for the caller's
+    // logs.
     const failure = new Error('provider down')
     const send = jest.fn().mockRejectedValue(failure)
     const onFailure = jest.fn()

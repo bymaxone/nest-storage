@@ -114,8 +114,8 @@ describe('StorageService.deleteMany', () => {
   })
 
   it('aggregates mixed successes and per-key failures', async () => {
-    // Triage: `error` was "Code: Message"; the provider's sentence is no longer repeated, so it is the
-    // code, which a caller can branch on. Missing fields default gracefully.
+    // `error` is the provider's code, which a caller can branch on, and never its sentence. Missing
+    // fields default gracefully.
     const { service, send } = makeService()
     send.mockResolvedValue(
       deleteResponse({
@@ -157,7 +157,7 @@ describe('StorageService.deleteMany', () => {
   })
 
   it('marks every key in a chunk as failed when the whole request throws', async () => {
-    // Triage: `error` was the thrown message; it is now a fixed reason, so no driver text is returned.
+    // A request that fails as a whole reports a fixed reason, so no driver text is returned.
     const { service, send } = makeService()
     send.mockRejectedValue(
       Object.assign(new Error('connect ECONNREFUSED 10.1.2.3:9000'), { code: 'ECONNREFUSED' }),
@@ -172,7 +172,7 @@ describe('StorageService.deleteMany', () => {
   })
 
   it('coerces a non-Error throw into a string error for every key', async () => {
-    // Triage: the string was echoed; a bare string is now just a fixed reason, never `undefined`.
+    // A bare string rejection is a fixed reason, never echoed and never `undefined`.
     const { service, send } = makeService()
     send.mockRejectedValue('kaboom')
     const result = await service.deleteMany(['a.txt', 'b.txt'])
@@ -185,7 +185,7 @@ describe('StorageService.deleteMany', () => {
   })
 
   it('reports a rejection value with no usable toString instead of throwing', async () => {
-    // Triage: the value used to be described; it is classified, which cannot throw on this value.
+    // A value with no usable toString is classified, which cannot throw on it.
     const { service, send } = makeService()
     send.mockRejectedValue(Object.create(null))
     const result = await service.deleteMany(['a.txt'])
