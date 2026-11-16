@@ -21,7 +21,9 @@ import type { FileScannerService } from './file-scanner.service'
 
 function makePassthroughValidation(): ValidationService {
   return {
-    validate: jest.fn().mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
+    validate: jest
+      .fn()
+      .mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
   } as unknown as ValidationService
 }
 
@@ -93,7 +95,12 @@ function makeService(overrides: Partial<BymaxStorageModuleOptions> = {}): Harnes
 }
 
 function uploadOf(overrides: Partial<UploadOptions> = {}): UploadOptions {
-  return { key: 'a.txt', body: Readable.from([Buffer.from('data')]), contentType: 'text/plain', ...overrides }
+  return {
+    key: 'a.txt',
+    body: Readable.from([Buffer.from('data')]),
+    contentType: 'text/plain',
+    ...overrides,
+  }
 }
 
 /** Returns the constructor options of the first `Upload` instantiation. */
@@ -160,17 +167,22 @@ describe('StorageService — multipart upload', () => {
   })
 
   it('maps a failed done() to STORAGE_MULTIPART_ABORTED with details', async () => {
-    // A multipart failure surfaces the abort code and non-sensitive details (key + the
-    // underlying AWS message), never a blank details object.
+    // A multipart failure surfaces the abort code and non-sensitive details (key and a fixed
+    // reason), never a blank details object; the underlying message is on `cause`.
     const { service } = makeService()
     installUploader(() => Promise.reject(new Error('part failed')))
     const err = await service.upload(uploadOf({ key: 'big.bin' })).catch((e: unknown) => e)
     expect((err as StorageException).code).toBe('STORAGE_MULTIPART_ABORTED')
-    const details = ((err as StorageException).getResponse() as {
-      error: { details: Record<string, unknown> }
-    }).error.details
+    const details = (
+      (err as StorageException).getResponse() as {
+        error: { details: Record<string, unknown> }
+      }
+    ).error.details
     expect(details.key).toBe('big.bin')
     expect(details.bucket).toBe('test-bucket')
-    expect(details.awsMessage).toBe('part failed')
+    // Triage: this asserted the provider's message in the body; it is on the cause now.
+    expect(details.reason).toBe('rejected')
+    expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('part failed')
+    expect(((err as StorageException).cause as Error).message).toBe('part failed')
   })
 })

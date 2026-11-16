@@ -15,16 +15,26 @@ function knownStatus(error: StorageException): HttpStatus | undefined {
 }
 
 /**
- * Describes why a delete failed. A `StorageException`'s own `message` is the generic
- * 'Storage Exception', so its code and the provider's message (kept in its details) are used.
+ * What a client reads of a failed delete: the code of a `StorageException`, or a fixed word for any
+ * other failure. Never the text of the driver or of the provider, which is for the logs
+ * ({@link describeCleanupFailure}).
  */
-function describeCleanupError(error: unknown): string {
+function cleanupErrorCode(error: unknown): string {
+  return error instanceof StorageException ? error.code : 'UNKNOWN'
+}
+
+/**
+ * Describes why a delete failed, for a log line: a `StorageException`'s own `message` is the generic
+ * 'Storage Exception', so its code and what its `cause` said are used.
+ *
+ * @param error - What the delete threw.
+ * @returns The text for the log.
+ */
+export function describeCleanupFailure(error: unknown): string {
   if (!(error instanceof StorageException)) {
     return describeError(error)
   }
-  const body = error.getResponse() as { error?: { details?: { awsMessage?: unknown } } }
-  const awsMessage = body.error?.details?.awsMessage
-  return typeof awsMessage === 'string' ? `${error.code}: ${awsMessage}` : error.code
+  return error.cause === undefined ? error.code : `${error.code}: ${describeError(error.cause)}`
 }
 
 /**
@@ -46,11 +56,17 @@ export function withCleanupFailure(
     return scanError
   }
   const body = scanError.getResponse() as { error?: { details?: Record<string, unknown> } }
-  return new StorageException(scanError.code, knownStatus(scanError), {
-    ...(body.error?.details ?? {}),
-    key: keys.key,
-    storedKey: keys.storedKey,
-    cleanup: 'failed',
-    cleanupError: describeCleanupError(cleanupError),
-  })
+  return new StorageException(
+    scanError.code,
+    knownStatus(scanError),
+    {
+      ...(body.error?.details ?? {}),
+      key: keys.key,
+      storedKey: keys.storedKey,
+      cleanup: 'failed',
+      cleanupError: cleanupErrorCode(cleanupError),
+    },
+    undefined,
+    scanError.cause,
+  )
 }

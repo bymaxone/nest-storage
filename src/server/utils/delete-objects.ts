@@ -4,11 +4,11 @@
  */
 import { DeleteObjectsCommand, type S3Client } from '@aws-sdk/client-s3'
 import type { DeleteManyResult, FailedDeletion } from '../interfaces/delete-many-options.interface'
-import { describeError } from './describe-error'
+import { providerFailureReason } from '../errors/provider-failure'
 
 /**
- * Deletes one chunk (at most 1000 keys). Per-key outcomes come from the response; a failure of the
- * whole request fails every key, with the reason as text.
+ * Deletes one chunk (at most 1000 keys). Per-key outcomes come from the response, with the provider's
+ * error code; a failure of the whole request fails every key, with a fixed reason.
  *
  * @param client - The S3 client.
  * @param bucket - The bucket.
@@ -41,16 +41,16 @@ export async function deleteObjectsChunk(
       if (failure.Key !== undefined) {
         failed.push({
           key: stripPrefix(failure.Key),
-          error: `${failure.Code ?? 'Unknown'}: ${failure.Message ?? ''}`,
+          // The provider's code, which a caller can branch on; its sentence is not repeated.
+          error: failure.Code ?? 'Unknown',
         })
       }
     }
   } catch (err) {
-    // A non-Error throw (or an Error without a message) must still coerce to the
-    // `string` that `FailedDeletion.error` declares — never `undefined`.
-    const message = describeError(err)
+    // The whole request failed: a fixed word, never what the driver or the provider wrote.
+    const reason = providerFailureReason(err)
     for (const key of chunk) {
-      failed.push({ key: stripPrefix(key), error: message })
+      failed.push({ key: stripPrefix(key), error: reason })
     }
   }
   return { deleted, failed }

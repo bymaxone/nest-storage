@@ -17,7 +17,9 @@ import type { FileScannerService } from './file-scanner.service'
 
 function makePassthroughValidation(): ValidationService {
   return {
-    validate: jest.fn().mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
+    validate: jest
+      .fn()
+      .mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
   } as unknown as ValidationService
 }
 
@@ -34,7 +36,10 @@ interface Harness {
   send: jest.Mock
 }
 
-function makeService(overrides: Partial<BymaxStorageModuleOptions> = {}, configured = true): Harness {
+function makeService(
+  overrides: Partial<BymaxStorageModuleOptions> = {},
+  configured = true,
+): Harness {
   const resolved = applyDefaults({
     endpoint: 'https://s3.example.com',
     region: 'us-east-1',
@@ -66,7 +71,9 @@ function firstInput(send: jest.Mock): Record<string, unknown> {
 }
 
 /** Builds a `DeleteObjects` output. */
-function deleteResponse(partial: Partial<DeleteObjectsCommandOutput> = {}): DeleteObjectsCommandOutput {
+function deleteResponse(
+  partial: Partial<DeleteObjectsCommandOutput> = {},
+): DeleteObjectsCommandOutput {
   return { $metadata: {}, ...partial }
 }
 
@@ -74,7 +81,9 @@ describe('StorageService.deleteMany', () => {
   it('throws STORAGE_NOT_CONFIGURED when the client is missing', async () => {
     // assertConfigured guards the batch-delete path.
     const { service } = makeService({}, false)
-    await expect(service.deleteMany(['a'])).rejects.toMatchObject({ code: 'STORAGE_NOT_CONFIGURED' })
+    await expect(service.deleteMany(['a'])).rejects.toMatchObject({
+      code: 'STORAGE_NOT_CONFIGURED',
+    })
   })
 
   it('short-circuits an empty input without calling S3', async () => {
@@ -105,19 +114,24 @@ describe('StorageService.deleteMany', () => {
   })
 
   it('aggregates mixed successes and per-key failures', async () => {
-    // Errors carry a readable "Code: Message"; missing fields default gracefully.
+    // Triage: `error` was "Code: Message"; the provider's sentence is no longer repeated, so it is the
+    // code, which a caller can branch on. Missing fields default gracefully.
     const { service, send } = makeService()
     send.mockResolvedValue(
       deleteResponse({
         Deleted: [{ Key: 'ok.txt' }, {}],
-        Errors: [{ Key: 'bad.txt', Code: 'AccessDenied', Message: 'nope' }, { Key: 'plain.txt' }, {}],
+        Errors: [
+          { Key: 'bad.txt', Code: 'AccessDenied', Message: 'nope' },
+          { Key: 'plain.txt' },
+          {},
+        ],
       }),
     )
     const result = await service.deleteMany(['ok.txt', 'bad.txt', 'plain.txt'])
     expect(result.deleted).toEqual(['ok.txt'])
     expect(result.failed).toEqual([
-      { key: 'bad.txt', error: 'AccessDenied: nope' },
-      { key: 'plain.txt', error: 'Unknown: ' },
+      { key: 'bad.txt', error: 'AccessDenied' },
+      { key: 'plain.txt', error: 'Unknown' },
     ])
   })
 
@@ -128,7 +142,8 @@ describe('StorageService.deleteMany', () => {
     const keys = Array.from({ length: 1001 }, (_, i) => `k${String(i)}.txt`)
     await service.deleteMany(keys)
     expect(send).toHaveBeenCalledTimes(2)
-    const secondInput = (send.mock.calls[1] as [{ input: { Delete: { Objects: unknown[] } } }])[0].input
+    const secondInput = (send.mock.calls[1] as [{ input: { Delete: { Objects: unknown[] } } }])[0]
+      .input
     expect(secondInput.Delete.Objects).toHaveLength(1)
   })
 
@@ -142,37 +157,39 @@ describe('StorageService.deleteMany', () => {
   })
 
   it('marks every key in a chunk as failed when the whole request throws', async () => {
-    // A batch-level rejection fails all keys with the error message.
+    // Triage: `error` was the thrown message; it is now a fixed reason, so no driver text is returned.
     const { service, send } = makeService()
-    send.mockRejectedValue(new Error('network down'))
+    send.mockRejectedValue(
+      Object.assign(new Error('connect ECONNREFUSED 10.1.2.3:9000'), { code: 'ECONNREFUSED' }),
+    )
     const result = await service.deleteMany(['a.txt', 'b.txt'])
     expect(result.deleted).toEqual([])
     expect(result.failed).toEqual([
-      { key: 'a.txt', error: 'network down' },
-      { key: 'b.txt', error: 'network down' },
+      { key: 'a.txt', error: 'unreachable' },
+      { key: 'b.txt', error: 'unreachable' },
     ])
+    expect(JSON.stringify(result)).not.toContain('10.1.2.3')
   })
 
   it('coerces a non-Error throw into a string error for every key', async () => {
-    // A provider that rejects with a bare string (not an Error) must still yield a
-    // string `error` per key — never `undefined`.
+    // Triage: the string was echoed; a bare string is now just a fixed reason, never `undefined`.
     const { service, send } = makeService()
     send.mockRejectedValue('kaboom')
     const result = await service.deleteMany(['a.txt', 'b.txt'])
     expect(result.deleted).toEqual([])
     expect(result.failed).toEqual([
-      { key: 'a.txt', error: 'kaboom' },
-      { key: 'b.txt', error: 'kaboom' },
+      { key: 'a.txt', error: 'rejected' },
+      { key: 'b.txt', error: 'rejected' },
     ])
     expect(typeof result.failed[0]!.error).toBe('string')
   })
 
   it('reports a rejection value with no usable toString instead of throwing', async () => {
-    // String(Object.create(null)) throws; the catch that reports a failure must not.
+    // Triage: the value used to be described; it is classified, which cannot throw on this value.
     const { service, send } = makeService()
     send.mockRejectedValue(Object.create(null))
     const result = await service.deleteMany(['a.txt'])
-    expect(result.failed).toEqual([{ key: 'a.txt', error: 'non-printable rejection value' }])
+    expect(result.failed).toEqual([{ key: 'a.txt', error: 'rejected' }])
   })
 
   it('strips the global key prefix from returned keys', async () => {
@@ -189,6 +206,6 @@ describe('StorageService.deleteMany', () => {
       Delete: { Objects: [{ Key: 'tenant/a.txt' }, { Key: 'tenant/b.txt' }] },
     })
     expect(result.deleted).toEqual(['a.txt'])
-    expect(result.failed).toEqual([{ key: 'b.txt', error: 'X: y' }])
+    expect(result.failed).toEqual([{ key: 'b.txt', error: 'X' }])
   })
 })

@@ -9,9 +9,14 @@ export interface DeleteManyOptions {
   bucket?: string
 }
 
-/** A single failed key from a batch delete, with a readable provider error. */
+/** A single failed key from a batch delete. */
 export interface FailedDeletion {
   key: string
+  /**
+   * The provider's error code for this key (for example `AccessDenied`), or, when the whole request
+   * failed, a fixed reason: `unreachable`, `timeout`, `provider-error`, `credentials-refused` or
+   * `rejected`. Never the text of the driver or of the provider.
+   */
   error: string
 }
 

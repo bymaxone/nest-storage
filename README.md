@@ -598,8 +598,8 @@ bodies are not affected, and `post-upload` hands the scanner the key only, no bo
 when the scanner rejects it, so the library deletes it and rejects `upload()` with the verdict
 (`STORAGE_SCAN_INFECTED` or `STORAGE_SCAN_INCONCLUSIVE`). If that delete fails the verdict is still the
 error, and `details` carries `cleanup: 'failed'`, the `key` you passed, the `storedKey` (with any
-`keyPrefix`, as a bucket listing shows it) and the delete failure in `cleanupError`; the failure is
-also logged at error level as `STORAGE_SCAN_CLEANUP_FAILED`. With no `details.cleanup` the object was
+`keyPrefix`, as a bucket listing shows it) and the code of the delete failure in `cleanupError`; the
+failure, with what the provider said, is logged at error level as `STORAGE_SCAN_CLEANUP_FAILED`. With no `details.cleanup` the object was
 removed; with `cleanup: 'failed'` it is **still stored** and has to be removed by other means.
 
 ---
@@ -765,7 +765,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_PART_TOO_SMALL`         | 400  | Never thrown: a `multipart.partSizeBytes` below 5 MiB fails at init as `STORAGE_INVALID_CONFIG`                                                                                                                                                                             |
 | `STORAGE_INVALID_PART_COUNT`     | 400  | `getMultipartUploadUrls()` with `parts` not an integer from 1 to 10 000 (`details.provided`, `details.reason`)                                                                                                                                                  |
 | `STORAGE_BUCKET_UNDEFINED`       | 400  | Operation without a bucket and no default in config                                                                                                                                                                |
-| `STORAGE_MULTIPART_ABORTED`      | 500  | A multipart upload failed (**503** when the cause is an outage, as for `STORAGE_PROVIDER_ERROR`). `details.abort` is `'completed'` when the library aborted it, `'failed'` (with `abortError`) when the abort itself failed: that upload then stays open on the provider until a lifecycle rule removes it |
+| `STORAGE_MULTIPART_ABORTED`      | 500  | A multipart upload failed (**503** when the cause is an outage, as for `STORAGE_PROVIDER_ERROR`). `details.abort` is `'completed'` when the library aborted it, `'failed'` when the abort itself failed (logged as a warning, with what it threw): that upload then stays open on the provider until a lifecycle rule removes it |
 | `STORAGE_INVALID_CONFIG`         | 500  | `BymaxStorageModuleOptions` validation failed at initialization                                                                                                                                                    |
 | `STORAGE_TIMEOUT`                | 503  | An attempt got no response headers within `requestTimeoutMs`, a multipart source stayed silent for `uploadIdleTimeoutMs` (`details.phase: 'source-idle'`), or a download body stayed silent for `bodyIdleTimeoutMs` (`details.phase: 'body-idle'`)                                                                                                                                                                                |
 | `STORAGE_LIFECYCLE_RULE_INVALID` | 400  | `BucketLifecycleService` input rejected: bad `id`, day count or `prefix`, or an id naming a rule outside `keyPrefix` (`details.reason`) |

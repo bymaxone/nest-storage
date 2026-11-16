@@ -4,10 +4,9 @@
  * @layer server/errors
  */
 import { StorageException } from './storage-exception'
-import { describeError } from '../utils/describe-error'
 import { SourceIdleError } from '../utils/idle-timeout'
 import { mapAwsError } from './aws-error-mapper'
-import { providerFailureStatus } from './provider-failure'
+import { providerFailureReason, providerFailureStatus } from './provider-failure'
 import { mapSizeLimitError } from './size-limit-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -45,8 +44,10 @@ export function mapMultipartError(
     STORAGE_ERROR_CODES.STORAGE_MULTIPART_ABORTED,
     // An outage ends the upload as an outage; any other cause is a failure of the upload itself.
     providerFailureStatus(err),
-    { ...context, awsMessage: describeError(err) },
+    // A fixed word; what the driver or the provider wrote is on `cause`, for the host's logs.
+    { ...context, reason: providerFailureReason(err) },
     // The code's message says the upload was aborted; it is not, when the abort itself failed.
     context.abort === 'failed' ? ABORT_FAILED_MESSAGE : undefined,
+    err,
   )
 }

@@ -48,7 +48,7 @@ export function isNoLifecycleConfiguration(err: unknown): boolean {
  * Maps a lifecycle call failure to a typed `StorageException`. An unsupported
  * provider and a rejected configuration get their own stable codes; the rest are
  * mapped as any other provider failure. `details` carries the same projected
- * fields `mapAwsError` produces, never the caught error.
+ * fields `mapAwsError` produces; the caught error rides on `cause`, never in the body.
  *
  * @param err - The error thrown by the AWS SDK.
  * @param context - Non-sensitive context merged into `details`.
@@ -65,10 +65,22 @@ export function mapLifecycleError(
   const details = (mapped.getResponse() as { error: { details: Record<string, unknown> } }).error
     .details
   if (UNSUPPORTED_NAMES.has(name) || UNSUPPORTED_STATUSES.has(status)) {
-    return new StorageException(STORAGE_ERROR_CODES.STORAGE_LIFECYCLE_UNSUPPORTED, undefined, details)
+    return new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_LIFECYCLE_UNSUPPORTED,
+      undefined,
+      details,
+      undefined,
+      err,
+    )
   }
   if (REJECTED_NAMES.has(name)) {
-    return new StorageException(STORAGE_ERROR_CODES.STORAGE_LIFECYCLE_REJECTED, undefined, details)
+    return new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_LIFECYCLE_REJECTED,
+      undefined,
+      details,
+      undefined,
+      err,
+    )
   }
   return mapped
 }

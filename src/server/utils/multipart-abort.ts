@@ -4,12 +4,13 @@
  */
 import { AbortMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
 import { CLEANUP_DEADLINE_MS } from './abort-support'
-import { describeError } from './describe-error'
 
-/** What happened to the multipart upload after a failure; empty when none had been created. */
+/**
+ * What happened to the multipart upload after a failure; empty when none had been created. It names no
+ * driver or provider text: a failed abort is reported to the caller's `onFailure`, for its logs.
+ */
 export interface AbortOutcome {
   abort?: 'completed' | 'failed'
-  abortError?: string
 }
 
 /**
@@ -22,6 +23,8 @@ export interface AbortOutcome {
  * @param bucket - The bucket of the upload.
  * @param key - The final object key.
  * @param uploadId - The upload id, absent when `CreateMultipartUpload` never answered.
+ * @param onFailure - Told what the failed abort threw, for the caller's logs; the outcome itself holds
+ *   none of it.
  * @returns Details for the error the caller receives; never throws.
  */
 export async function closeMultipartUpload(
@@ -29,6 +32,7 @@ export async function closeMultipartUpload(
   bucket: string,
   key: string,
   uploadId: string | undefined,
+  onFailure?: (err: unknown) => void,
 ): Promise<AbortOutcome> {
   if (uploadId === undefined) {
     return {}
@@ -45,7 +49,8 @@ export async function closeMultipartUpload(
     if ((err as { name?: unknown } | null)?.name === 'NoSuchUpload') {
       return { abort: 'completed' }
     }
-    return { abort: 'failed', abortError: describeError(err) }
+    onFailure?.(err)
+    return { abort: 'failed' }
   }
 }
 
@@ -58,12 +63,14 @@ export async function closeMultipartUpload(
  * @param bucket - The bucket of the upload.
  * @param key - The final object key.
  * @param created - The id the create answers with, or `undefined` if it fails; it never rejects.
+ * @param onFailure - Told what a failed abort threw, for the caller's logs.
  */
 export function closeWhenCreated(
   client: S3Client,
   bucket: string,
   key: string,
   created: Promise<string | undefined>,
+  onFailure?: (err: unknown) => void,
 ): void {
-  void created.then((uploadId) => closeMultipartUpload(client, bucket, key, uploadId))
+  void created.then((uploadId) => closeMultipartUpload(client, bucket, key, uploadId, onFailure))
 }

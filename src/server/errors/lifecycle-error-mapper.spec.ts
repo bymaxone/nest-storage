@@ -10,7 +10,11 @@ import { isNoLifecycleConfiguration, mapLifecycleError } from './lifecycle-error
 describe('isNoLifecycleConfiguration', () => {
   it.each([
     ['by name', { name: 'NoSuchLifecycleConfiguration' }, true],
-    ['by Code, which wins over name', { Code: 'NoSuchLifecycleConfiguration', name: 'Other' }, true],
+    [
+      'by Code, which wins over name',
+      { Code: 'NoSuchLifecycleConfiguration', name: 'Other' },
+      true,
+    ],
     ['another error name', { name: 'NoSuchBucket' }, false],
     ['a null error', null, false],
   ])('classifies %s', (_label, err, expected) => {
@@ -66,9 +70,11 @@ describe('mapLifecycleError', () => {
       awsCode: 'NotImplemented',
       httpStatus: 501,
       requestId: 'req-1',
-      awsMessage: 'no lifecycle here',
+      reason: 'rejected',
     })
-    expect(mapped.cause).toBeUndefined()
+    // Triage: the provider's sentence left the body; the error rides on `cause` for the logs.
+    expect(mapped.cause).toBeDefined()
+    expect(JSON.stringify(mapped.getResponse())).not.toContain('no lifecycle here')
     expect(JSON.stringify(mapped.getResponse())).not.toContain('FIXTURE-must-not-leak')
   })
 })

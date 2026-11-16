@@ -50,7 +50,10 @@ const UNREACHABLE_IN_MESSAGE = new RegExp(
 const ADDRESSES_FAILED = 'AWS SDK error wrapper for AggregateError'
 
 /** The provider answers with these when the access key or the signature is wrong. */
-const CREDENTIAL_CODES: ReadonlySet<string> = new Set(['InvalidAccessKeyId', 'SignatureDoesNotMatch'])
+const CREDENTIAL_CODES: ReadonlySet<string> = new Set([
+  'InvalidAccessKeyId',
+  'SignatureDoesNotMatch',
+])
 
 /** Whether the failure is a connection that could not be made or was cut, however the SDK reports it. */
 function cutConnection(failure: FailureLike, noAnswer: boolean): boolean {
@@ -67,30 +70,64 @@ function cutConnection(failure: FailureLike, noAnswer: boolean): boolean {
 }
 
 /**
- * Classifies an error thrown for a request to the provider.
+ * What happened to a request to the provider, as a fixed word a client may read: `unreachable` (the
+ * connection could not be made or was cut), `timeout` (the SDK's own deadline ended it), `provider-error`
+ * (a server error), `credentials-refused` (the access key or the signature) or `rejected` (any other
+ * answer). It carries nothing the driver or the provider wrote.
+ */
+export type ProviderFailureReason =
+  'unreachable' | 'timeout' | 'provider-error' | 'credentials-refused' | 'rejected'
+
+/**
+ * Says what happened to a request to the provider, from the error the SDK threw, in words that name no
+ * host, port, driver or provider sentence.
  *
  * Only the provider's own answer refuses credentials: a `HEAD` answer carries no body, so for those
- * calls the code is not there and the failure is `other`.
+ * calls the code is not there and the failure is `rejected`.
  *
  * @param err - What the SDK threw.
- * @returns The kind of failure.
+ * @returns The fixed reason.
  */
-export function classifyProviderFailure(err: unknown): ProviderFailure {
+export function providerFailureReason(err: unknown): ProviderFailureReason {
   const failure = (err ?? {}) as FailureLike
   const status = failure.$metadata?.httpStatusCode
-  // The SDK's own timeouts (`requestTimeoutMs`, a socket that went silent) carry this name and no code.
-  if (failure.name === 'TimeoutError' || cutConnection(failure, status === undefined)) {
-    return 'unavailable'
+  // The SDK's own timeouts (`requestTimeoutMs`, a socket that went silent) carry this name, with no code
+  // or with `ETIMEDOUT`; a connection reset also carries the name, with its own code.
+  if (
+    failure.name === 'TimeoutError' &&
+    (failure.code === undefined || failure.code === 'ETIMEDOUT')
+  ) {
+    return 'timeout'
+  }
+  if (cutConnection(failure, status === undefined)) {
+    return 'unreachable'
+  }
+  if (failure.name === 'TimeoutError') {
+    return 'timeout'
   }
   // 501 is the provider saying it does not implement the call: asking again will not change that.
   if (typeof status === 'number' && status >= 500 && status !== 501) {
-    return 'unavailable'
+    return 'provider-error'
   }
   const awsCode = failure.Code ?? failure.name
   if (status === 403 && typeof awsCode === 'string' && CREDENTIAL_CODES.has(awsCode)) {
     return 'credentials-refused'
   }
-  return 'other'
+  return 'rejected'
+}
+
+/**
+ * Classifies an error thrown for a request to the provider.
+ *
+ * @param err - What the SDK threw.
+ * @returns The kind of failure.
+ */
+export function classifyProviderFailure(err: unknown): ProviderFailure {
+  const reason = providerFailureReason(err)
+  if (reason === 'credentials-refused') {
+    return 'credentials-refused'
+  }
+  return reason === 'rejected' ? 'other' : 'unavailable'
 }
 
 /**

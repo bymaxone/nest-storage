@@ -236,13 +236,16 @@ describe('silent failures', () => {
         cleanup: 'failed',
         key: 'bad.bin',
         storedKey: 'bad.bin',
-        // The provider's own message, not the generic one of the exception that wrapped it.
-        cleanupError: 'STORAGE_PROVIDER_ERROR: UnknownError',
+        // Triage: the body held the provider's message; it holds the code, and the text is logged.
+        cleanupError: 'STORAGE_PROVIDER_ERROR',
       })
+      expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).not.toContain(
+        'UnknownError',
+      )
       expect(await storage.exists('bad.bin')).toBe(true)
       expect(logged).toHaveBeenCalledWith(
         expect.stringContaining('STORAGE_SCAN_CLEANUP_FAILED'),
-        expect.anything(),
+        expect.stringContaining('UnknownError'),
       )
     })
 
@@ -286,6 +289,7 @@ describe('silent failures', () => {
 
     it('keeps the original failure as the error when the abort also fails, and reports the abort failure', async () => {
       mode = { partFails: true, abortFails: true }
+      const warned = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
       const storage = await storageWith()
 
       const error = await rejection(
@@ -295,11 +299,14 @@ describe('silent failures', () => {
 
       expect(error).toMatchObject({ code: 'STORAGE_MULTIPART_ABORTED' })
       expect(detailsOf(error)).toMatchObject({ abort: 'failed' })
-      expect(typeof detailsOf(error).abortError).toBe('string')
+      // Triage: the abort failure's text was in the body as `abortError`; it is logged instead.
+      expect(detailsOf(error)).not.toHaveProperty('abortError')
+      expect(warned).toHaveBeenCalledWith(expect.stringContaining('Multipart abort failed'))
       // The message must not claim an abort the provider never carried out.
       expect(messageOf(error)).toBe('Multipart upload failed and could not be aborted')
       // The original failure is the part upload, not the abort that came after it.
-      expect(String(detailsOf(error).awsMessage)).toBe('UnknownError')
+      expect(detailsOf(error)).not.toHaveProperty('awsMessage')
+      expect(String((error as { cause?: Error }).cause?.message)).toBe('UnknownError')
       expect(
         calls.filter((c) => c.startsWith('PUT') && c.endsWith('?uploadId')).length,
       ).toBeGreaterThan(0)

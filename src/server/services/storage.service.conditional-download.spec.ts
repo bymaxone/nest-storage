@@ -27,7 +27,9 @@ describe('conditional and ranged download', () => {
       } else if (req.headers['if-match'] !== undefined && req.headers['if-match'] !== '"v1"') {
         res.statusCode = 412
         res.setHeader('Content-Type', 'application/xml')
-        res.end('<Error><Code>PreconditionFailed</Code><Message>At least one of the preconditions you specified did not hold.</Message></Error>')
+        res.end(
+          '<Error><Code>PreconditionFailed</Code><Message>At least one of the preconditions you specified did not hold.</Message></Error>',
+        )
       } else if (req.headers.range !== undefined) {
         res.statusCode = 206
         res.setHeader('Content-Range', 'bytes 0-2/10')
@@ -93,16 +95,25 @@ describe('conditional and ranged download', () => {
     expect(error).toMatchObject({ code: 'STORAGE_PRECONDITION_FAILED', status: 412 })
   })
 
-  it('carries the provider status and request context in details, never the caught error', async () => {
+  it('carries the provider status and request context in details, and the caught error only on the cause', async () => {
     const error = await failure((await storage()).download({ key: 'a.txt', ifNoneMatch: '"v1"' }))
 
-    const details = (error as { getResponse(): { error: { details: Record<string, unknown> } } }).getResponse().error.details
+    const details = (
+      error as { getResponse(): { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
     expect(details).toMatchObject({ httpStatus: 304, op: 'download', bucket: 'b', key: 'a.txt' })
-    expect((error as { cause?: unknown }).cause).toBeUndefined()
+    // Triage: `cause` was asserted absent to keep the error out of the body; the body is what is
+    // asserted now, and the cause is kept for the host's logs.
+    expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).not.toContain(
+      'UnknownError',
+    )
+    expect((error as { cause?: unknown }).cause).toBeDefined()
   })
 
   it('returns the object when the conditions hold', async () => {
-    const result = await (await storage()).downloadBuffer({ key: 'a.txt', ifNoneMatch: '"v2"', ifMatch: '"v1"' })
+    const result = await (
+      await storage()
+    ).downloadBuffer({ key: 'a.txt', ifNoneMatch: '"v2"', ifMatch: '"v1"' })
 
     expect(result.buffer.toString()).toBe('abcdefghij')
   })
