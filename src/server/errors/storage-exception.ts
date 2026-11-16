@@ -42,7 +42,7 @@ export class StorageException extends HttpException {
         },
       },
       statusCode,
-      cause === undefined ? undefined : { cause },
+      { cause },
     )
     this.code = code
   }

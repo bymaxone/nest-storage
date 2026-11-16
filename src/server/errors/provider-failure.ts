@@ -92,11 +92,9 @@ export function providerFailureReason(err: unknown): ProviderFailureReason {
   const failure = (err ?? {}) as FailureLike
   const status = failure.$metadata?.httpStatusCode
   // The SDK's own timeouts (`requestTimeoutMs`, a socket that went silent) carry this name, with no code
-  // or with `ETIMEDOUT`; a connection reset also carries the name, with its own code.
-  if (
-    failure.name === 'TimeoutError' &&
-    (failure.code === undefined || failure.code === 'ETIMEDOUT')
-  ) {
+  // or with `ETIMEDOUT`, which is also a cut connection's code: the name decides that one. A connection
+  // reset carries the name too, with its own code, and is unreachable.
+  if (failure.name === 'TimeoutError' && failure.code === 'ETIMEDOUT') {
     return 'timeout'
   }
   if (cutConnection(failure, status === undefined)) {

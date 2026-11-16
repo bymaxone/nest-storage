@@ -113,6 +113,11 @@ describe('mapAwsError', () => {
         'timeout',
       ],
       ['the SDK deadline, with ETIMEDOUT', { name: 'TimeoutError', code: 'ETIMEDOUT' }, 'timeout'],
+      [
+        'a connection that timed out at the socket, not named a TimeoutError',
+        { name: 'Error', code: 'ETIMEDOUT', message: 'connect ETIMEDOUT 10.1.2.3:9000' },
+        'unreachable',
+      ],
       ['a TimeoutError with some other code', { name: 'TimeoutError', code: 'EOTHER' }, 'timeout'],
       [
         'an answer of 500',
