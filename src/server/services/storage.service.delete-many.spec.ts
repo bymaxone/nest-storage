@@ -6,6 +6,7 @@
  * @layer server/services
  */
 import type { DeleteObjectsCommandOutput, S3Client } from '@aws-sdk/client-s3'
+import { Logger } from '@nestjs/common'
 import { StorageService } from './storage.service'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
@@ -158,6 +159,7 @@ describe('StorageService.deleteMany', () => {
 
   it('marks every key in a chunk as failed when the whole request throws', async () => {
     // A request that fails as a whole reports a fixed reason, so no driver text is returned.
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const { service, send } = makeService()
     send.mockRejectedValue(
       Object.assign(new Error('connect ECONNREFUSED 10.1.2.3:9000'), { code: 'ECONNREFUSED' }),
@@ -169,6 +171,10 @@ describe('StorageService.deleteMany', () => {
       { key: 'b.txt', error: 'unreachable' },
     ])
     expect(JSON.stringify(result)).not.toContain('10.1.2.3')
+    // What the driver said is in the log, once for the request and not once per key.
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('10.1.2.3'))
+    warn.mockRestore()
   })
 
   it('coerces a non-Error throw into a string error for every key', async () => {

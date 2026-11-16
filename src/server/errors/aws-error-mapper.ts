@@ -6,6 +6,7 @@
  */
 import { HttpStatus } from '@nestjs/common'
 import { StorageException } from './storage-exception'
+import { logProviderFailure } from '../utils/provider-failure-log'
 import { providerFailureReason, providerFailureStatus } from './provider-failure'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -43,7 +44,7 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
     awsCode,
     httpStatus,
     requestId,
-    // A fixed word, never what the driver or the provider wrote: that is on `cause`, for the host's logs.
+    // A fixed word, never what the driver or the provider wrote.
     reason: providerFailureReason(err),
   }
 
@@ -52,8 +53,6 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
       STORAGE_ERROR_CODES.STORAGE_BUCKET_NOT_FOUND,
       HttpStatus.NOT_FOUND,
       details,
-      undefined,
-      err,
     )
   }
   if (e.name === 'NotFound' || httpStatus === 404) {
@@ -61,8 +60,6 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
       STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND,
       HttpStatus.NOT_FOUND,
       details,
-      undefined,
-      err,
     )
   }
   if (httpStatus === 304) {
@@ -70,8 +67,6 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
       STORAGE_ERROR_CODES.STORAGE_NOT_MODIFIED,
       HttpStatus.NOT_MODIFIED,
       details,
-      undefined,
-      err,
     )
   }
   if (httpStatus === 412) {
@@ -79,24 +74,20 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
       STORAGE_ERROR_CODES.STORAGE_PRECONDITION_FAILED,
       HttpStatus.PRECONDITION_FAILED,
       details,
-      undefined,
-      err,
     )
   }
   if (e.name === 'TimeoutError') {
+    logProviderFailure(err, context)
     return new StorageException(
       STORAGE_ERROR_CODES.STORAGE_TIMEOUT,
       undefined,
       details,
-      undefined,
-      err,
     )
   }
+  logProviderFailure(err, context)
   return new StorageException(
     STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR,
     providerFailureStatus(err),
     details,
-    undefined,
-    err,
   )
 }

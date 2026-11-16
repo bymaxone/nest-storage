@@ -96,13 +96,14 @@ describe('mapMultipartError', () => {
     expect(messageOf(error)).toBe('Multipart upload failed and could not be aborted')
   })
 
-  it('maps any other failure to STORAGE_MULTIPART_ABORTED, with the text on the cause only', () => {
+  it('maps any other failure to STORAGE_MULTIPART_ABORTED, without the provider text', () => {
     // The body holds a fixed reason, never the provider's message.
     const original = new Error('part 2 failed')
     const error = mapMultipartError(original, { key: 'k', bucket: 'b' })
 
     expect(error.code).toBe('STORAGE_MULTIPART_ABORTED')
     expect(detailsOf(error)).toEqual({ key: 'k', bucket: 'b', reason: 'rejected' })
-    expect(error.cause).toBe(original)
+    expect(error.cause).toBeUndefined()
+    expect(JSON.stringify(error.getResponse())).not.toContain('part 2 failed')
   })
 })

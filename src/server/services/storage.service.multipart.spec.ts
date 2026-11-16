@@ -7,6 +7,7 @@
 import { Readable } from 'node:stream'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
+import { Logger } from '@nestjs/common'
 import { StorageService } from './storage.service'
 import type { StorageException } from '../errors/storage-exception'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
@@ -168,7 +169,8 @@ describe('StorageService — multipart upload', () => {
 
   it('maps a failed done() to STORAGE_MULTIPART_ABORTED with details', async () => {
     // A multipart failure surfaces the abort code and non-sensitive details (key and a fixed
-    // reason), never a blank details object; the underlying message is on `cause`.
+    // reason), never a blank details object; the underlying message is in the log, not the body.
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const { service } = makeService()
     installUploader(() => Promise.reject(new Error('part failed')))
     const err = await service.upload(uploadOf({ key: 'big.bin' })).catch((e: unknown) => e)
@@ -183,6 +185,8 @@ describe('StorageService — multipart upload', () => {
     // The body carries a fixed reason; the provider's message is not in it.
     expect(details.reason).toBe('rejected')
     expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('part failed')
-    expect(((err as StorageException).cause as Error).message).toBe('part failed')
+    expect((err as StorageException).cause).toBeUndefined()
+    // What the provider said is in the log.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('part failed'))
   })
 })

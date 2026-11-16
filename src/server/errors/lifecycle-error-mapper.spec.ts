@@ -73,7 +73,7 @@ describe('mapLifecycleError', () => {
       reason: 'rejected',
     })
     // The provider's sentence stays out of the body.
-    expect(mapped.cause).toBeDefined()
+    expect(mapped.cause).toBeUndefined()
     expect(JSON.stringify(mapped.getResponse())).not.toContain('no lifecycle here')
     expect(JSON.stringify(mapped.getResponse())).not.toContain('FIXTURE-must-not-leak')
   })

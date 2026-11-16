@@ -77,28 +77,11 @@ describe('withCleanupFailure', () => {
     expect(detailsOf(error)?.cleanupError).toBe('UNKNOWN')
   })
 
-  it('keeps the scan verdict cause on the rewritten exception', () => {
-    const scanCause = new Error('scanner socket closed')
-    const verdict = new StorageException(
-      'STORAGE_SCAN_INCONCLUSIVE',
-      undefined,
-      undefined,
-      undefined,
-      scanCause,
-    )
-
-    expect((withCleanupFailure(verdict, KEYS, 'x') as StorageException).cause).toBe(scanCause)
-  })
-
   it('names only the code to a client when the delete failed with a StorageException', () => {
     // The body names the code of the delete failure; what the provider said is for the log.
-    const refused = new StorageException(
-      'STORAGE_PROVIDER_ERROR',
-      undefined,
-      { reason: 'rejected' },
-      undefined,
-      new Error('Access Denied'),
-    )
+    const refused = new StorageException('STORAGE_PROVIDER_ERROR', undefined, {
+      reason: 'rejected',
+    })
 
     const error = withCleanupFailure(new StorageException('STORAGE_SCAN_INFECTED'), KEYS, refused)
 
@@ -107,22 +90,12 @@ describe('withCleanupFailure', () => {
   })
 
   describe('describeCleanupFailure, for the log', () => {
-    it('gives the code and what the cause said for a StorageException', () => {
-      const refused = new StorageException(
-        'STORAGE_PROVIDER_ERROR',
-        undefined,
-        undefined,
-        undefined,
-        new Error('Access Denied'),
-      )
+    it('gives the code of a StorageException, whose own message is generic', () => {
+      const refused = new StorageException('STORAGE_PROVIDER_ERROR', undefined, {
+        reason: 'rejected',
+      })
 
-      expect(describeCleanupFailure(refused)).toBe('STORAGE_PROVIDER_ERROR: Access Denied')
-    })
-
-    it('gives only the code when the StorageException has no cause', () => {
-      expect(describeCleanupFailure(new StorageException('STORAGE_TIMEOUT'))).toBe(
-        'STORAGE_TIMEOUT',
-      )
+      expect(describeCleanupFailure(refused)).toBe('STORAGE_PROVIDER_ERROR')
     })
 
     it('describes anything else by its message, without throwing', () => {

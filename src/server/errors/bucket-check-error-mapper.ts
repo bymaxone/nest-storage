@@ -34,8 +34,6 @@ export function mapBucketCheckError(
       STORAGE_ERROR_CODES.STORAGE_BUCKET_REGION_MISMATCH,
       undefined,
       details,
-      undefined,
-      err,
     )
   }
   if (status === 403) {
@@ -43,8 +41,6 @@ export function mapBucketCheckError(
       STORAGE_ERROR_CODES.STORAGE_BUCKET_ACCESS_DENIED,
       undefined,
       details,
-      undefined,
-      err,
     )
   }
   if (status === 404) {
@@ -52,8 +48,6 @@ export function mapBucketCheckError(
       STORAGE_ERROR_CODES.STORAGE_BUCKET_NOT_FOUND,
       HttpStatus.NOT_FOUND,
       details,
-      undefined,
-      err,
     )
   }
   return mapAwsError(err, context)

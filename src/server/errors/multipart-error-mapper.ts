@@ -44,10 +44,9 @@ export function mapMultipartError(
     STORAGE_ERROR_CODES.STORAGE_MULTIPART_ABORTED,
     // An outage ends the upload as an outage; any other cause is a failure of the upload itself.
     providerFailureStatus(err),
-    // A fixed word; what the driver or the provider wrote is on `cause`, for the host's logs.
+    // A fixed word, never what the driver or the provider wrote.
     { ...context, reason: providerFailureReason(err) },
     // The code's message says the upload was aborted; it is not, when the abort itself failed.
     context.abort === 'failed' ? ABORT_FAILED_MESSAGE : undefined,
-    err,
   )
 }

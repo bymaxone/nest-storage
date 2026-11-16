@@ -245,7 +245,7 @@ describe('silent failures', () => {
       expect(await storage.exists('bad.bin')).toBe(true)
       expect(logged).toHaveBeenCalledWith(
         expect.stringContaining('STORAGE_SCAN_CLEANUP_FAILED'),
-        expect.stringContaining('UnknownError'),
+        expect.stringContaining('STORAGE_PROVIDER_ERROR'),
       )
     })
 
@@ -306,7 +306,12 @@ describe('silent failures', () => {
       expect(messageOf(error)).toBe('Multipart upload failed and could not be aborted')
       // The original failure is the part upload, not the abort that came after it.
       expect(detailsOf(error)).not.toHaveProperty('awsMessage')
-      expect(String((error as { cause?: Error }).cause?.message)).toBe('UnknownError')
+      expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).not.toContain(
+        'UnknownError',
+      )
+      expect((error as { cause?: unknown }).cause).toBeUndefined()
+      // The part's failure was logged when it was mapped, with the provider's text.
+      expect(warned).toHaveBeenCalledWith(expect.stringContaining('UnknownError'))
       expect(
         calls.filter((c) => c.startsWith('PUT') && c.endsWith('?uploadId')).length,
       ).toBeGreaterThan(0)

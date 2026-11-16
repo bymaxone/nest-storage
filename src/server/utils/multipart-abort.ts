@@ -5,8 +5,8 @@
 import { AbortMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
 import type { Logger } from '@nestjs/common'
 import { CLEANUP_DEADLINE_MS } from './abort-support'
-import { describeError } from './describe-error'
 import { logValue } from './log-value'
+import { describeProviderFailure } from './provider-failure-log'
 
 /**
  * What happened to the multipart upload after a failure; empty when none had been created. It names no
@@ -89,7 +89,7 @@ export function closeWhenCreated(
 export function abortFailureLogger(logger: Logger, key: string): (err: unknown) => void {
   return (err) => {
     logger.warn(
-      `Multipart abort failed, the upload stays open on the provider: ${logValue(key)} ${logValue(describeError(err))}`,
+      `Multipart abort failed, the upload stays open on the provider: ${logValue(key)} ${describeProviderFailure(err)}`,
     )
   }
 }

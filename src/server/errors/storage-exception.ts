@@ -26,12 +26,6 @@ export class StorageException extends HttpException {
     details?: Record<string, unknown>,
     /** Defaults to the message of `code`. Pass only when the situation is more specific than the code. */
     message: string = STORAGE_ERROR_MESSAGES[code],
-    /**
-     * The original error, for the host's own logs: it is on `error.cause` and never in `getResponse()`.
-     * Send `getResponse()` to a client, never the exception object itself, whose `cause` can hold what
-     * the driver or the provider said.
-     */
-    cause?: unknown,
   ) {
     super(
       {
@@ -42,7 +36,6 @@ export class StorageException extends HttpException {
         },
       },
       statusCode,
-      { cause },
     )
     this.code = code
   }

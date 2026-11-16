@@ -25,7 +25,7 @@ function cleanupErrorCode(error: unknown): string {
 
 /**
  * Describes why a delete failed, for a log line: a `StorageException`'s own `message` is the generic
- * 'Storage Exception', so its code and what its `cause` said are used.
+ * 'Storage Exception', so its code is used; what the provider said was logged when the call was mapped.
  *
  * @param error - What the delete threw.
  * @returns The text for the log.
@@ -34,7 +34,7 @@ export function describeCleanupFailure(error: unknown): string {
   if (!(error instanceof StorageException)) {
     return describeError(error)
   }
-  return error.cause === undefined ? error.code : `${error.code}: ${describeError(error.cause)}`
+  return error.code
 }
 
 /**
@@ -66,7 +66,5 @@ export function withCleanupFailure(
       cleanup: 'failed',
       cleanupError: cleanupErrorCode(cleanupError),
     },
-    undefined,
-    scanError.cause,
   )
 }

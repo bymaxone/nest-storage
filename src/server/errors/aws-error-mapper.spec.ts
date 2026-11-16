@@ -149,16 +149,6 @@ describe('mapAwsError', () => {
       expect(JSON.stringify(e.getResponse())).not.toContain('10.1.2.3')
       expect(JSON.stringify(e.getResponse())).not.toContain('requestTimeout')
     })
-
-    it('carries the original error as the cause, for the logs', () => {
-      const original = {
-        name: 'Error',
-        code: 'ECONNREFUSED',
-        message: 'connect ECONNREFUSED 10.1.2.3:9000',
-      }
-
-      expect(mapAwsError(original).cause).toBe(original)
-    })
   })
 
   describe('a provider that is unavailable, or that refused the credentials', () => {
@@ -342,27 +332,25 @@ describe('mapAwsError', () => {
     ['not-found', { name: 'NotFound' }, 'STORAGE_OBJECT_NOT_FOUND'],
     ['timeout', { name: 'TimeoutError' }, 'STORAGE_TIMEOUT'],
     ['provider-error', { name: 'AccessDenied' }, 'STORAGE_PROVIDER_ERROR'],
-  ])(
-    'should keep the caught error out of the body, on the cause, on the %s branch',
-    (_label, shape, expectedCode) => {
-      // `details` is serialized into the HTTP error envelope this library returns to API
-      // clients, so anything reachable from the returned exception is a published surface.
-      // The SDK error carries `$metadata`, `$fault`, a possibly-unconsumed `$response.body` stream and
-      // vendor fields, so the body is projected from named fields; the error itself rides on `cause`,
-      // which `getResponse()` never reaches, for the host's logs.
-      //
-      // Driven across all three return paths on purpose: each constructs its own
-      // exception, so a guard on one says nothing about the others, and the not-found
-      // branch is the one `head` and `download` misses travel through.
-      const caught = { ...shape, message: 'denied', leaked: 'FIXTURE-must-not-leak' }
+  ])('should never attach the caught error on the %s branch', (_label, shape, expectedCode) => {
+    // `details` is serialized into the HTTP error envelope this library returns to API
+    // clients, so anything reachable from the returned exception is a published surface.
+    // `details` is serialized into the HTTP error envelope this library returns to API clients, so
+    // anything reachable from the returned exception is a published surface. A `cause` chain drags the
+    // whole SDK error with it (`$metadata`, `$fault`, a possibly-unconsumed `$response.body` stream and
+    // any vendor fields), so the mapper projects named fields and attaches nothing.
+    //
+    // Driven across all three return paths on purpose: each constructs its own
+    // exception, so a guard on one says nothing about the others, and the not-found
+    // branch is the one `head` and `download` misses travel through.
+    const caught = { ...shape, message: 'denied', leaked: 'FIXTURE-must-not-leak' }
 
-      const mapped = mapAwsError(caught, { key: 'k', bucket: 'b', op: 'head' })
+    const mapped = mapAwsError(caught, { key: 'k', bucket: 'b', op: 'head' })
 
-      expect(mapped.code).toBe(expectedCode)
-      expect(mapped.cause).toBe(caught)
-      expect(JSON.stringify(mapped.getResponse())).not.toContain('FIXTURE-must-not-leak')
-    },
-  )
+    expect(mapped.code).toBe(expectedCode)
+    expect(mapped.cause).toBeUndefined()
+    expect(JSON.stringify(mapped.getResponse())).not.toContain('FIXTURE-must-not-leak')
+  })
 
   it('should project only the four named fields beside the caller context', () => {
     // Guards the projection itself, so the body assertions above cannot pass by the

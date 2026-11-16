@@ -34,26 +34,6 @@ describe('StorageException', () => {
     expect(e.getStatus()).toBe(HttpStatus.BAD_REQUEST)
   })
 
-  it('should carry the original error as its cause, and keep it out of the response body', () => {
-    // The text of a driver or of a provider belongs to the host's logs: it rides on `cause`, never on
-    // what `getResponse()` hands to a client.
-    const original = new Error('connect ECONNREFUSED 10.1.2.3:9000')
-    const e = new StorageException(
-      'STORAGE_PROVIDER_ERROR',
-      undefined,
-      { reason: 'unreachable' },
-      undefined,
-      original,
-    )
-
-    expect(e.cause).toBe(original)
-    expect(JSON.stringify(e.getResponse())).not.toContain('10.1.2.3')
-  })
-
-  it('should have no cause when none is given', () => {
-    expect(new StorageException('STORAGE_KEY_INVALID').cause).toBeUndefined()
-  })
-
   it('should serialize details into the response body', () => {
     // Details-present branch of the body spread.
     const body = new StorageException('STORAGE_KEY_INVALID', HttpStatus.BAD_REQUEST, {

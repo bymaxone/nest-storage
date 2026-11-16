@@ -95,7 +95,7 @@ describe('conditional and ranged download', () => {
     expect(error).toMatchObject({ code: 'STORAGE_PRECONDITION_FAILED', status: 412 })
   })
 
-  it('carries the provider status and request context in details, and the caught error only on the cause', async () => {
+  it('carries the provider status and request context in details, and never the caught error', async () => {
     const error = await failure((await storage()).download({ key: 'a.txt', ifNoneMatch: '"v1"' }))
 
     const details = (
@@ -106,7 +106,7 @@ describe('conditional and ranged download', () => {
     expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).not.toContain(
       'UnknownError',
     )
-    expect((error as { cause?: unknown }).cause).toBeDefined()
+    expect((error as { cause?: unknown }).cause).toBeUndefined()
   })
 
   it('returns the object when the conditions hold', async () => {
