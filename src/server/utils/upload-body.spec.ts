@@ -94,7 +94,7 @@ describe('boundStreamSize', () => {
     expect((await read(boundStreamSize(Readable.from([Buffer.alloc(500)]), 500, options()))).error).toBeUndefined()
   })
 
-  it('uploads a multipart-sized stream shorter than declared as it is, and refuses one that is longer', async () => {
+  it('lets a multipart-sized stream that is shorter than declared through unchanged, and refuses one that is longer', async () => {
     // The multipart path never stored a truncated object, so a shorter body stays accepted there.
     const shorter = await read(boundStreamSize(Readable.from([Buffer.alloc(120)]), THRESHOLD + 500, options()))
     const longer = await read(boundStreamSize(Readable.from([Buffer.alloc(THRESHOLD + 600)]), THRESHOLD + 500, options()))
