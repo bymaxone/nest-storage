@@ -287,8 +287,10 @@ describe('applyDefaults: an option group key that holds undefined or null', () =
       validation: { maxSizeBytes: 1000 },
       multipart: { queueSize: 7 },
       signedUrls: { defaultGetTtlSeconds: 60 },
+      scanner: { impl: scanner, rejectOnUnknown: false },
     })
 
+    expect(resolved.scanner?.rejectOnUnknown).toBe(false)
     expect(resolved.validation?.maxSizeBytes).toBe(1000)
     expect(resolved.multipart.queueSize).toBe(7)
     expect(resolved.signedUrls.defaultGetTtlSeconds).toBe(60)

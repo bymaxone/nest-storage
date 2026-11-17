@@ -125,6 +125,9 @@ describe('toUploadBody', () => {
     }
 
     expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+    expect((thrown as { getResponse(): unknown }).getResponse()).toMatchObject({
+      error: { details: { field: 'body' } },
+    })
   })
 
   it('leaves a Buffer, a Uint8Array and a stream as they are', () => {
