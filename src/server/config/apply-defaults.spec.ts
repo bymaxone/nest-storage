@@ -302,3 +302,64 @@ describe('applyDefaults: a scanner of null', () => {
   })
 })
 
+describe('applyDefaults: a group that is a class instance', () => {
+  // Validation reads a group by property name, so a value served from a prototype getter passes it; the
+  // resolved options must carry that value, or a scanner or a size limit would be off while validated.
+  class ScannerConfig {
+    private readonly implementation = scanner
+
+    get impl(): IFileScanner {
+      return this.implementation
+    }
+
+    get mode(): 'pre-upload' | 'post-upload' {
+      return this.mode_
+    }
+
+    private readonly mode_: 'pre-upload' | 'post-upload' = 'post-upload'
+  }
+  class SizeConfig {
+    private readonly limit = 1234
+
+    get maxSizeBytes(): number {
+      return this.limit
+    }
+  }
+  class TtlConfig {
+    private readonly ceiling = 90
+
+    get maxTtlSeconds(): number {
+      return this.ceiling
+    }
+  }
+  class MultipartConfig {
+    private readonly queue = 9
+
+    get queueSize(): number {
+      return this.queue
+    }
+  }
+
+  it('keeps the values a prototype getter serves, in every group', () => {
+    const resolved = applyDefaults({
+      ...base,
+      scanner: new ScannerConfig(),
+      validation: new SizeConfig(),
+      signedUrls: new TtlConfig(),
+      multipart: new MultipartConfig(),
+    })
+
+    expect(resolved.scanner?.impl).toBe(scanner)
+    expect(resolved.scanner?.mode).toBe('post-upload')
+    expect(resolved.validation?.maxSizeBytes).toBe(1234)
+    expect(resolved.signedUrls.maxTtlSeconds).toBe(90)
+    expect(resolved.multipart.queueSize).toBe(9)
+  })
+
+  it('still carries the validators and the whitelist of the validation group', () => {
+    const resolved = applyDefaults({ ...base, validation: { mimeWhitelist: ['image/png'], customValidators: [validator] } })
+
+    expect(resolved.validation).toEqual({ mimeWhitelist: ['image/png'], customValidators: [validator] })
+  })
+})
+
