@@ -48,8 +48,12 @@ describe('options.keyPrefix', () => {
   })
 })
 
+/** An array with a hole in it: `every` and `forEach` skip the hole, so a check made with them never sees it. */
+const sparse: string[] = new Array<string>(2)
+sparse[1] = 'image/png'
+
 describe('validation.mimeWhitelist', () => {
-  it.each([[SENTINEL], [{ s: SENTINEL }], [5], [true], [[SENTINEL, 5]], [[null]], [[['image/png']]]])(
+  it.each([[SENTINEL], [{ s: SENTINEL }], [5], [true], [[SENTINEL, 5]], [[null]], [[['image/png']]], [[undefined, 'image/png']], [sparse]])(
     'refuses %p without repeating it',
     (value) => {
       const result = refusal({ ...valid, validation: { mimeWhitelist: value } })
@@ -103,7 +107,7 @@ describe('validation.maxSizeBytes', () => {
 })
 
 describe('options.region', () => {
-  it.each(['us east', 'a/b', 'x\ny', 'a'.repeat(64), `${SENTINEL}?x=1`, 'é-1', '-lead', '.lead'])(
+  it.each(['us east', 'a/b', 'x\ny', 'us-east-1\n', 'us-east-1\r', 'us-east-1\r\n', 'a'.repeat(64), `${SENTINEL}?x=1`, 'é-1', '-lead', '.lead'])(
     'refuses %p, which no region is called, without repeating it',
     (value) => {
       const result = refusal({ ...valid, region: value })

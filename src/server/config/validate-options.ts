@@ -170,7 +170,7 @@ function assertValidationKinds(validation: unknown): void {
   if (mimeWhitelist === null) {
     throw invalid('validation.mimeWhitelist must not be null; omit it to allow every type')
   }
-  if (mimeWhitelist !== undefined && (!Array.isArray(mimeWhitelist) || !mimeWhitelist.every((entry) => typeof entry === 'string'))) {
+  if (mimeWhitelist !== undefined && (!Array.isArray(mimeWhitelist) || !Array.from(mimeWhitelist as unknown[]).every((entry) => typeof entry === 'string'))) {
     throw invalid('validation.mimeWhitelist must be an array of strings')
   }
   if (customValidators === null) {

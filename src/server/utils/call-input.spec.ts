@@ -84,6 +84,15 @@ describe('assertAbortSignal', () => {
     }).not.toThrow()
   })
 
+  it('refuses an object whose property getter throws, as a validation error, not as the getter\'s own error', () => {
+    const throwing = { get aborted(): boolean { throw new Error('getter ran') }, addEventListener: (): void => undefined }
+    const throwingListener = { aborted: false, get addEventListener(): () => void { throw new Error('getter ran') } }
+
+    for (const value of [throwing, throwingListener]) {
+      expect(refusal(() => { assertAbortSignal(value) })).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400, field: 'abortSignal' })
+    }
+  })
+
   it.each([...hostile, ['a string', SENTINEL], ['an empty object', {}], ['an object with only aborted', { aborted: false }]] as [string, unknown][])(
     'refuses %s as a validation error that names the abort signal and echoes nothing',
     (_what, value) => {

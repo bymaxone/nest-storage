@@ -45,12 +45,18 @@ export function resolveBucket(perCall: unknown, moduleDefault: string): string {
  */
 export function assertAbortSignal(signal: unknown): void {
   if (signal === undefined || signal === null) return
-  const candidate = signal as { aborted?: unknown; addEventListener?: unknown }
-  if (
-    typeof signal !== 'object' ||
-    typeof candidate.aborted !== 'boolean' ||
-    typeof candidate.addEventListener !== 'function'
-  ) {
+  if (!hasSignalSurface(signal)) {
     throw wrongKind('abortSignal', 'an AbortSignal')
+  }
+}
+
+/** Whether `signal` has the surface of an `AbortSignal`; an object whose property getter throws does not. */
+function hasSignalSurface(signal: unknown): boolean {
+  if (typeof signal !== 'object') return false
+  const candidate = signal as { aborted?: unknown; addEventListener?: unknown }
+  try {
+    return typeof candidate.aborted === 'boolean' && typeof candidate.addEventListener === 'function'
+  } catch {
+    return false
   }
 }
