@@ -611,7 +611,7 @@ with no `maxSizeBytes` it is refused with a reason that says to set it or use `p
 scanner's own text, so it is written to the warning log (escaped and truncated) and never to the
 body of the error.
 
-In `post-upload` mode the scan reads the object stored under the key, so another writer that overwrites the same key between your upload and the scan makes the verdict about their object, and an infected verdict deletes the key whichever object it now holds.
+In `post-upload` mode your scanner is given the key and reads the object itself, so another writer that overwrites the same key between your upload and the scan makes the verdict about their object, and an infected verdict deletes the key whichever object it now holds.
 
 **A rejected object that could not be removed.** In `post-upload` mode the object is already stored
 when the scanner rejects it, so the library deletes it and rejects `upload()` with the verdict
