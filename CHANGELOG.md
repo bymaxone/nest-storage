@@ -49,7 +49,7 @@ note on each entry is the compatibility contract — read it, not the number.
   `'pre_upload'`) made the library skip both the pre-upload and the post-upload scan, so an infected upload was
   stored (measured with an infected stand-in: 9 bytes stored under each). `forRoot` now fails with
   `STORAGE_INVALID_CONFIG` unless `scanner.impl` is an object with a `scan` function and `scanner.mode` is
-  `'pre-upload'` or `'post-upload'`; `scanner.rejectOnUnknown` must be a boolean, and is no longer read as one
+  `'pre-upload'` or `'post-upload'`; `scanner.rejectOnUnknown` must be a boolean (unset or `null` is the default), and is no longer read as one
   (`'false'` rejected unknown results). A `scanner` of `null` is no scanner, as `undefined` is, and an
   `undefined` or `null` mode is the default `'pre-upload'`.
 
