@@ -35,6 +35,38 @@ note on each entry is the compatibility contract — read it, not the number.
   clamped to the maximum), a fractional or string TTL, a fractional or negative `size`, and a `maxKeys` of
   `Infinity`, `0`, a fraction or a string are now refused with the codes above.
 
+- **A scan result outside the contract no longer uploads.** `scan()` returned any result that was not
+  `'infected'` or an `'unknown'` it was told to reject, so no result, `null`, `'CLEAN'`, `' clean'` or an object
+  as the status stored the object. Only the exact string `'clean'` passes now; `'unknown'` keeps following
+  `rejectOnUnknown`, and anything else is rejected as `STORAGE_SCAN_INCONCLUSIVE` with
+  `details.reason: 'unrecognised scanner status'`, with or without `rejectOnUnknown`, and logged.
+
+  **Apply to a derived backend:** a scanner that returned a status other than `'clean'`, `'infected'` or
+  `'unknown'` (or nothing) on a clean file was uploading; fix the scanner, it is rejected now.
+
+- **A stream whose declared `size` is wrong no longer leaves a truncated object.** A stream below the multipart
+  threshold goes as one request with `Content-Length` set to `size`; a provider stores the object once it has
+  that many bytes, so a longer body (measured on MinIO: 500 declared, 5000 sent) stored the first 500 bytes as
+  if it were the whole. The last byte is now held back until the source has ended: a longer body fails
+  `STORAGE_SIZE_EXCEEDED` before the request completes and a shorter one fails `STORAGE_VALIDATION_FAILED`
+  (`details.field: 'size'`), each in bounded time with nothing stored. A declared `size` that is not a whole
+  number of at least 0 also fails `STORAGE_VALIDATION_FAILED` (see the entry above).
+
+  **Apply to a derived backend:** a caller that passed a `size` that did not match its stream, and got an object
+  of the declared length back, now gets an error; pass the true size, or none (a stream with no size uses
+  multipart). The multipart path is unchanged for a shorter stream.
+
+### Added
+
+- **`scanner.timeoutMs` bounds a file scan.** A scanner that never settled held the upload until the caller
+  aborted. A scan now ends with `STORAGE_TIMEOUT` (503, `details.phase: 'scan'`) after `scanner.timeoutMs`,
+  by default 60 s, and the scanner is handed an `AbortSignal` (`signal` on its input) that aborts then. There is
+  no setting that waits without limit. A scanner that ignores the signal keeps running after the timeout.
+  `check:function-length` also runs in `prepublishOnly` now.
+
+  **Apply to a derived backend:** a scan that took longer than 60 s used to complete and now fails; set
+  `scanner.timeoutMs` to what your scanner needs, and have the scanner honour `signal`.
+
 ## [1.1.16] - 2026-11-17
 
 ### Changed
