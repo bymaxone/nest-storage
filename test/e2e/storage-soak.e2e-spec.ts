@@ -105,7 +105,7 @@ describeSoak('Storage E2E — soak', () => {
         }
       }
 
-      // Straight to stderr: the reporter's console capture did not show this table in a long run.
+      // Written straight to stderr, so the table is printed when the test ends.
       process.stderr.write(
         `SOAK iterations=${String(iterations)} samples=\n${samples.map((s) => JSON.stringify(s)).join('\n')}\n`,
       )
