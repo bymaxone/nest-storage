@@ -79,7 +79,6 @@ note on each entry is the compatibility contract — read it, not the number.
   aborted. A scan now ends with `STORAGE_TIMEOUT` (503, `details.phase: 'scan'`) after `scanner.timeoutMs`,
   by default 60 s, and the scanner is handed an `AbortSignal` (`signal` on its input) that aborts then. There is
   no setting that waits without limit. A scanner that ignores the signal keeps running after the timeout.
-  `check:function-length` also runs in `prepublishOnly` now.
 
   **Apply to a derived backend:** a scan that took longer than 60 s used to complete and now fails; set
   `scanner.timeoutMs` to what your scanner needs, and have the scanner honour `signal`.
