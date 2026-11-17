@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.15] - 2026-11-17
+
 ### Fixed
 
 - **A download body that fails after its headers no longer reaches the caller as the SDK's raw error.** A
@@ -880,4 +882,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.12]: https://github.com/bymaxone/nest-storage/compare/v1.1.11...v1.1.12
 [1.1.13]: https://github.com/bymaxone/nest-storage/compare/v1.1.12...v1.1.13
 [1.1.14]: https://github.com/bymaxone/nest-storage/compare/v1.1.13...v1.1.14
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.14...HEAD
+[1.1.15]: https://github.com/bymaxone/nest-storage/compare/v1.1.14...v1.1.15
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.15...HEAD
