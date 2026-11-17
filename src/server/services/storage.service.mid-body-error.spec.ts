@@ -141,12 +141,13 @@ describe('a download body that fails after its headers', () => {
     return controller.signal
   }
 
-  const guards: [string, Partial<BymaxStorageModuleOptions>][] = [
-    ['the idle guard on', {}],
-    ['the idle guard off', { bodyIdleTimeoutMs: 0 }],
+  /** The operation a mapped failure names: the guard maps the body it wraps, `downloadBuffer()` the one it reads. */
+  const guards: [string, Partial<BymaxStorageModuleOptions>, string][] = [
+    ['the idle guard on', {}, 'download'],
+    ['the idle guard off', { bodyIdleTimeoutMs: 0 }, 'downloadBuffer'],
   ]
 
-  describe.each(guards)('with %s', (_guard, options) => {
+  describe.each(guards)('with %s', (_guard, options, op) => {
     it('rejects downloadBuffer() with a provider error when the connection is reset mid-body', async () => {
       const storage = await storageWith(options)
 
@@ -154,7 +155,7 @@ describe('a download body that fails after its headers', () => {
 
       expect(error).toBeInstanceOf(StorageException)
       expect(error).toMatchObject({ code: 'STORAGE_PROVIDER_ERROR', status: 503 })
-      expect(detailsOf(error)).toMatchObject({ reason: 'unreachable', key: 'k', bucket: 'b' })
+      expect(detailsOf(error)).toMatchObject({ reason: 'unreachable', key: 'k', bucket: 'b', op })
     })
 
     it('rejects downloadBuffer() with the typed abort when the caller cancels mid-body', async () => {
