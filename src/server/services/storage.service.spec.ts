@@ -201,7 +201,7 @@ describe('StorageService — single-shot upload', () => {
     ['a Blob', new Blob(['abc'])],
     ['an array of chunks', [Buffer.from('a')]],
   ])('refuses %s as a body with STORAGE_VALIDATION_FAILED (400) and sends no request', async (_label, body) => {
-    // These used to reach the upload as if they were streams and fail as STORAGE_MULTIPART_ABORTED (500).
+    // They fail as a validation error before any request, not as STORAGE_MULTIPART_ABORTED (500).
     const { service, send } = makeService()
 
     const err = await service.upload(uploadOf({ body: body as never })).catch((e: unknown) => e)

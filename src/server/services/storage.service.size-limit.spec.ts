@@ -309,8 +309,8 @@ describe('upload size bound', () => {
   })
 
   describe('a single-shot stream whose declared size is wrong', () => {
-    // Measured before the change: a 5000-byte stream declared as 500 reached the provider as exactly 500
-    // bytes, which a provider stores as the whole object, with the rest of the stream never read.
+    // A provider stores an object once it has received `Content-Length` bytes, so a 5000-byte stream declared
+    // as 500 would leave a 500-byte object; the last byte is held back so that no request completes.
     const oneShot = (bytes: number): Readable => Readable.from([Buffer.alloc(bytes, 9)])
 
     it('refuses a body longer than declared with STORAGE_SIZE_EXCEEDED, and the provider never gets a complete request', async () => {
@@ -351,9 +351,9 @@ describe('upload size bound', () => {
   })
 
   describe('a stream with a wrong declared size, read into memory for a pre-upload scan', () => {
-    // The stream becomes a buffer before the size guard runs, and the request still carried the declared
-    // size as Content-Length: a 5000-byte buffer declared as 500 reached the provider cut to 500 bytes
-    // after the scanner had approved all 5000.
+    // The stream becomes a buffer before the size guard runs while the request carries the declared size as
+    // Content-Length, so a 5000-byte buffer declared as 500 would be cut to 500 bytes after the scanner had
+    // approved all 5000: the buffered length is checked against the declared size.
     const scanning = {
       validation: { maxSizeBytes: 1_000_000 },
       scanner: {
@@ -409,8 +409,8 @@ describe('upload size bound', () => {
   })
 
   describe('the bytes a pre-upload scan approved are the bytes that are stored', () => {
-    // Measured before the change: a caller who wrote into its own buffer while the scan ran had the
-    // changed bytes stored ("ZAAA") after the scanner had approved the original ("AAAA").
+    // The scanner and the upload read one private copy, so a caller who writes into its own array while the
+    // scan runs ("ZAAA") changes neither what was approved ("AAAA") nor what is stored.
     async function scannedAndStored(make: () => Buffer | Uint8Array): Promise<{ scanned: string; stored: string }> {
       let scanned = ''
       const impl = {

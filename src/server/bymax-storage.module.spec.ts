@@ -134,8 +134,8 @@ describe('BymaxStorageModule', () => {
     ['a size limit of NaN, which would switch the limit off', { validation: { maxSizeBytes: Number.NaN } }],
     ['a multipart queue of Infinity, which would keep the process busy on the first upload', { multipart: { queueSize: Infinity } }],
   ])('refuses to boot with %s', (_what, extra) => {
-    // Measured before the fix: forRoot accepted both; a 10-byte upload went through under NaN, and the first
-    // multipart upload under Infinity ran past a 20 s kill.
+    // A comparison alone lets both through: `NaN` on a size limit switches the limit off, and `Infinity` as a
+    // multipart queue keeps the process busy from the first multipart upload, so `forRoot` refuses them.
     let thrown: unknown
     try {
       BymaxStorageModule.forRoot({ ...base, ...extra })
