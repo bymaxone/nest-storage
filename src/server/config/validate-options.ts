@@ -128,8 +128,7 @@ function assertBoundedInteger(
 }
 
 /**
- * Refuses a scanner configuration that would leave scanning silently off: the scanner is enabled only
- * when `impl` is there, and `getMode()` returns whatever `mode` holds, so a missing `impl` or a mode that
+ * Refuses a scanner configuration that would leave scanning silently off: a missing `impl` or a mode that
  * is neither value (a typo such as `'preupload'`) means nothing is scanned while the host believes it is.
  * `undefined` for the group means no scanner and `null` is refused, so a config lookup that returns `null`
  * for a missing key cannot switch scanning off; `undefined` or `null` for `mode` is the default.
