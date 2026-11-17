@@ -235,19 +235,20 @@ export class StorageService {
   }
 
   /**
-   * In pre-upload scan mode a stream body is read into one `Buffer`, so the scanner
-   * and the upload see the same bytes; a stream is single-use, and one the scanner
+   * In pre-upload scan mode a stream body is read into one `Buffer`, and a buffer body is copied, so
+   * the scanner and the upload see the same bytes; a stream is single-use, and one the scanner
    * had consumed would leave the upload with nothing to send. The read is bounded by
    * `validation.maxSizeBytes`, and a stream with no bound is refused rather than
    * buffered without limit. Other bodies and modes pass through unchanged.
    */
   private async bufferForPreUploadScan(body: UploadBody, finalKey: string): Promise<UploadBody> {
-    if (
-      !this.scanner.isEnabled() ||
-      this.scanner.getMode() !== 'pre-upload' ||
-      isBufferLike(body)
-    ) {
+    if (!this.scanner.isEnabled() || this.scanner.getMode() !== 'pre-upload') {
       return body
+    }
+    // A buffer is copied: the caller still holds it, and a change they make while the scan runs would
+    // otherwise be stored without having been scanned.
+    if (isBufferLike(body)) {
+      return Buffer.from(body)
     }
     return bufferStreamForScan(body, finalKey, this.options.validation?.maxSizeBytes)
   }

@@ -407,5 +407,36 @@ describe('upload size bound', () => {
       expect(result.multipart).toBe(true)
     })
   })
+
+  describe('the bytes a pre-upload scan approved are the bytes that are stored', () => {
+    // Measured before the change: a caller who wrote into its own buffer while the scan ran had the
+    // changed bytes stored ("ZAAA") after the scanner had approved the original ("AAAA").
+    async function scannedAndStored(make: () => Buffer | Uint8Array): Promise<{ scanned: string; stored: string }> {
+      let scanned = ''
+      const impl = {
+        scan: async (input: { body?: Buffer | NodeJS.ReadableStream }): Promise<{ status: 'clean'; engine: string }> => {
+          scanned = Buffer.from(input.body as Buffer).toString()
+          await new Promise((resolve) => setTimeout(resolve, 60))
+          return { status: 'clean', engine: 't' }
+        },
+      }
+      const storage = await storageWith({ validation: { maxSizeBytes: 1000 }, scanner: { impl, mode: 'pre-upload' } })
+      const body = make()
+
+      const pending = storage.upload({ key: 'k', body, contentType: 'text/plain' })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      body[0] = 'Z'.charCodeAt(0)
+      await pending
+
+      return { scanned, stored: String(putBodies[0]) }
+    }
+
+    it.each([
+      ['a Buffer', () => Buffer.from('AAAA')],
+      ['a Uint8Array', () => new Uint8Array(Buffer.from('AAAA'))],
+    ])('stores what the scanner saw when the caller changes %s during the scan', async (_label, make) => {
+      expect(await scannedAndStored(make)).toEqual({ scanned: 'AAAA', stored: 'AAAA' })
+    })
+  })
 })
 
