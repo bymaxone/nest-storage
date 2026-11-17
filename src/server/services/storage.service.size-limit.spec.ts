@@ -307,4 +307,47 @@ describe('upload size bound', () => {
       storage.upload({ key: 'edge.bin', body: stream, contentType: 'application/octet-stream' }),
     ).resolves.toMatchObject({ multipart: true })
   })
+
+  describe('a single-shot stream whose declared size is wrong', () => {
+    // Measured before the change: a 5000-byte stream declared as 500 reached the provider as exactly 500
+    // bytes, which a provider stores as the whole object, with the rest of the stream never read.
+    const oneShot = (bytes: number): Readable => Readable.from([Buffer.alloc(bytes, 9)])
+
+    it('refuses a body longer than declared with STORAGE_SIZE_EXCEEDED, and the provider never gets a complete request', async () => {
+      const storage = await storageWith({})
+      const stream = Readable.from([Buffer.alloc(300, 9), Buffer.alloc(300, 9)])
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: stream, contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_SIZE_EXCEEDED', status: 413 })
+      expect(detailsOf(error)).toMatchObject({ declaredSize: 500, key: 'k', bucket: 'b' })
+      expect(putBodies).toEqual([])
+      expect(stream.destroyed).toBe(true)
+    })
+
+    it('refuses a body shorter than declared with STORAGE_VALIDATION_FAILED naming size, and stores nothing', async () => {
+      const storage = await storageWith({})
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: oneShot(120), contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+      expect(detailsOf(error)).toMatchObject({ field: 'size', declaredSize: 500, receivedSize: 120 })
+      expect(putBodies).toEqual([])
+    })
+
+    it('uploads a body of exactly the declared size, every byte of it', async () => {
+      const storage = await storageWith({})
+
+      const result = await storage.upload({ key: 'k', body: oneShot(500), contentType: 'text/plain', size: 500 })
+
+      expect(result.multipart).toBe(false)
+      expect(putBodies).toHaveLength(1)
+      expect(putBodies[0]).toEqual(Buffer.alloc(500, 9))
+    })
+  })
 })
+

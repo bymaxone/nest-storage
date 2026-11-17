@@ -193,3 +193,33 @@ export async function abortable<T>(
     work.catch(() => undefined)
   }
 }
+
+/**
+ * Makes a failure of the request body end the request. The SDK pipes the body into the request and
+ * does not stop when the body errors, so a stream that failed (a size guard, a source that broke)
+ * would leave the request waiting for its timeout; the signal returned here aborts at once, and
+ * `failure()` says what the body failed with so the caller can report that and not the abort.
+ *
+ * @param body - The body handed to the SDK.
+ * @param signal - The caller's signal, if any.
+ * @returns The signal to send with (the caller's when the body is not a stream) and the body's failure.
+ */
+export function abortOnBodyFailure(
+  body: unknown,
+  signal: AbortSignal | undefined,
+): { signal: AbortSignal | undefined; failure: () => unknown } {
+  const stream = body as Partial<NodeJS.ReadableStream> | null | undefined
+  if (typeof stream?.once !== 'function') {
+    return { signal, failure: () => undefined }
+  }
+  const controller = new AbortController()
+  let failure: unknown
+  stream.once('error', (err: unknown) => {
+    failure = err
+    controller.abort()
+  })
+  return {
+    signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
+    failure: () => failure,
+  }
+}

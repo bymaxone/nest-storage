@@ -40,6 +40,7 @@ import { FileScannerService } from './file-scanner.service'
 import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
+import { mapSizeLimitError } from '../errors/size-limit-exception'
 import { describeCleanupFailure, withCleanupFailure } from '../errors/scan-cleanup-error'
 import {
   abortFailureLogger,
@@ -64,7 +65,7 @@ import { assertIntegerInput } from '../utils/numeric-input'
 import { bufferStreamForScan, boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { logValue } from '../utils/log-value'
-import {
+import { abortOnBodyFailure,
   abortable,
   bindToSignal,
   CLEANUP_DEADLINE_MS,
@@ -570,10 +571,11 @@ export class StorageService {
       Body: normalizeSingleShotBody(options.body),
       ContentLength: total,
     }
+    const watch = abortOnBodyFailure(input.Body, options.abortSignal)
     try {
       const response = await this.s3Provider
         .getClient()
-        .send(new PutObjectCommand(input), sendOptions(options.abortSignal))
+        .send(new PutObjectCommand(input), sendOptions(watch.signal))
       if (options.onProgress) {
         emitProgress(options.onProgress, total, total)
       }
@@ -588,7 +590,8 @@ export class StorageService {
       })
     } catch (err) {
       const context = { key: finalKey, bucket, op: 'upload-single' }
-      throw failureOrAbort(options.abortSignal, context, mapAwsError(err, context))
+      const mapped = mapSizeLimitError(watch.failure(), context) ?? mapAwsError(err, context)
+      throw failureOrAbort(options.abortSignal, context, mapped)
     }
   }
 

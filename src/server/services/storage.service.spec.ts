@@ -197,13 +197,23 @@ describe('StorageService — single-shot upload', () => {
     expect(Buffer.isBuffer(firstInput(send).Body)).toBe(true)
   })
 
-  it('passes a known-size stream straight through on the single-shot path', async () => {
-    // A small stream with a declared size stays single-shot; the body is the stream.
+  it('sends the bytes of a known-size stream, in one request, on the single-shot path', async () => {
+    // A small stream with a declared size stays single-shot. Its body is the size guard over the
+    // stream (a longer or shorter body is refused), so the bytes are what is compared.
     const { service, send } = makeService()
-    send.mockResolvedValue({ ETag: '"abc"' })
-    const stream = Readable.from([Buffer.from('hi')])
-    await service.upload(uploadOf({ body: stream, size: 2 }))
-    expect(firstInput(send).Body).toBe(stream)
+    send.mockImplementation(async (command: { input: { Body: NodeJS.ReadableStream } }) => {
+      const chunks: Buffer[] = []
+      for await (const chunk of command.input.Body) chunks.push(Buffer.from(chunk as Buffer))
+      sent.push(Buffer.concat(chunks).toString())
+      return { ETag: '"abc"' }
+    })
+    const sent: string[] = []
+
+    await service.upload(uploadOf({ body: Readable.from([Buffer.from('hi')]), size: 2 }))
+
+    expect(sent).toEqual(['hi'])
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(firstInput(send).ContentLength).toBe(2)
   })
 
   it('returns a populated UploadResult with multipart false', async () => {

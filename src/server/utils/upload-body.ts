@@ -5,7 +5,8 @@
  */
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
-import { withSizeLimit } from './size-limit'
+import { withExactSize, withSizeLimit } from './size-limit'
+import { pickUploadStrategy } from './upload-strategy'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
 import {
@@ -15,7 +16,6 @@ import {
   toUploadBody,
   type UploadBody,
 } from './stream-utils'
-import { pickUploadStrategy } from './upload-strategy'
 
 /**
  * Brings an untyped body to bytes: a string becomes its UTF-8 bytes and an `ArrayBuffer` or other
@@ -31,10 +31,11 @@ export function withBytesBody(options: UploadOptions): UploadOptions {
 }
 
 /**
- * Caps a stream that takes the multipart path, as it is read, at the lower of the configured
- * maximum and the size its caller declared, so an undeclared stream or one longer than it declared
- * cannot exceed either. A single-shot stream needs no cap: the request carries `Content-Length`
- * set to the declared size.
+ * Caps a stream, as it is read, at the lower of the configured maximum and the size its caller
+ * declared, so an undeclared stream or one longer than it declared cannot exceed either. A
+ * single-shot stream must have exactly the size declared: the request carries `Content-Length` set
+ * to that size, and a longer body would leave the provider with an object of the declared length
+ * and the rest unread, which it stores as if it were the whole.
  *
  * @param body - The body about to be uploaded.
  * @param declaredSize - The size the caller declared, if any.
@@ -48,10 +49,13 @@ export function boundStreamSize(
 ): UploadBody {
   // A declared size above the maximum is refused before this point, so it is the lower bound.
   const limit = declaredSize ?? options.validation?.maxSizeBytes
+  if (isBufferLike(body) || limit === undefined) {
+    return body
+  }
   const singleShot =
     pickUploadStrategy(body, declaredSize, options.multipart.thresholdBytes) === 'single-shot'
-  if (isBufferLike(body) || singleShot || limit === undefined) {
-    return body
+  if (declaredSize !== undefined && singleShot) {
+    return withExactSize(body, declaredSize)
   }
   return withSizeLimit(body, limit, declaredSize === undefined ? 'max' : 'declared')
 }

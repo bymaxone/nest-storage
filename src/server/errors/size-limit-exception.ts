@@ -4,7 +4,7 @@
  * @layer server/errors
  */
 import { StorageException } from './storage-exception'
-import { SizeLimitError, type SizeLimitKind } from '../utils/size-limit'
+import { SizeLimitError, SizeShortfallError, type SizeLimitKind } from '../utils/size-limit'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
 /**
@@ -30,12 +30,21 @@ export function sizeLimitException(
 /**
  * @param err - Whatever the upload rejected with.
  * @param context - Details to carry (key, bucket and, for multipart, the abort outcome).
- * @returns The exception when `err` is a size-limit failure, otherwise `undefined`.
+ * @returns The exception when `err` is a size-limit or size-shortfall failure, otherwise `undefined`.
  */
 export function mapSizeLimitError(
   err: unknown,
   context: Record<string, unknown>,
 ): StorageException | undefined {
+  if (err instanceof SizeShortfallError) {
+    return new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
+      ...context,
+      field: 'size',
+      reason: 'The body is shorter than the declared size',
+      declaredSize: err.declaredBytes,
+      receivedSize: err.receivedBytes,
+    })
+  }
   if (!(err instanceof SizeLimitError)) {
     return undefined
   }
