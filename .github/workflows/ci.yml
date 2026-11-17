@@ -72,6 +72,20 @@ jobs:
           else
             pnpm check:spec-headers
           fi
+      - name: Functions and test bodies stay within the length limit
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # A pull request is compared with the baseline on its base branch, and a push with the one
+          # before it, so the baseline a change carries cannot admit the function it adds.
+          if [ -n "$BASE_REF" ]; then
+            pnpm check:function-length --base "origin/$BASE_REF"
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            pnpm check:function-length --base "$BEFORE"
+          else
+            pnpm check:function-length
+          fi
       - name: Build all subpaths
         run: pnpm build
       - name: Verify build output integrity
