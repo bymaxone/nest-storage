@@ -8,6 +8,22 @@
     "reason": "Tests scripts/check-file-length.mjs, a CI tool outside the mutate list. It is a plain .mjs script with no import from src/, so the mutation run has no mutant that relates to this spec."
   },
   {
+    "file": "src/check-function-length.spec.ts",
+    "reason": "Runs scripts/check-function-length.mjs as a child process against a throwaway repository and reads what it prints; it executes no code under src, so it can kill no mutant."
+  },
+  {
+    "file": "src/check-function-length.baseline.spec.ts",
+    "reason": "Runs scripts/check-function-length.mjs as a child process against a throwaway repository to pin its baseline handling; it executes no code under src, so it can kill no mutant."
+  },
+  {
+    "file": "src/check-function-length.key.spec.ts",
+    "reason": "Tests scripts/function-length-key.mjs, a plain script outside the mutate list; it executes no code under src, so it can kill no mutant."
+  },
+  {
+    "file": "src/check-spec-headers.spec.ts",
+    "reason": "Runs scripts/check-spec-headers.mjs against a throwaway repository and reads the tracked spec files' leading comments; it executes no code under src, so it can kill no mutant."
+  },
+  {
     "file": "src/shared/constants/constant-tables.spec.ts",
     "reason": "Pins the shared error-code, MIME-whitelist and default-option tables whole. Stryker generated 0 mutants for src/shared/constants/*.constants.ts and src/server/constants/*.constants.ts (measured: 'Instrumented 5 source file(s) with 0 mutant(s)'), because they hold only 'as const' data, so no mutant can select this spec."
   },
