@@ -19,8 +19,8 @@ export class SourceIdleError extends Error {
 /**
  * Whether a value is an error: an object with a `name` and a `message`, which an `Error`, a
  * `DOMException` (an abort or timeout signal's reason) and an error from another realm (a `vm` context,
- * a test sandbox) all are, though `instanceof Error` is not true for the last two. Re-wrapping one would
- * drop its name and its `code`.
+ * a test sandbox) all are, though `instanceof Error` is not true for an error from another realm.
+ * Re-wrapping one would drop its name and its `code`.
  */
 function isError(value: unknown): value is Error {
   const candidate = value as { name?: unknown; message?: unknown } | null | undefined
