@@ -56,6 +56,23 @@ note on each entry is the compatibility contract — read it, not the number.
   of the declared length back, now gets an error; pass the true size, or none (a stream with no size uses
   multipart). The multipart path is unchanged for a shorter stream.
 
+- **A body that is not a body now fails as a validation error.** A `Blob`, an array of chunks or any other object
+  that is not a `Buffer`, `Uint8Array`, `ArrayBuffer`, string or `Readable` reached the upload as if it were a
+  stream and failed as `STORAGE_MULTIPART_ABORTED` (500), which blames the multipart upload. It now fails
+  `STORAGE_VALIDATION_FAILED` (400, `details.field: 'body'`) before any request.
+
+  **Apply to a derived backend:** a handler that mapped that 500 to a client error can drop the mapping; pass
+  a supported body.
+
+- **The scanner's engine and threat names are capped, and a scanner that throws is logged.** `details.engine`
+  and `details.threat` in the body, and the same names in the log line, are cut to 200 characters and left out
+  when the scanner gave something that is not a string. A scanner that threw was answered 500 with no log line
+  at all; it now logs `Scanner failed` with its message, cut at 300 characters. The error the caller gets is
+  unchanged.
+
+  **Apply to a derived backend:** a scanner that names a threat longer than 200 characters is cut in the
+  response; keep the names short, or read the full text from your scanner's own log.
+
 ### Added
 
 - **`scanner.timeoutMs` bounds a file scan.** A scanner that never settled held the upload until the caller

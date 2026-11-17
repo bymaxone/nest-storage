@@ -229,6 +229,86 @@ describe('FileScannerService', () => {
       })
     })
 
+    describe('the engine and threat names', () => {
+      const LONG = 'x'.repeat(500)
+
+      it('are cut to 200 characters in the body and in the log', async () => {
+        const impl = makeMockScanner({ status: 'infected', engine: LONG, threat: LONG })
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        const { engine, threat } = ((err as StorageException).getResponse() as { error: { details: Record<string, string> } }).error.details
+        expect(engine).toBe('x'.repeat(200))
+        expect(threat).toBe('x'.repeat(200))
+        const line = String(warnSpy.mock.calls[0]?.[0])
+        expect(line).toContain(`"${'x'.repeat(200)}"`)
+        expect(line).not.toContain('x'.repeat(201))
+        warnSpy.mockRestore()
+      })
+
+      it('are left whole at exactly 200 characters', async () => {
+        const name = 'y'.repeat(200)
+        const impl = makeMockScanner({ status: 'infected', engine: name, threat: name })
+        const service = await buildService(buildOptions({ impl }), impl)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect((err as StorageException).getResponse()).toMatchObject({ error: { details: { engine: name, threat: name } } })
+      })
+
+      it('are left out of the body when they are not strings', async () => {
+        const impl: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'infected', engine: 'clamav', threat: { secret: 'x' } }) }
+        const service = await buildService(buildOptions({ impl }), impl)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('secret')
+        expect((err as StorageException).getResponse()).toMatchObject({ error: { details: { engine: 'clamav' } } })
+      })
+    })
+
+    describe('a scanner that throws', () => {
+      it('is logged once with its message cut at 300 characters, and the error is rethrown unchanged', async () => {
+        const failure = new Error(`engine down ${'z'.repeat(500)}`)
+        const impl: IFileScanner = { scan: jest.fn().mockRejectedValue(failure) }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect(err).toBe(failure)
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+        const line = String(warnSpy.mock.calls[0]?.[0])
+        expect(line).toMatch(/^Scanner failed: key="test\/file\.png" error="engine down z+"$/)
+        expect(line).not.toContain('z'.repeat(300))
+        warnSpy.mockRestore()
+      })
+
+      it('logs a value that is not an Error without throwing', async () => {
+        const impl: IFileScanner = { scan: jest.fn().mockRejectedValue(Object.create(null)) }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('non-printable rejection value'))
+        warnSpy.mockRestore()
+      })
+
+      it('does not log the deadline, which is a typed error that names itself', async () => {
+        const impl: IFileScanner = { scan: jest.fn(() => new Promise<FileScanResult>(() => undefined)) }
+        const service = await buildService(buildOptions({ impl, timeoutMs: 10 }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        expect(warnSpy).not.toHaveBeenCalled()
+        warnSpy.mockRestore()
+      })
+    })
+
     describe('a result outside the contract', () => {
       // Only the exact string 'clean' lets an object through: a scanner written in JS, a typo, or a
       // result that is not an object must not be read as a pass.

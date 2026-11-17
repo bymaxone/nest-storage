@@ -341,6 +341,8 @@ await storage.upload({
 
 Uploads are automatically routed to multipart when `size >= multipart.thresholdBytes` (default 5 MiB). A `Readable` without a `size` always uses multipart. Multipart aborts automatically on failure (`leavePartsOnError: false`).
 
+**What `body` may be.** A `Buffer`, a `Uint8Array`, an `ArrayBuffer`, a string or a Node `Readable`. Anything else (a `Blob`, an array of chunks, a plain object) fails with `STORAGE_VALIDATION_FAILED` (`details.field: 'body'`) before any request; it used to reach the upload as if it were a stream and fail as `STORAGE_MULTIPART_ABORTED` (500).
+
 **A stream's declared size must be true.** A stream below the multipart threshold is sent as one request that carries `Content-Length` set to `size`, and a provider stores an object as soon as it has received that many bytes. So a body longer than `size` is refused with `STORAGE_SIZE_EXCEEDED` (`details.declaredSize`) before its last byte is sent, and a body shorter than `size` with `STORAGE_VALIDATION_FAILED` (`details.field: 'size'`, `details.declaredSize` and `details.receivedSize`); either way the request is abandoned and nothing is stored. A stream on the multipart path is still refused when it is longer than `size`; a shorter one is uploaded as it is. A `size` that is not a whole number of at least `0` fails with `STORAGE_VALIDATION_FAILED` before any request.
 
 **The library owns a `Readable` once you pass it to `upload()`**, as with `stream.pipeline`. When the upload is rejected for any reason, the stream is destroyed without an error, which releases the file handle or socket behind it: a listener on the stream sees `'close'`, and the failure is the rejection of `upload()`. A call answered from the idempotency cache destroys the stream unread. Do not reuse a stream you passed in; open a new one to retry. No listener on the stream is needed to avoid an unhandled `'error'` event.
@@ -605,7 +607,7 @@ bodies are not affected, and `post-upload` hands the scanner the key only, no bo
 **What counts as a verdict.** Only the exact strings `'clean'`, `'infected'` and `'unknown'` are results. Anything else (no result, `null`, `'CLEAN'`, `' clean'`, an object, a made-up status) is rejected as `STORAGE_SCAN_INCONCLUSIVE` with `details.reason: 'unrecognised scanner status'`, whatever `rejectOnUnknown` says: an object the scanner did not call clean is not stored.
 
 **What a client is told.** `STORAGE_SCAN_INFECTED` carries `details.engine` and `details.threat`, and
-`STORAGE_SCAN_INCONCLUSIVE` carries `details.engine`. The free-form `details` your scanner returns is the
+`STORAGE_SCAN_INCONCLUSIVE` carries `details.engine`; each name is cut to 200 characters, in the body and in the log, and left out when the scanner gave something that is not a string. A scanner that throws is answered with a 500, and the library logs a `Scanner failed` warning with the message (cut at 300 characters) so there is a trace of why. The free-form `details` your scanner returns is the
 scanner's own text, so it is written to the warning log (escaped and truncated) and never to the
 body of the error.
 

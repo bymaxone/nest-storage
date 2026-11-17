@@ -197,6 +197,19 @@ describe('StorageService — single-shot upload', () => {
     expect(Buffer.isBuffer(firstInput(send).Body)).toBe(true)
   })
 
+  it.each([
+    ['a Blob', new Blob(['abc'])],
+    ['an array of chunks', [Buffer.from('a')]],
+  ])('refuses %s as a body with STORAGE_VALIDATION_FAILED (400) and sends no request', async (_label, body) => {
+    // These used to reach the upload as if they were streams and fail as STORAGE_MULTIPART_ABORTED (500).
+    const { service, send } = makeService()
+
+    const err = await service.upload(uploadOf({ body: body as never })).catch((e: unknown) => e)
+
+    expect(err).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it('sends the bytes of a known-size stream, in one request, on the single-shot path', async () => {
     // A small stream with a declared size stays single-shot. Its body is the size guard over the
     // stream (a longer or shorter body is refused), so the bytes are what is compared.
