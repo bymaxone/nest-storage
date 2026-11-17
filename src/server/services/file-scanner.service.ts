@@ -169,7 +169,7 @@ export class FileScannerService {
   /**
    * Runs the scanner and gives up after `scanner.timeoutMs`: a scanner that never settles would hold
    * the upload for good. The scanner is handed a signal that aborts then; one that ignores it keeps
-   * running, which is why the README says repeated timeouts pile up work.
+   * running.
    */
   private async scanWithinDeadline(scanner: IFileScanner, input: ScanInput): Promise<ScannerOutcome> {
     const timeoutMs = this.options.scanner?.timeoutMs ?? DEFAULT_SCANNER_TIMEOUT_MS
