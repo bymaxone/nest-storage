@@ -15,9 +15,9 @@ import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constant
  * - `ttlSeconds` is `undefined` → returns `defaultTtl`.
  * - `ttlSeconds > maxTtl` → silently clamps to `maxTtl` (consumer-friendly;
  *   the SDK's `getSignedUrl` does the same for its own ceiling).
- * - `ttlSeconds <= 0` → throws `STORAGE_SIGNED_URL_TTL_INVALID` because a
- *   non-positive TTL would produce a URL that is immediately expired or
- *   cryptographically undefined.
+ * - `ttlSeconds` not a whole number above 0 (`NaN`, a fraction, a string, zero or less) → throws
+ *   `STORAGE_SIGNED_URL_TTL_INVALID`: `NaN` would put `X-Amz-Expires=NaN` in the URL, and a
+ *   non-positive TTL would produce a URL that is immediately expired or cryptographically undefined.
  *
  * The SigV4 presign hard ceiling is **604800 s (7 days)**. Callers should
  * clamp `maxTtl` to that value before passing it here.
@@ -26,7 +26,7 @@ import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constant
  * @param defaultTtl - The module-configured default TTL.
  * @param maxTtl - The maximum allowed TTL; values above this are silently clamped.
  * @returns The effective TTL in seconds.
- * @throws StorageException `STORAGE_SIGNED_URL_TTL_INVALID` when `ttlSeconds <= 0`.
+ * @throws StorageException `STORAGE_SIGNED_URL_TTL_INVALID` when the TTL is not a whole number above 0.
  */
 export function clampTtl(
   ttlSeconds: number | undefined,
@@ -34,9 +34,9 @@ export function clampTtl(
   maxTtl: number,
 ): number {
   const ttl = ttlSeconds ?? defaultTtl
-  if (ttl <= 0) {
+  if (typeof ttl !== 'number' || !Number.isInteger(ttl) || ttl <= 0) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SIGNED_URL_TTL_INVALID, undefined, {
-      reason: 'TTL must be > 0',
+      reason: Number.isFinite(ttl) && ttl <= 0 ? 'TTL must be > 0' : 'TTL must be a whole number of seconds greater than 0',
       provided: ttl,
     })
   }

@@ -71,4 +71,41 @@ describe('clampTtl', () => {
     // smallest valid positive TTL must not be rejected
     expect(clampTtl(1, DEFAULT_TTL, MAX_TTL)).toBe(1)
   })
+
+  it.each([Number.NaN, Infinity, -Infinity, 1.5, '3'])(
+    'throws STORAGE_SIGNED_URL_TTL_INVALID for %p, so the URL never carries it as X-Amz-Expires',
+    (value) => {
+      // `NaN <= 0` is false, so a check on the sign alone let NaN through to `X-Amz-Expires=NaN`.
+      const call = (): number => clampTtl(value as number, DEFAULT_TTL, MAX_TTL)
+
+      expect(call).toThrow(StorageException)
+      let thrown: unknown
+      try {
+        call()
+      } catch (error) {
+        thrown = error
+      }
+      expect(thrown).toMatchObject({ code: STORAGE_ERROR_CODES.STORAGE_SIGNED_URL_TTL_INVALID })
+    },
+  )
+
+  it('checks the default TTL as well, so a NaN default is refused at the call', () => {
+    expect(() => clampTtl(undefined, Number.NaN, MAX_TTL)).toThrow(StorageException)
+  })
+
+  it('says why: a non-whole TTL is not reported as non-positive, and a non-positive one keeps its reason', () => {
+    const reasonOf = (value: number): string => {
+      try {
+        clampTtl(value, DEFAULT_TTL, MAX_TTL)
+      } catch (error) {
+        return ((error as StorageException).getResponse() as { error: { details: { reason: string } } }).error.details.reason
+      }
+      return ''
+    }
+
+    expect(reasonOf(Number.NaN)).toBe('TTL must be a whole number of seconds greater than 0')
+    expect(reasonOf(1.5)).toBe('TTL must be a whole number of seconds greater than 0')
+    expect(reasonOf(-1.5)).toBe('TTL must be > 0')
+    expect(reasonOf(0)).toBe('TTL must be > 0')
+  })
 })

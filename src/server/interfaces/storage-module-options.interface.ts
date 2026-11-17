@@ -49,20 +49,20 @@ export interface BymaxStorageModuleOptions {
   defaultContentDisposition?: 'inline' | 'attachment'
 
   signedUrls?: {
-    /** Default GET TTL (seconds). Default: `300`. */
+    /** Default GET TTL (seconds): a whole number of at least 1. Default: `300`. */
     defaultGetTtlSeconds?: number
-    /** Default PUT TTL (seconds). Default: `300`. */
+    /** Default PUT TTL (seconds): a whole number of at least 1. Default: `300`. */
     defaultPutTtlSeconds?: number
-    /** Hard cap — higher TTLs are silently clamped. Default: `604800` (7 days). */
+    /** Hard cap, a whole number of at least 1 — higher TTLs are silently clamped. Default: `604800` (7 days). */
     maxTtlSeconds?: number
   }
 
   multipart?: {
-    /** Bytes threshold to switch to multipart. Default: `5242880` (5 MB). */
+    /** Bytes threshold to switch to multipart, a whole number of at least 1. Default: `5242880` (5 MB). */
     thresholdBytes?: number
-    /** Size per part (S3 minimum: 5 MB). Default: 5 MB. */
+    /** Size per part, a whole number from 5 MB (S3 minimum) to 5 GB (S3 maximum). Default: 5 MB. */
     partSizeBytes?: number
-    /** Concurrent parts. Default: `4`. */
+    /** Concurrent parts, a whole number from 1 to 1000. Default: `4`. */
     queueSize?: number
   }
 
@@ -71,7 +71,7 @@ export interface BymaxStorageModuleOptions {
     /** MIME whitelist — supports wildcards like `'image/*'`. */
     mimeWhitelist?: readonly string[]
     /**
-     * Max upload size in bytes. A buffer is checked by its length and a stream is counted as it
+     * Max upload size in bytes, a whole number of at least 1. A buffer is checked by its length and a stream is counted as it
      * is read, so the limit holds whether or not the caller declares `size`.
      */
     maxSizeBytes?: number

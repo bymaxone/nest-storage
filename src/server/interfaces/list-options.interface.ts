@@ -9,7 +9,7 @@ export interface ListOptions {
   /** Filter prefix (applied AFTER the global key prefix). */
   prefix?: string
   bucket?: string
-  /** Page size. Default: `1000` (S3 hard max). */
+  /** Page size, a whole number of at least 1; above `1000` (the S3 hard max) it is lowered to it. Default: `1000`. */
   maxKeys?: number
   /** Token from a previous page. */
   continuationToken?: string

@@ -130,6 +130,22 @@ describe('BymaxStorageModule', () => {
     expect(() => BymaxStorageModule.forRoot({ ...base, endpoint: '' })).toThrow(StorageException)
   })
 
+  it.each([
+    ['a size limit of NaN, which would switch the limit off', { validation: { maxSizeBytes: Number.NaN } }],
+    ['a multipart queue of Infinity, which would keep the process busy on the first upload', { multipart: { queueSize: Infinity } }],
+  ])('refuses to boot with %s', (_what, extra) => {
+    // Measured before the fix: forRoot accepted both; a 10-byte upload went through under NaN, and the first
+    // multipart upload under Infinity ran past a 20 s kill.
+    let thrown: unknown
+    try {
+      BymaxStorageModule.forRoot({ ...base, ...extra })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toMatchObject({ code: 'STORAGE_INVALID_CONFIG' })
+  })
+
   describe('signedUrls.maxTtlSeconds above the SigV4 limit', () => {
     let warn: jest.SpyInstance<void, [message: unknown, ...optionalParams: unknown[]]>
 

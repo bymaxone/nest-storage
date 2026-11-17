@@ -308,3 +308,53 @@ describe('validateOptions', () => {
     }).not.toThrow()
   })
 })
+
+describe('validateOptions: the numeric options in a group', () => {
+  // Each option is tried with the values a comparison alone mishandles: `NaN` is neither below nor above
+  // any bound, so `NaN < 1` and `NaN > 1` are both false, and a string compares as the number it spells.
+  // `NaN` on `validation.maxSizeBytes` switched the size limit off (a 10-byte upload and a stream declared
+  // 5e9 bytes were both sent); `Infinity` on `multipart.queueSize` kept the process busy on the first
+  // multipart upload (a 4 s timer never fired and the run was killed at 20 s).
+  const BAD = [Number.NaN, Infinity, -1, 0, 1.5, '3', null]
+  const options: [string, (value: unknown) => Record<string, unknown>][] = [
+    ['validation.maxSizeBytes', (value) => ({ validation: { maxSizeBytes: value } })],
+    ['signedUrls.defaultGetTtlSeconds', (value) => ({ signedUrls: { defaultGetTtlSeconds: value } })],
+    ['signedUrls.defaultPutTtlSeconds', (value) => ({ signedUrls: { defaultPutTtlSeconds: value } })],
+    ['signedUrls.maxTtlSeconds', (value) => ({ signedUrls: { maxTtlSeconds: value } })],
+    ['multipart.thresholdBytes', (value) => ({ multipart: { thresholdBytes: value } })],
+    ['multipart.partSizeBytes', (value) => ({ multipart: { partSizeBytes: value } })],
+    ['multipart.queueSize', (value) => ({ multipart: { queueSize: value } })],
+  ]
+
+  describe.each(options)('%s', (name, build) => {
+    it.each(BAD)('refuses %p, naming the option', (value) => {
+      expect(reasonOf(() => { validateOptions({ ...valid, ...build(value) }) })).toContain(name)
+    })
+
+    it('accepts a whole number inside its range', () => {
+      const value = name === 'multipart.queueSize' ? 4 : 5 * 1024 * 1024
+      expect(() => { validateOptions({ ...valid, ...build(value) }) }).not.toThrow()
+    })
+  })
+
+  it('states the part size range in megabytes and gigabytes', () => {
+    expect(reasonOf(() => { validateOptions({ ...valid, multipart: { partSizeBytes: 1024 } }) })).toBe(
+      'multipart.partSizeBytes must be an integer >= 5 MB (S3 hard limit) and <= 5 GB',
+    )
+  })
+
+  it.each([
+    ['multipart.queueSize', { multipart: { queueSize: 1000 } }, { multipart: { queueSize: 1001 } }],
+    ['multipart.partSizeBytes', { multipart: { partSizeBytes: 5 * 1024 ** 3 } }, { multipart: { partSizeBytes: 5 * 1024 ** 3 + 1 } }],
+    ['multipart.partSizeBytes', { multipart: { partSizeBytes: 5 * 1024 ** 2 } }, { multipart: { partSizeBytes: 5 * 1024 ** 2 - 1 } }],
+    ['validation.maxSizeBytes', { validation: { maxSizeBytes: Number.MAX_SAFE_INTEGER } }, { validation: { maxSizeBytes: Number.MAX_SAFE_INTEGER + 1 } }],
+    ['signedUrls.maxTtlSeconds', { signedUrls: { maxTtlSeconds: 1 } }, { signedUrls: { maxTtlSeconds: 0 } }],
+  ])('%s: accepts its bound and refuses the next value', (_name, atBound, past) => {
+    expect(() => { validateOptions({ ...valid, ...atBound }) }).not.toThrow()
+    expect(() => { validateOptions({ ...valid, ...past }) }).toThrow()
+  })
+
+  it('leaves an unset group alone', () => {
+    expect(() => { validateOptions({ ...valid, multipart: {}, signedUrls: {}, validation: {} }) }).not.toThrow()
+  })
+})

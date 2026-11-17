@@ -92,6 +92,19 @@ describe('StorageService.list', () => {
     expect(firstInput(send).ContinuationToken).toBe('tok-1')
   })
 
+  it.each([Number.NaN, Infinity, -1, 0, 1.5, '3'])(
+    'refuses a maxKeys of %p with STORAGE_VALIDATION_FAILED and sends no request',
+    async (maxKeys) => {
+      // `Math.min(NaN, 1000)` is NaN, which the request would carry as `MaxKeys`.
+      const { service, send } = makeService()
+
+      const err = await service.list({ maxKeys: maxKeys as number }).catch((e: unknown) => e)
+
+      expect(err).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+      expect(send).not.toHaveBeenCalled()
+    },
+  )
+
   it('defaults maxKeys to the S3 cap when unset', async () => {
     // Absent maxKeys falls back to 1000.
     const { service, send } = makeService()

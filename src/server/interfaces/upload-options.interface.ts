@@ -10,7 +10,7 @@ export interface UploadOptions {
   body: Buffer | NodeJS.ReadableStream | Uint8Array
   contentType: string
   bucket?: string
-  /** Required for validation and optimal multipart sizing. */
+  /** Required for validation and optimal multipart sizing: a whole number of bytes, `0` or more. */
   size?: number
   cacheControl?: string
   /** `'inline'`, `'attachment'`, or a full `Content-Disposition` value. */

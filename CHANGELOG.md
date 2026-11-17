@@ -13,6 +13,28 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A size limit or a multipart setting of `NaN` or `Infinity` no longer boots.** `validation.maxSizeBytes`,
+  `signedUrls.defaultGetTtlSeconds`, `defaultPutTtlSeconds`, `multipart.thresholdBytes` and `multipart.queueSize`
+  had no check, and `signedUrls.maxTtlSeconds` and `multipart.partSizeBytes` checked only one side of their range,
+  which `NaN` passes. `NaN` for `maxSizeBytes` switched the size limit off: a buffer and a stream declared at
+  5 GB were both sent. `NaN` for a TTL put `X-Amz-Expires=NaN` in every signed URL. `Infinity` for `queueSize`
+  kept the process busy from the first multipart upload on. A threshold of `NaN` or `Infinity` never chose a
+  multipart upload and a part size of `Infinity` buffered the whole stream as one part. Each option is now a
+  whole number in a stated range, and `forRoot` fails with `STORAGE_INVALID_CONFIG` naming the option. Per
+  call, a `ttlSeconds` that is not a whole number above 0 fails with `STORAGE_SIGNED_URL_TTL_INVALID`, and a
+  declared upload `size` or a list `maxKeys` that is not a whole number fails with `STORAGE_VALIDATION_FAILED`,
+  before any request.
+
+  **Apply to a derived backend:** a configuration that booted before and is now refused at `forRoot`:
+  `validation.maxSizeBytes`, a TTL or `multipart.thresholdBytes` that is `0`, negative, `NaN`, `Infinity`,
+  fractional or a string; `signedUrls.maxTtlSeconds: Infinity` (it was lowered to 7 days with a warning; a finite
+  value above that still is); `multipart.partSizeBytes` that is a string, `NaN`, `Infinity` or above 5 GiB;
+  `multipart.queueSize` that is not a whole number from 1 to 1000. Per call, `ttlSeconds: Infinity` (it was
+  clamped to the maximum), a fractional or string TTL, a fractional or negative `size`, and a `maxKeys` of
+  `Infinity`, `0`, a fraction or a string are now refused with the codes above.
+
 ## [1.1.16] - 2026-11-17
 
 ### Changed

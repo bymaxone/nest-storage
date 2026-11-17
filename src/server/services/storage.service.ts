@@ -60,6 +60,7 @@ import {
   isBufferLike,
   type UploadBody,
 } from '../utils/stream-utils'
+import { assertIntegerInput } from '../utils/numeric-input'
 import { bufferStreamForScan, boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { logValue } from '../utils/log-value'
@@ -696,6 +697,7 @@ export class StorageService {
   async list(options: ListOptions): Promise<ListResult> {
     this.assertConfigured()
     const bucket = this.resolveBucket(options.bucket)
+    assertIntegerInput(options.maxKeys, 'maxKeys', 1)
     const maxKeys = Math.min(options.maxKeys ?? MAX_LIST_KEYS, MAX_LIST_KEYS)
     const prefix = options.prefix
       ? this.keyResolver.normalize(options.prefix)
