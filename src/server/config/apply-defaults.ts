@@ -34,6 +34,32 @@ function resolveSignedUrls(
 }
 
 /**
+ * Attaches the credentials to the resolved options as a non-enumerable accessor.
+ *
+ * @param resolved - The resolved options being built.
+ * @param credentials - The caller's credentials.
+ */
+function attachCredentials(
+  resolved: Omit<ResolvedBymaxStorageOptions, 'credentials'>,
+  credentials: ResolvedBymaxStorageOptions['credentials'],
+): void {
+  // The long-lived AWS keys are attached as a non-enumerable accessor rather
+  // than as a plain field. This object is injected into every service, so an
+  // enumerable `credentials` is emitted by whatever serializes one of them
+  // incidentally: a structured logger rendering its arguments, an error
+  // reporter capturing the scope of a throw, an object spread. Non-enumerable
+  // removes it from `JSON.stringify`, spread and `util.inspect`; making it an
+  // accessor also keeps it out of `inspect({ showHidden: true })`, which is
+  // what a diagnostic dump uses and which still prints a hidden data property.
+  // Reads are unchanged — `options.credentials.accessKeyId` resolves as before.
+  Object.defineProperty(resolved, 'credentials', {
+    get: (): ResolvedBymaxStorageOptions['credentials'] => credentials,
+    enumerable: false,
+    configurable: false,
+  })
+}
+
+/**
  * Produces the resolved options consumed by every service. Optional fields
  * without a default (`cdnBaseUrl`, `validation`, `scanner`,
  * `serverSideEncryption`, `kmsKeyId`) are included only when provided so the
@@ -80,20 +106,7 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     hasCredentials,
   }
 
-  // The long-lived AWS keys are attached as a non-enumerable accessor rather
-  // than as a plain field. This object is injected into every service, so an
-  // enumerable `credentials` is emitted by whatever serializes one of them
-  // incidentally: a structured logger rendering its arguments, an error
-  // reporter capturing the scope of a throw, an object spread. Non-enumerable
-  // removes it from `JSON.stringify`, spread and `util.inspect`; making it an
-  // accessor also keeps it out of `inspect({ showHidden: true })`, which is
-  // what a diagnostic dump uses and which still prints a hidden data property.
-  // Reads are unchanged — `options.credentials.accessKeyId` resolves as before.
-  Object.defineProperty(resolved, 'credentials', {
-    get: (): ResolvedBymaxStorageOptions['credentials'] => credentials,
-    enumerable: false,
-    configurable: false,
-  })
+  attachCredentials(resolved, credentials)
 
   return resolved as ResolvedBymaxStorageOptions
 }

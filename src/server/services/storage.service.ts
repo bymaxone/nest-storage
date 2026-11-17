@@ -58,10 +58,9 @@ import {
   destroyStream,
   getBodySize,
   isBufferLike,
-  readStreamUpTo,
   type UploadBody,
 } from '../utils/stream-utils'
-import { boundStreamSize, withBytesBody } from '../utils/upload-body'
+import { bufferStreamForScan, boundStreamSize, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { logValue } from '../utils/log-value'
 import {
@@ -169,7 +168,8 @@ export class StorageService {
     }
     const finalKey = this.keyResolver.normalize(options.key)
     const bucket = this.resolveBucket(options.bucket)
-    throwIfAborted(options.abortSignal, { key: finalKey, bucket, op: 'upload' })
+    const context = { key: finalKey, bucket, op: 'upload' }
+    throwIfAborted(options.abortSignal, context)
 
     if (options.idempotencyKey) {
       const cacheKey = this.idempotencyCache.computeKey(options.idempotencyKey, finalKey)
@@ -181,11 +181,38 @@ export class StorageService {
       }
     }
 
-    // Reading the body (a validator peeking at it, the pre-upload scan buffering it) happens before any
-    // request, so the signal is watched here: a silent stream must not hold the call.
-    const context = { key: finalKey, bucket, op: 'upload' }
-    const signal = options.abortSignal
+    const validatedOptions = await this.validateAndScan(options, finalKey, bucket, context)
+    throwIfAborted(options.abortSignal, context)
+    const strategy = pickUploadStrategy(
+      validatedOptions.body,
+      validatedOptions.size,
+      this.options.multipart.thresholdBytes,
+    )
+    const result =
+      strategy === 'multipart'
+        ? await this.uploadMultipart(validatedOptions, finalKey, bucket)
+        : await this.uploadSingleShot(validatedOptions, finalKey, bucket)
 
+    // Post-upload scan: an abort ends the wait, not the scan; an infected stored object is still deleted.
+    const stored = { ...context, stored: true }
+    await abortable(this.runPostUploadScan(finalKey, bucket, options), options.abortSignal, stored)
+
+    this.rememberUpload(options, finalKey, result)
+    return result
+  }
+
+  /**
+   * Validates the upload and runs the pre-upload scan, returning the options with the body to send.
+   * Reading the body (a validator peeking at it, the scan buffering it) happens before any request, so
+   * the signal is watched here: a silent stream must not hold the call.
+   */
+  private async validateAndScan(
+    options: UploadOptions,
+    finalKey: string,
+    bucket: string,
+    context: { key: string; bucket: string; op: string },
+  ): Promise<UploadOptions> {
+    const signal = options.abortSignal
     // Validation pipeline: MIME → size → custom validators.
     const input = validationInput(options, finalKey)
     const validated = await abortable(this.validation.validate(input), signal, context)
@@ -200,25 +227,7 @@ export class StorageService {
 
     // Pre-upload scan: runs before the S3 PutObject.
     await abortable(this.runPreUploadScan(body, finalKey, bucket, options), signal, context)
-
-    throwIfAborted(signal, context)
-    const strategy = pickUploadStrategy(
-      validatedOptions.body,
-      validatedOptions.size,
-      this.options.multipart.thresholdBytes,
-    )
-    const result =
-      strategy === 'multipart'
-        ? await this.uploadMultipart(validatedOptions, finalKey, bucket)
-        : await this.uploadSingleShot(validatedOptions, finalKey, bucket)
-
-    // Post-upload scan: runs after the object is written; infected → delete and re-throw. An abort ends
-    // the wait, not the scan: the object is stored, and an infected one is still deleted.
-    const stored = { ...context, stored: true }
-    await abortable(this.runPostUploadScan(finalKey, bucket, options), signal, stored)
-
-    this.rememberUpload(options, finalKey, result)
-    return result
+    return validatedOptions
   }
 
   /**
@@ -236,25 +245,7 @@ export class StorageService {
     ) {
       return body
     }
-    const maxSizeBytes = this.options.validation?.maxSizeBytes
-    if (maxSizeBytes === undefined) {
-      destroyStream(body)
-      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
-        key: finalKey,
-        reason:
-          'Pre-upload scanning of a stream needs validation.maxSizeBytes to bound the buffer; set it or use scanner mode post-upload',
-      })
-    }
-    const buffered = await readStreamUpTo(body, maxSizeBytes)
-    if (buffered === undefined) {
-      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
-        key: finalKey,
-        maxSizeBytes,
-        reason:
-          'The stream is longer than validation.maxSizeBytes, so it cannot be scanned before upload',
-      })
-    }
-    return buffered
+    return bufferStreamForScan(body, finalKey, this.options.validation?.maxSizeBytes)
   }
 
   /** Runs a pre-upload scan when configured; throws on infected. */

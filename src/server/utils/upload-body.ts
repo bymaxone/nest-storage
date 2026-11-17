@@ -6,7 +6,15 @@
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
 import { withSizeLimit } from './size-limit'
-import { isBufferLike, toUploadBody, type UploadBody } from './stream-utils'
+import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { StorageException } from '../errors/storage-exception'
+import {
+  destroyStream,
+  isBufferLike,
+  readStreamUpTo,
+  toUploadBody,
+  type UploadBody,
+} from './stream-utils'
 import { pickUploadStrategy } from './upload-strategy'
 
 /**
@@ -46,4 +54,39 @@ export function boundStreamSize(
     return body
   }
   return withSizeLimit(body, limit, declaredSize === undefined ? 'max' : 'declared')
+}
+
+/**
+ * Reads a stream body into one `Buffer` so a pre-upload scan and the upload see the same bytes. A
+ * stream with no bound is refused, and so is one longer than the bound; both release the stream.
+ *
+ * @param body - The stream body.
+ * @param finalKey - The resolved key, for the error details.
+ * @param maxSizeBytes - `validation.maxSizeBytes`, the bound on the buffer.
+ * @returns The buffered body.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when there is no bound or the stream exceeds it.
+ */
+export async function bufferStreamForScan(
+  body: NodeJS.ReadableStream,
+  finalKey: string,
+  maxSizeBytes: number | undefined,
+): Promise<Buffer> {
+  if (maxSizeBytes === undefined) {
+    destroyStream(body)
+    throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
+      key: finalKey,
+      reason:
+        'Pre-upload scanning of a stream needs validation.maxSizeBytes to bound the buffer; set it or use scanner mode post-upload',
+    })
+  }
+  const buffered = await readStreamUpTo(body, maxSizeBytes)
+  if (buffered === undefined) {
+    throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
+      key: finalKey,
+      maxSizeBytes,
+      reason:
+        'The stream is longer than validation.maxSizeBytes, so it cannot be scanned before upload',
+    })
+  }
+  return buffered
 }
