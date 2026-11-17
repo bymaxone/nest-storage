@@ -174,6 +174,7 @@ describe('StorageService.deleteMany', () => {
     // What the driver said is in the log, once for the request and not once per key.
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('10.1.2.3'))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('op="deleteMany"'))
     warn.mockRestore()
   })
 

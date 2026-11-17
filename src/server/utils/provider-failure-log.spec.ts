@@ -3,7 +3,7 @@
  * secrets masked and the message bounded, and never the error object.
  * @layer server/utils
  */
-import { Logger } from '@nestjs/common'
+import { ConsoleLogger, Logger } from '@nestjs/common'
 import { describeProviderFailure, logProviderFailure } from './provider-failure-log'
 
 describe('describeProviderFailure', () => {
@@ -91,5 +91,16 @@ describe('logProviderFailure', () => {
 
     expect(warn).toHaveBeenNthCalledWith(1, expect.stringContaining('op=- key=- '))
     expect(warn).toHaveBeenNthCalledWith(2, expect.stringContaining('op=- key=- '))
+  })
+
+  it('writes under the name of the storage provider, so a host can filter on it', () => {
+    const warn = jest.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => undefined)
+
+    logProviderFailure({ message: 'm' })
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Provider call failed'),
+      'StorageProvider',
+    )
   })
 })
