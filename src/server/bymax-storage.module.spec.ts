@@ -211,7 +211,7 @@ describe('BymaxStorageModule: a group key that is set to undefined', () => {
       imports: [BymaxStorageModule.forRoot({
           ...base,
           // An explicit undefined is outside the exactOptionalPropertyTypes type, but a JavaScript caller can pass it.
-          signedUrls: { maxTtlSeconds: undefined } as unknown as BymaxStorageModuleOptions['signedUrls'],
+          signedUrls: { maxTtlSeconds: undefined } as unknown as NonNullable<BymaxStorageModuleOptions['signedUrls']>,
         })],
     }).compile()
     await moduleRef.init()
