@@ -32,8 +32,7 @@ note on each entry is the compatibility contract — read it, not the number.
   `cleanupError` finds that text in the library's warn log instead; the exception no longer carries it,
   so there is nothing to forward to a client by mistake. A host that matched on that text matches
   `details.reason` (`unreachable`, `timeout`, `provider-error`, `credentials-refused` or `rejected`) or
-  `awsCode`. For a request that fails as a whole, `deleteMany`'s `failed[].error` is one of those
-  reasons and no longer the thrown message.
+  `awsCode`.
 
 ## [1.1.12] - 2026-11-14
 
