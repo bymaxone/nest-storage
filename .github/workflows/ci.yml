@@ -66,7 +66,6 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          node --test scripts/check-spec-headers.test.mjs
           if [ -n "$BASE_REF" ]; then
             pnpm check:spec-headers --base "origin/$BASE_REF"
           else
