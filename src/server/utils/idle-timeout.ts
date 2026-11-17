@@ -24,7 +24,13 @@ export class SourceIdleError extends Error {
  */
 function isError(value: unknown): value is Error {
   const candidate = value as { name?: unknown; message?: unknown } | null | undefined
-  return typeof candidate?.name === 'string' && typeof candidate.message === 'string'
+  try {
+    return typeof candidate?.name === 'string' && typeof candidate.message === 'string'
+  } catch {
+    // A value whose `name` or `message` throws when read is not an error, and the read it came from must
+    // still settle: a throw here would leave the wrapped promise pending with its timer already cleared.
+    return false
+  }
 }
 
 /** Waits for `next`, rejecting with {@link SourceIdleError} if it does not settle in `idleMs`. */

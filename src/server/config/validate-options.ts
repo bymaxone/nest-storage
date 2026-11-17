@@ -17,6 +17,9 @@ const MAX_PART_SIZE_BYTES = 5 * 1024 * 1024 * 1024
 /** The most concurrent part uploads: the multipart loop pins the process for seconds well before 100 000, and 4 096 already exceeds the connections a client opens. */
 const MAX_QUEUE_SIZE = 1000
 
+/** What a region is called by AWS and by every S3-compatible provider this library documents (`auto`, `nyc3`, `eu-central-003`). */
+const REGION_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/
+
 function invalid(reason: string): StorageException {
   return new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG, HttpStatus.INTERNAL_SERVER_ERROR, {
     reason,
@@ -149,6 +152,34 @@ function assertScanner(scanner: unknown): void {
   }
 }
 
+/**
+ * Refuses an option of the wrong kind in the `validation` group, and a `null` where an absent value would
+ * mean "no limit" or "protection off": a `null` that a config lookup returns for a missing key must not
+ * switch a protection off, so it is refused, and the option is omitted to mean "none".
+ *
+ * @param validation - The `validation` option as the caller passed it.
+ * @throws StorageException with code `STORAGE_INVALID_CONFIG` naming the option.
+ */
+function assertValidationKinds(validation: unknown): void {
+  if (!isObject(validation)) return
+  const { maxSizeBytes, mimeWhitelist, customValidators } = validation
+  if (maxSizeBytes === null) {
+    throw invalid('validation.maxSizeBytes must not be null; omit it for no size limit')
+  }
+  if (mimeWhitelist === null) {
+    throw invalid('validation.mimeWhitelist must not be null; omit it to allow every type')
+  }
+  if (mimeWhitelist !== undefined && (!Array.isArray(mimeWhitelist) || !mimeWhitelist.every((entry) => typeof entry === 'string'))) {
+    throw invalid('validation.mimeWhitelist must be an array of strings')
+  }
+  if (customValidators === null) {
+    throw invalid('validation.customValidators must not be null; omit it to run no custom validator')
+  }
+  if (customValidators !== undefined && !Array.isArray(customValidators)) {
+    throw invalid('validation.customValidators must be an array')
+  }
+}
+
 /** Validates the numeric options that sit in a group: the size limit, the signed-URL TTLs and the multipart sizes. */
 function assertNumericSections(options: Record<string, unknown>): void {
   const MAX = Number.MAX_SAFE_INTEGER
@@ -174,6 +205,7 @@ function assertNumericSections(options: Record<string, unknown>): void {
  */
 function assertLimitsAndEncryption(options: Record<string, unknown>): void {
   assertNumericSections(options)
+  assertValidationKinds(options.validation)
   assertScanner(options.scanner)
   const maxAttempts = options.maxAttempts
   if (
@@ -223,8 +255,18 @@ export function validateOptions(options: unknown): void {
   if (!isNonEmptyString(options.region)) {
     throw invalid('options.region must be a non-empty string')
   }
+  // The region becomes part of the signing scope and, for AWS, of the host the request goes to; the SDK
+  // repeats it in its own error messages, which are logged.
+  if (!REGION_SHAPE.test(options.region)) {
+    throw invalid(
+      "options.region must be 1 to 63 letters, digits, '.', '_' or '-', starting with a letter or digit",
+    )
+  }
   if (!isNonEmptyString(options.bucket)) {
     throw invalid('options.bucket must be a non-empty string')
+  }
+  if (options.keyPrefix !== undefined && options.keyPrefix !== null && typeof options.keyPrefix !== 'string') {
+    throw invalid('options.keyPrefix must be a string')
   }
   if (!isObject(options.credentials)) {
     throw invalid('options.credentials is required')

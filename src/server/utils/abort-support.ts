@@ -7,6 +7,7 @@
 import { CreateMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { assertAbortSignal } from './call-input'
 
 /**
  * How long the cleanup of an aborted or failed call may take. It runs with a signal of its own, never
@@ -44,16 +45,18 @@ export function requestAborted(
 }
 
 /**
- * Ends the call before any request when its signal has already aborted.
+ * Ends the call before any request when its signal has already aborted, and refuses a signal that is
+ * not one: the first thing every call that takes a signal does with it.
  *
  * @param signal - The caller's signal, if any.
  * @param context - Details to carry on the error.
- * @throws StorageException `STORAGE_REQUEST_ABORTED`.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` naming `abortSignal`, `STORAGE_REQUEST_ABORTED`.
  */
 export function throwIfAborted(
   signal: AbortSignal | undefined,
   context: Record<string, unknown>,
 ): void {
+  assertAbortSignal(signal)
   if (signal?.aborted) {
     throw requestAborted(signal, context)
   }

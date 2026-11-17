@@ -376,7 +376,8 @@ describe('validateOptions: nullish keys and the retry ceiling', () => {
     expect(() => {
       validateOptions({
         ...valid,
-        validation: { maxSizeBytes: value },
+        // `maxSizeBytes` has no default (omitting it means no limit), so `null` is refused for it: see validate-options.kinds.spec.ts.
+        validation: { maxSizeBytes: undefined },
         signedUrls: { defaultGetTtlSeconds: value, defaultPutTtlSeconds: value, maxTtlSeconds: value },
         multipart: { thresholdBytes: value, partSizeBytes: value, queueSize: value },
         scanner: { impl: scannerImpl, timeoutMs: value },

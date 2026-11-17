@@ -38,6 +38,7 @@ import { KeyResolverService } from './key-resolver.service'
 import { ValidationService } from './validation.service'
 import { FileScannerService } from './file-scanner.service'
 import { StorageException } from '../errors/storage-exception'
+import { resolveBucket as resolveBucketInput } from '../utils/call-input'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
 import { mapSizeLimitError } from '../errors/size-limit-exception'
@@ -533,11 +534,7 @@ export class StorageService {
 
   /** Resolves the target bucket from a per-call override or the module default. */
   private resolveBucket(perCall?: string): string {
-    const bucket = perCall ?? this.options.bucket
-    if (!bucket) {
-      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_BUCKET_UNDEFINED)
-    }
-    return bucket
+    return resolveBucketInput(perCall, this.options.bucket)
   }
 
   /** Maps an S3 metadata response onto the public `ObjectMetadata` shape. */
