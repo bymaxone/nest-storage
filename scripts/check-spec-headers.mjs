@@ -11,8 +11,8 @@
  * specs name the layer they test in their own terms, so the gate checks that one is named and not which. Nothing
  * else enforces the header.
  *
- * A spec that already lacks a header is listed in the baseline, so the check can be red for what a change
- * introduces without failing on what the repository inherits. The list is kept honest from both sides:
+ * The check is red for what a change introduces; a spec without a header is allowed only while it is
+ * on the baseline. The list is kept honest from both sides:
  *
  * - a spec without a valid header that is not on the baseline fails (a new offender);
  * - a baselined spec that now has a valid header, or is no longer tracked, fails until its entry is removed,
@@ -48,6 +48,9 @@ const MIN_PURPOSE_WORDS = 3
  */
 const LAYER_MARKER = /^\s*@layer[ \t]+([A-Za-z0-9-]+)|\bLayer:[ \t]+([A-Za-z0-9-]+)/i
 
+/** Every layer marker of a line: the purpose of a header is what is left once all of them are taken out. */
+const EVERY_LAYER_MARKER = new RegExp(LAYER_MARKER.source, 'gi')
+
 /** A shebang line ahead of the header, as an executable script carries. */
 const SHEBANG = /^#![^\n]*\n/
 
@@ -71,7 +74,7 @@ export function headerProblem(source) {
   const at = lines.findIndex((line) => LAYER_MARKER.test(line))
   if (at === -1) return 'header has no layer marker (`@layer <layer>` or `Layer: <layer>.`)'
   const purpose = lines
-    .map((line, i) => (i === at ? line.replace(LAYER_MARKER, '') : line))
+    .map((line) => line.replace(EVERY_LAYER_MARKER, ''))
     .join(' ')
     .replace(/@fileoverview/gi, '')
     .trim()
@@ -121,7 +124,13 @@ export function problemsOf(offenders, baseline, base) {
  */
 function option(name, fallback) {
   const index = process.argv.indexOf(name)
-  return index === -1 ? fallback : (process.argv[index + 1] ?? fallback)
+  if (index === -1) return fallback
+  const value = process.argv[index + 1]
+  if (value === undefined || value.startsWith('--')) {
+    console.error(`${name} needs a value.`)
+    process.exit(2)
+  }
+  return value
 }
 
 /**

@@ -68,7 +68,7 @@ describe('check-spec-headers', () => {
     // byte-order mark, and layers the repository names in its own words. Expected: all pass. Why:
     // the specs name the layer they test in their own terms, so the gate asks that one is named and not
     // which, and failing a spec over a word would be the wrong signal.
-    it('accepts a purpose with any layer word, in either form, behind a byte-order mark', () => {
+    it('accepts several layer words in the tag form and one in the sentence form, behind a byte-order mark', () => {
       expect(problemOf(GOOD)).toBeNull()
       expect(
         problemOf('﻿/**\n * What the widget spec covers in detail. Layer: application.\n */\n')
@@ -85,6 +85,37 @@ describe('check-spec-headers', () => {
           problemOf(`/**\n * Specs of the widget and what it accepts.\n * @layer ${layer}\n */\n`)
         ).toBeNull()
       }
+    })
+
+    // Scenario: a header with nothing but layer markers, repeated, in either form, mixed, with a file overview tag, or
+    // with whitespace or punctuation between them. Expected: each fails as a header that names a layer and not what the
+    // file tests. Why: a marker says where a spec sits, never what it covers, so the purpose is what is left after every
+    // marker is taken out, and a header with none left says nothing however many markers it repeats.
+    it('refuses a header made only of layer markers, however they are repeated or mixed', () => {
+      const bodies = [
+        ' * Layer: scripts. Layer: scripts. Layer: scripts.',
+        ' * Layer: a. Layer: b. Layer: c. Layer: d.',
+        ' * @layer a\n * @layer b\n * @layer c',
+        ' * Layer: a.\n * @layer b\n * Layer: c.',
+        ' * @fileoverview @fileoverview\n * @fileoverview\n * @layer x',
+        ' * @fileoverview\n * @layer x\n *\n * ---\n * ...',
+        ' * @layer x\n * Layer: x. Layer: x. Layer: x. Layer: x. Layer: x.'
+      ]
+      for (const body of bodies) {
+        expect(problemOf(`/**\n${body}\n */\n`)).toContain('states a layer but not what the file tests')
+      }
+    })
+
+    // Scenario: a real purpose beside several markers, and a purpose that uses the word layer without a marker. Expected:
+    // both pass. Why: markers are taken out wherever they stand and what remains is judged, so extra markers do not hurt a
+    // header that says what the file tests.
+    it('accepts a header with a purpose beside several markers, and a purpose that names a layer in prose', () => {
+      expect(
+        problemOf('/**\n * Specs of the widget and what it accepts. Layer: a.\n * @layer b\n * Layer: c.\n */\n')
+      ).toBeNull()
+      expect(
+        problemOf('/**\n * Specs of the transport layer and its codecs.\n * @layer transport\n */\n')
+      ).toBeNull()
     })
 
     // Scenario: a layer marker with a purpose line that is only punctuation, or only filler. Expected: it
@@ -239,7 +270,7 @@ describe('check-spec-headers', () => {
     // Scenario: with `--base`, an entry the base revision's baseline did not have, and then one it had.
     // Expected: the first fails, naming it, and the second passes. Why: the baseline in a change is the
     // change's own file, and without the comparison it could admit the offender it adds.
-    it('compares with the base revision: an entry the base lacks fails', () => {
+    it('fails an entry the base revision lacks and passes one it has', () => {
       const root = scratch({ 'src/old.spec.ts': HEADERLESS })
       writeFileSync(join(root, 'baseline.json'), '{"files":[]}')
       execFileSync('git', ['add', '-A'], { cwd: root })
@@ -263,6 +294,17 @@ describe('check-spec-headers', () => {
         }
       )
       expect(run(root, '{"files":["src/old.spec.ts"]}', '--base', 'HEAD').status).toBe(0)
+    })
+
+    // Scenario: `--base` is the last argument, so it has no value. Expected: exit 2 naming the
+    // option. Why: a truncated invocation must not read as "no base revision" and skip the widening check.
+    it('refuses an option that has no value', () => {
+      const root = scratch({ 'src/ok.spec.ts': GOOD })
+
+      const result = run(root, '{"files":[]}', '--base')
+
+      expect(result.status).toBe(2)
+      expect(result.output).toContain('--base needs a value.')
     })
 
     // Scenario: a base that is not a revision. Expected: a non-zero exit that says so. Why: a
