@@ -307,4 +307,136 @@ describe('upload size bound', () => {
       storage.upload({ key: 'edge.bin', body: stream, contentType: 'application/octet-stream' }),
     ).resolves.toMatchObject({ multipart: true })
   })
+
+  describe('a single-shot stream whose declared size is wrong', () => {
+    // Measured before the change: a 5000-byte stream declared as 500 reached the provider as exactly 500
+    // bytes, which a provider stores as the whole object, with the rest of the stream never read.
+    const oneShot = (bytes: number): Readable => Readable.from([Buffer.alloc(bytes, 9)])
+
+    it('refuses a body longer than declared with STORAGE_SIZE_EXCEEDED, and the provider never gets a complete request', async () => {
+      const storage = await storageWith({})
+      const stream = Readable.from([Buffer.alloc(300, 9), Buffer.alloc(300, 9)])
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: stream, contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_SIZE_EXCEEDED', status: 413 })
+      expect(detailsOf(error)).toMatchObject({ declaredSize: 500, key: 'k', bucket: 'b' })
+      expect(putBodies).toEqual([])
+      expect(stream.destroyed).toBe(true)
+    })
+
+    it('refuses a body shorter than declared with STORAGE_VALIDATION_FAILED naming size, and stores nothing', async () => {
+      const storage = await storageWith({})
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: oneShot(120), contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+      expect(detailsOf(error)).toMatchObject({ field: 'size', declaredSize: 500, receivedSize: 120 })
+      expect(putBodies).toEqual([])
+    })
+
+    it('uploads a body of exactly the declared size, every byte of it', async () => {
+      const storage = await storageWith({})
+
+      const result = await storage.upload({ key: 'k', body: oneShot(500), contentType: 'text/plain', size: 500 })
+
+      expect(result.multipart).toBe(false)
+      expect(putBodies).toHaveLength(1)
+      expect(putBodies[0]).toEqual(Buffer.alloc(500, 9))
+    })
+  })
+
+  describe('a stream with a wrong declared size, read into memory for a pre-upload scan', () => {
+    // The stream becomes a buffer before the size guard runs, and the request still carried the declared
+    // size as Content-Length: a 5000-byte buffer declared as 500 reached the provider cut to 500 bytes
+    // after the scanner had approved all 5000.
+    const scanning = {
+      validation: { maxSizeBytes: 1_000_000 },
+      scanner: {
+        impl: { scan: (): Promise<{ status: 'clean'; engine: string }> => Promise.resolve({ status: 'clean', engine: 't' }) },
+        mode: 'pre-upload' as const,
+      },
+    }
+
+    it('refuses a body longer than declared with STORAGE_SIZE_EXCEEDED and sends nothing', async () => {
+      const storage = await storageWith(scanning)
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: Readable.from([Buffer.alloc(5000, 1)]), contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_SIZE_EXCEEDED', status: 413 })
+      expect(detailsOf(error)).toMatchObject({ declaredSize: 500, key: 'k', bucket: 'b' })
+      expect(calls).toEqual([])
+    })
+
+    it('refuses a body shorter than a single-shot declared size with STORAGE_VALIDATION_FAILED and sends nothing', async () => {
+      const storage = await storageWith(scanning)
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: Readable.from([Buffer.alloc(120, 1)]), contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+      expect(detailsOf(error)).toMatchObject({ field: 'size', declaredSize: 500, receivedSize: 120 })
+      expect(calls).toEqual([])
+    })
+
+    it('stores a body of exactly the declared size', async () => {
+      const storage = await storageWith(scanning)
+
+      await storage.upload({ key: 'k', body: Readable.from([Buffer.alloc(500, 1)]), contentType: 'text/plain', size: 500 })
+
+      expect(putBodies).toEqual([Buffer.alloc(500, 1)])
+    })
+
+    it('uploads a body shorter than a multipart-sized declared size, as a multipart upload', async () => {
+      const storage = await storageWith({ ...scanning, multipart: { thresholdBytes: 100, partSizeBytes: 5 * MIB } })
+
+      const result = await storage.upload({
+        key: 'k',
+        body: Readable.from([Buffer.alloc(120, 1)]),
+        contentType: 'text/plain',
+        size: 500,
+      })
+
+      expect(result.multipart).toBe(true)
+    })
+  })
+
+  describe('the bytes a pre-upload scan approved are the bytes that are stored', () => {
+    // Measured before the change: a caller who wrote into its own buffer while the scan ran had the
+    // changed bytes stored ("ZAAA") after the scanner had approved the original ("AAAA").
+    async function scannedAndStored(make: () => Buffer | Uint8Array): Promise<{ scanned: string; stored: string }> {
+      let scanned = ''
+      const impl = {
+        scan: async (input: { body?: Buffer | NodeJS.ReadableStream }): Promise<{ status: 'clean'; engine: string }> => {
+          scanned = Buffer.from(input.body as Buffer).toString()
+          await new Promise((resolve) => setTimeout(resolve, 60))
+          return { status: 'clean', engine: 't' }
+        },
+      }
+      const storage = await storageWith({ validation: { maxSizeBytes: 1000 }, scanner: { impl, mode: 'pre-upload' } })
+      const body = make()
+
+      const pending = storage.upload({ key: 'k', body, contentType: 'text/plain' })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      body[0] = 'Z'.charCodeAt(0)
+      await pending
+
+      return { scanned, stored: String(putBodies[0]) }
+    }
+
+    it.each([
+      ['a Buffer', () => Buffer.from('AAAA')],
+      ['a Uint8Array', () => new Uint8Array(Buffer.from('AAAA'))],
+    ])('stores what the scanner saw when the caller changes %s during the scan', async (_label, make) => {
+      expect(await scannedAndStored(make)).toEqual({ scanned: 'AAAA', stored: 'AAAA' })
+    })
+  })
 })
+

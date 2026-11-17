@@ -12,6 +12,7 @@ import type { UploadBody } from '../utils/stream-utils'
 import { peekFirstBytes } from '../utils/stream-utils'
 import { assertMimeAllowed } from '../utils/mime-allowed'
 import { assertHeaderValues, assertMetadata } from '../utils/header-value'
+import { assertIntegerInput } from '../utils/numeric-input'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -78,6 +79,7 @@ export class ValidationService {
 
   /** Best-effort size check — skipped when size is undefined. */
   private checkSize(size: number | undefined): void {
+    assertIntegerInput(size, 'size', 0)
     const maxSizeBytes = this.options.validation?.maxSizeBytes
     if (maxSizeBytes === undefined || size === undefined) {
       return

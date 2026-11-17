@@ -12,6 +12,10 @@ import { MAX_TIMER_MS } from '../constants/timer.constants'
 import { isHeaderValue } from '../utils/header-value'
 
 const MIN_PART_SIZE_BYTES = 5 * 1024 * 1024
+/** S3's largest part. */
+const MAX_PART_SIZE_BYTES = 5 * 1024 * 1024 * 1024
+/** The most concurrent part uploads: the multipart loop pins the process for seconds well before 100 000, and 4 096 already exceeds the connections a client opens. */
+const MAX_QUEUE_SIZE = 1000
 
 function invalid(reason: string): StorageException {
   return new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG, HttpStatus.INTERNAL_SERVER_ERROR, {
@@ -94,24 +98,57 @@ function assertTimerMs(options: Record<string, unknown>, name: string, min: 0 | 
 }
 
 /**
+ * Refuses a numeric option that is not an integer in `min..max`. A comparison alone lets `NaN` through
+ * (`NaN < 1` and `NaN > 1` are both false), and a string compares as the number it spells, so each
+ * option is checked by type, integrality and range.
+ *
+ * @param section - The option group (`signedUrls`, `multipart`, `validation`), if the caller set one.
+ * @param group - The group's name, for the message.
+ * @param key - The option inside the group.
+ * @param range - The least and the most value allowed, and how the message states that range.
+ * @throws StorageException with code `STORAGE_INVALID_CONFIG` naming the option.
+ */
+function assertBoundedInteger(
+  section: unknown,
+  group: string,
+  key: string,
+  range: { min: number; max: number; words?: string },
+): void {
+  if (!isObject(section)) return
+  const value = section[key]
+  if (value === undefined) return
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < range.min || value > range.max) {
+    throw invalid(
+      `${group}.${key} must be an integer ${range.words ?? `from ${String(range.min)} to ${String(range.max)}`}`,
+    )
+  }
+}
+
+/** Validates the numeric options that sit in a group: the size limit, the signed-URL TTLs and the multipart sizes. */
+function assertNumericSections(options: Record<string, unknown>): void {
+  const MAX = Number.MAX_SAFE_INTEGER
+  assertBoundedInteger(options.validation, 'validation', 'maxSizeBytes', { min: 1, max: MAX })
+  for (const key of ['defaultGetTtlSeconds', 'defaultPutTtlSeconds', 'maxTtlSeconds']) {
+    assertBoundedInteger(options.signedUrls, 'signedUrls', key, { min: 1, max: MAX })
+  }
+  assertBoundedInteger(options.scanner, 'scanner', 'timeoutMs', { min: 1, max: MAX_TIMER_MS })
+  assertBoundedInteger(options.multipart, 'multipart', 'thresholdBytes', { min: 1, max: MAX })
+  assertBoundedInteger(options.multipart, 'multipart', 'partSizeBytes', {
+    min: MIN_PART_SIZE_BYTES,
+    max: MAX_PART_SIZE_BYTES,
+    words: '>= 5 MB (S3 hard limit) and <= 5 GB',
+  })
+  assertBoundedInteger(options.multipart, 'multipart', 'queueSize', { min: 1, max: MAX_QUEUE_SIZE })
+}
+
+/**
  * Validates the optional limits, timers and encryption settings.
  *
  * @param options - The options object, already known to be an object.
  * @throws StorageException with code `STORAGE_INVALID_CONFIG`.
  */
 function assertLimitsAndEncryption(options: Record<string, unknown>): void {
-  const signedUrls = options.signedUrls
-  if (isObject(signedUrls) && typeof signedUrls.maxTtlSeconds === 'number' && signedUrls.maxTtlSeconds <= 0) {
-    throw invalid('signedUrls.maxTtlSeconds must be > 0')
-  }
-  const multipart = options.multipart
-  if (
-    isObject(multipart) &&
-    typeof multipart.partSizeBytes === 'number' &&
-    multipart.partSizeBytes < MIN_PART_SIZE_BYTES
-  ) {
-    throw invalid('multipart.partSizeBytes must be >= 5 MB (S3 hard limit)')
-  }
+  assertNumericSections(options)
   const maxAttempts = options.maxAttempts
   if (
     maxAttempts !== undefined &&

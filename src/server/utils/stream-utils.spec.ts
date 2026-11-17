@@ -86,6 +86,31 @@ describe('toUploadBody', () => {
     expect(toUploadBody(view)).toEqual(Buffer.from(whole.buffer, 2, 4))
   })
 
+  it.each([
+    ['a Blob', new Blob(['abc'])],
+    ['an array of chunks', [Buffer.from('a'), Buffer.from('b')]],
+    ['a plain object', { data: 'abc' }],
+    ['a number', 42],
+    ['an async iterable that is not a stream', { [Symbol.asyncIterator]: () => ({ next: () => Promise.resolve({ done: true, value: undefined }) }) }],
+  ])('refuses %s with STORAGE_VALIDATION_FAILED naming the body, not a multipart failure', (_label, value) => {
+    let thrown: unknown
+    try {
+      toUploadBody(value)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+    expect((thrown as { getResponse(): unknown }).getResponse()).toMatchObject({
+      error: {
+        details: {
+          field: 'body',
+          reason: 'body must be a Buffer, Uint8Array, ArrayBuffer, string or readable stream',
+        },
+      },
+    })
+  })
+
   it('leaves a Buffer, a Uint8Array and a stream as they are', () => {
     // The accepted shapes pass through by identity.
     const buffer = Buffer.from('a')

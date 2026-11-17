@@ -15,12 +15,11 @@ import { buildPublicUrl } from './public-url'
 import { isBufferLike, type UploadBody } from './stream-utils'
 
 /**
- * Coerces the scan body to a `Buffer` so the scanner always receives its declared
- * contract type. In pre-upload mode a stream has already been buffered,
- * so only `Buffer` and `Uint8Array` arrive here.
+ * Narrows the scan body to the `Buffer` the scanner is declared to receive. In pre-upload mode a stream
+ * has been buffered and a buffer body copied before the scan, so every body that arrives here is one.
  */
 export function normalizeScanBody(body: UploadBody): Buffer {
-  return Buffer.isBuffer(body) ? body : Buffer.from(body as Uint8Array)
+  return body as Buffer
 }
 
 /** Relays the uploader's progress events to the caller's callback, when there is one. */

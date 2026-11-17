@@ -17,6 +17,11 @@ export interface IFileScanner {
     bucket: string
     contentType: string
     size?: number
+    /**
+     * Aborts when `scanner.timeoutMs` passes. A scanner that ignores it keeps running after the
+     * upload is refused, so repeated timeouts pile up scanner work.
+     */
+    signal?: AbortSignal
   }): Promise<FileScanResult>
 }
 

@@ -40,6 +40,7 @@ import { FileScannerService } from './file-scanner.service'
 import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
+import { mapSizeLimitError } from '../errors/size-limit-exception'
 import { describeCleanupFailure, withCleanupFailure } from '../errors/scan-cleanup-error'
 import {
   abortFailureLogger,
@@ -60,10 +61,12 @@ import {
   isBufferLike,
   type UploadBody,
 } from '../utils/stream-utils'
-import { bufferStreamForScan, boundStreamSize, withBytesBody } from '../utils/upload-body'
+import { assertIntegerInput } from '../utils/numeric-input'
+import { assertScannedSize, boundStreamSize, bufferStreamForScan, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { logValue } from '../utils/log-value'
 import {
+  abortOnBodyFailure,
   abortable,
   bindToSignal,
   CLEANUP_DEADLINE_MS,
@@ -222,6 +225,7 @@ export class StorageService {
       signal,
       context,
     )
+    assertScannedSize(scanned, options.size, this.options.multipart.thresholdBytes, context)
     const body = boundStreamSize(scanned, options.size, this.options)
     const validatedOptions = { ...options, body }
 
@@ -231,19 +235,20 @@ export class StorageService {
   }
 
   /**
-   * In pre-upload scan mode a stream body is read into one `Buffer`, so the scanner
-   * and the upload see the same bytes; a stream is single-use, and one the scanner
+   * In pre-upload scan mode a stream body is read into one `Buffer`, and a buffer body is copied, so
+   * the scanner and the upload see the same bytes; a stream is single-use, and one the scanner
    * had consumed would leave the upload with nothing to send. The read is bounded by
    * `validation.maxSizeBytes`, and a stream with no bound is refused rather than
    * buffered without limit. Other bodies and modes pass through unchanged.
    */
   private async bufferForPreUploadScan(body: UploadBody, finalKey: string): Promise<UploadBody> {
-    if (
-      !this.scanner.isEnabled() ||
-      this.scanner.getMode() !== 'pre-upload' ||
-      isBufferLike(body)
-    ) {
+    if (!this.scanner.isEnabled() || this.scanner.getMode() !== 'pre-upload') {
       return body
+    }
+    // A buffer is copied: the caller still holds it, and a change they make while the scan runs would
+    // otherwise be stored without having been scanned.
+    if (isBufferLike(body)) {
+      return Buffer.from(body)
     }
     return bufferStreamForScan(body, finalKey, this.options.validation?.maxSizeBytes)
   }
@@ -569,10 +574,11 @@ export class StorageService {
       Body: normalizeSingleShotBody(options.body),
       ContentLength: total,
     }
+    const watch = abortOnBodyFailure(input.Body, options.abortSignal)
     try {
       const response = await this.s3Provider
         .getClient()
-        .send(new PutObjectCommand(input), sendOptions(options.abortSignal))
+        .send(new PutObjectCommand(input), sendOptions(watch.signal))
       if (options.onProgress) {
         emitProgress(options.onProgress, total, total)
       }
@@ -587,7 +593,8 @@ export class StorageService {
       })
     } catch (err) {
       const context = { key: finalKey, bucket, op: 'upload-single' }
-      throw failureOrAbort(options.abortSignal, context, mapAwsError(err, context))
+      const mapped = mapSizeLimitError(watch.failure(), context) ?? mapAwsError(err, context)
+      throw failureOrAbort(options.abortSignal, context, mapped)
     }
   }
 
@@ -696,6 +703,7 @@ export class StorageService {
   async list(options: ListOptions): Promise<ListResult> {
     this.assertConfigured()
     const bucket = this.resolveBucket(options.bucket)
+    assertIntegerInput(options.maxKeys, 'maxKeys', 1)
     const maxKeys = Math.min(options.maxKeys ?? MAX_LIST_KEYS, MAX_LIST_KEYS)
     const prefix = options.prefix
       ? this.keyResolver.normalize(options.prefix)

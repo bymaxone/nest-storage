@@ -6,6 +6,8 @@
  * @layer server/utils
  */
 import { PassThrough, Readable } from 'node:stream'
+import { StorageException } from '../errors/storage-exception'
+import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
 /** Every shape accepted as an upload body. */
 export type UploadBody = Buffer | NodeJS.ReadableStream | Uint8Array
@@ -234,6 +236,7 @@ export async function readStream(source: NodeJS.ReadableStream): Promise<Buffer>
  *
  * @param body - The body as the caller passed it.
  * @returns The same body, or its `Buffer` form.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` naming `body` for anything else (a `Blob`, an array).
  */
 export function toUploadBody(body: unknown): UploadBody {
   if (typeof body === 'string') {
@@ -244,6 +247,15 @@ export function toUploadBody(body: unknown): UploadBody {
   }
   if (ArrayBuffer.isView(body) && !(body instanceof Uint8Array)) {
     return Buffer.from(body.buffer, body.byteOffset, body.byteLength)
+  }
+  const stream = body as { pipe?: unknown } | null | undefined
+  if (!(body instanceof Uint8Array) && typeof stream?.pipe !== 'function') {
+    // A Blob, an array of chunks or any other object is not a body the SDK can send: it would reach the
+    // upload as if it were a stream and fail there with a code that blames the multipart upload.
+    throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
+      field: 'body',
+      reason: 'body must be a Buffer, Uint8Array, ArrayBuffer, string or readable stream',
+    })
   }
   return body as UploadBody
 }

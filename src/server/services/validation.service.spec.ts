@@ -126,6 +126,28 @@ describe('ValidationService', () => {
       expect(details.maxSize).toBe(100)
     })
 
+    it.each([Number.NaN, Infinity, -1, 1.5, '3'])(
+      'refuses a declared size of %p with STORAGE_VALIDATION_FAILED naming the field, with or without a limit',
+      async (size) => {
+        // `NaN > maxSizeBytes` is false, so a declared size of NaN passed the limit unseen.
+        for (const validation of [{ maxSizeBytes: 100 }, undefined]) {
+          const service = await buildService(buildOptions(validation))
+          const err = await service
+            .validate({ key: 'k', body: Readable.from(Buffer.alloc(1)), contentType: 'image/png', size: size as number })
+            .catch((e: unknown) => e)
+          expect(err).toBeInstanceOf(StorageException)
+          expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED)
+          expect(((err as StorageException).getResponse() as { error: { details: { field: string } } }).error.details.field).toBe('size')
+        }
+      },
+    )
+
+    it('accepts a declared size of 0, the size of an empty object', async () => {
+      const service = await buildService(buildOptions({ maxSizeBytes: 100 }))
+      const result = await service.validate({ key: 'k', body: Buffer.alloc(0), contentType: 'image/png', size: 0 })
+      expect(result.body).toBeDefined()
+    })
+
     it('passes when size is within limit', async () => {
       // size within bounds must pass
       const service = await buildService(buildOptions({ maxSizeBytes: 1000 }))

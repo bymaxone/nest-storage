@@ -13,6 +13,85 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A size limit or a multipart setting of `NaN` or `Infinity` no longer boots.** `validation.maxSizeBytes`,
+  `signedUrls.defaultGetTtlSeconds`, `defaultPutTtlSeconds`, `multipart.thresholdBytes` and `multipart.queueSize`
+  had no check, and `signedUrls.maxTtlSeconds` and `multipart.partSizeBytes` checked only one side of their range,
+  which `NaN` passes. `NaN` for `maxSizeBytes` switched the size limit off: a buffer and a stream declared at
+  5 GB were both sent. `NaN` for a TTL put `X-Amz-Expires=NaN` in every signed URL. `Infinity` for `queueSize`
+  kept the process busy from the first multipart upload on. A threshold of `NaN` or `Infinity` never chose a
+  multipart upload and a part size of `Infinity` buffered the whole stream as one part. Each option is now a
+  whole number in a stated range, and `forRoot` fails with `STORAGE_INVALID_CONFIG` naming the option. Per
+  call, a `ttlSeconds` that is not a whole number above 0 fails with `STORAGE_SIGNED_URL_TTL_INVALID`, and a
+  declared upload `size` or a list `maxKeys` that is not a whole number fails with `STORAGE_VALIDATION_FAILED`,
+  before any request.
+
+  **Apply to a derived backend:** a configuration that booted before and is now refused at `forRoot`:
+  `validation.maxSizeBytes`, a TTL or `multipart.thresholdBytes` that is `0`, negative, `NaN`, `Infinity`,
+  fractional or a string; `signedUrls.maxTtlSeconds: Infinity` (it was lowered to 7 days with a warning; a finite
+  value above that still is); `multipart.partSizeBytes` that is a string, `NaN`, `Infinity` or above 5 GiB;
+  `multipart.queueSize` that is not a whole number from 1 to 1000. Per call, `ttlSeconds: Infinity` (it was
+  clamped to the maximum), a fractional or string TTL, a fractional or negative `size`, and a `maxKeys` of
+  `Infinity`, `0`, a fraction or a string are now refused with the codes above.
+
+- **A scan result outside the contract no longer uploads.** `scan()` returned any result that was not
+  `'infected'` or an `'unknown'` it was told to reject, so no result, `null`, `'CLEAN'`, `' clean'` or an object
+  as the status stored the object. Only the exact string `'clean'` passes now; `'unknown'` keeps following
+  `rejectOnUnknown`, and anything else is rejected as `STORAGE_SCAN_INCONCLUSIVE` with
+  `details.reason: 'unrecognised scanner status'`, with or without `rejectOnUnknown`, and logged.
+
+  **Apply to a derived backend:** a scanner that returned a status other than `'clean'`, `'infected'` or
+  `'unknown'` (or nothing) on a clean file was uploading; fix the scanner, it is rejected now.
+
+- **What a pre-upload scan approves is what is stored.** A caller that wrote into its own `Buffer` or
+  `Uint8Array` while the scan ran had the changed bytes stored (measured: `ZAAA` stored after the scanner
+  approved `AAAA`), because the scanner and the upload read the same memory at different times. In pre-upload
+  mode a buffer body is now copied once, and the scanner and the upload both use the copy.
+
+  **Apply to a derived backend:** a pre-upload scan holds a second copy of a buffer body while the upload
+  runs; the extra memory is the size of the body.
+
+- **A stream whose declared `size` is wrong no longer leaves a truncated object.** A stream below the multipart
+  threshold goes as one request with `Content-Length` set to `size`; a provider stores the object once it has
+  that many bytes, so a longer body (measured on MinIO: 500 declared, 5000 sent) stored the first 500 bytes as
+  if it were the whole. The last byte is now held back until the source has ended: a longer body fails
+  `STORAGE_SIZE_EXCEEDED` before the request completes and a shorter one fails `STORAGE_VALIDATION_FAILED`
+  (`details.field: 'size'`), each in bounded time with nothing stored. A declared `size` that is not a whole
+  number of at least 0 also fails `STORAGE_VALIDATION_FAILED` (see the entry above). With a pre-upload scanner
+  the stream is read into memory first, and the same rule is applied to the length that was read.
+
+  **Apply to a derived backend:** a caller that passed a `size` that did not match its stream, and got an object
+  of the declared length back, now gets an error; pass the true size, or none (a stream with no size uses
+  multipart). The multipart path is unchanged for a shorter stream.
+
+- **A body that is not a body now fails as a validation error.** A `Blob`, an array of chunks or any other object
+  that is not a `Buffer`, `Uint8Array`, `ArrayBuffer`, string or `Readable` reached the upload as if it were a
+  stream and failed as `STORAGE_MULTIPART_ABORTED` (500), which blames the multipart upload. It now fails
+  `STORAGE_VALIDATION_FAILED` (400, `details.field: 'body'`) before any request.
+
+  **Apply to a derived backend:** a handler that mapped that 500 to a client error can drop the mapping; pass
+  a supported body.
+
+- **The scanner's engine and threat names are capped, and a scanner that throws is logged.** `details.engine`
+  and `details.threat` in the body, and the same names in the log line, are cut to 200 characters and left out
+  when the scanner gave something that is not a string. A scanner that threw was answered 500 with no log line
+  at all; it now logs `Scanner failed` with its message, cut at 300 characters. The error the caller gets is
+  unchanged.
+
+  **Apply to a derived backend:** a scanner that names a threat longer than 200 characters is cut in the
+  response; keep the names short, or read the full text from your scanner's own log.
+
+### Added
+
+- **`scanner.timeoutMs` bounds a file scan.** A scanner that never settled held the upload until the caller
+  aborted. A scan now ends with `STORAGE_TIMEOUT` (503, `details.phase: 'scan'`) after `scanner.timeoutMs`,
+  by default 60 s, and the scanner is handed an `AbortSignal` (`signal` on its input) that aborts then. There is
+  no setting that waits without limit. A scanner that ignores the signal keeps running after the timeout.
+
+  **Apply to a derived backend:** a scan that took longer than 60 s used to complete and now fails; set
+  `scanner.timeoutMs` to what your scanner needs, and have the scanner honour `signal`.
+
 ## [1.1.16] - 2026-11-17
 
 ### Changed

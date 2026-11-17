@@ -229,6 +229,269 @@ describe('FileScannerService', () => {
       })
     })
 
+    describe('the engine and threat names', () => {
+      const LONG = 'x'.repeat(500)
+
+      it('are cut to 200 characters in the body and in the log', async () => {
+        const impl = makeMockScanner({ status: 'infected', engine: LONG, threat: LONG })
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        const { engine, threat } = ((err as StorageException).getResponse() as { error: { details: Record<string, string> } }).error.details
+        expect(engine).toBe('x'.repeat(200))
+        expect(threat).toBe('x'.repeat(200))
+        const line = String(warnSpy.mock.calls[0]?.[0])
+        expect(line).toContain(`"${'x'.repeat(200)}"`)
+        expect(line).not.toContain('x'.repeat(201))
+        warnSpy.mockRestore()
+      })
+
+      it('are left whole at exactly 200 characters', async () => {
+        const name = 'y'.repeat(200)
+        const impl = makeMockScanner({ status: 'infected', engine: name, threat: name })
+        const service = await buildService(buildOptions({ impl }), impl)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect((err as StorageException).getResponse()).toMatchObject({ error: { details: { engine: name, threat: name } } })
+      })
+
+      it('are left out of the body when they are not strings', async () => {
+        const impl: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'infected', engine: 'clamav', threat: { secret: 'x' } }) }
+        const service = await buildService(buildOptions({ impl }), impl)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('secret')
+        expect((err as StorageException).getResponse()).toMatchObject({ error: { details: { engine: 'clamav' } } })
+      })
+    })
+
+    describe('a scanner that throws', () => {
+      it('is logged once with its message cut at 300 characters, and the error is rethrown unchanged', async () => {
+        const failure = new Error(`engine down ${'z'.repeat(500)}`)
+        const impl: IFileScanner = { scan: jest.fn().mockRejectedValue(failure) }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect(err).toBe(failure)
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+        const line = String(warnSpy.mock.calls[0]?.[0])
+        expect(line).toMatch(/^Scanner failed: key="test\/file\.png" error="engine down z+"$/)
+        expect(line).not.toContain('z'.repeat(300))
+        warnSpy.mockRestore()
+      })
+
+      it('logs a value that is not an Error without throwing', async () => {
+        const impl: IFileScanner = { scan: jest.fn().mockRejectedValue(Object.create(null)) }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('non-printable rejection value'))
+        warnSpy.mockRestore()
+      })
+
+      it('does not log the deadline, which is a typed error that names itself', async () => {
+        const impl: IFileScanner = { scan: jest.fn(() => new Promise<FileScanResult>(() => undefined)) }
+        const service = await buildService(buildOptions({ impl, timeoutMs: 10 }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        expect(warnSpy).not.toHaveBeenCalled()
+        warnSpy.mockRestore()
+      })
+    })
+
+    describe('a result outside the contract', () => {
+      // Only the exact string 'clean' lets an object through: a scanner written in JS, a typo, or a
+      // result that is not an object must not be read as a pass.
+      const outside: [string, unknown][] = [
+        ['no result', undefined],
+        ['null', null],
+        ['a string result', 'clean'],
+        ['an empty object', {}],
+        ['a status in another case', { status: 'CLEAN', engine: 'clamav' }],
+        ['a status with a leading space', { status: ' clean', engine: 'clamav' }],
+        ['a status with a trailing newline', { status: 'clean\n', engine: 'clamav' }],
+        ['an object status', { status: {}, engine: 'clamav' }],
+        ['a numeric status', { status: 1, engine: 'clamav' }],
+        ['a made-up status', { status: 'ok', engine: 'clamav' }],
+      ]
+
+      it.each(outside)('rejects %s as inconclusive, with rejectOnUnknown on and off', async (_label, result) => {
+        for (const rejectOnUnknown of [false, true]) {
+          const impl: IFileScanner = { scan: jest.fn().mockResolvedValue(result) }
+          const service = await buildService(buildOptions({ impl, rejectOnUnknown }), impl)
+          const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+          const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+          expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SCAN_INCONCLUSIVE)
+          expect((err as StorageException).getResponse()).toMatchObject({
+            error: { details: { reason: 'unrecognised scanner status' } },
+          })
+          expect(warnSpy).toHaveBeenCalledTimes(1)
+          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Inconclusive scan result rejected'))
+          warnSpy.mockRestore()
+        }
+      })
+
+      it('names the unrecognised status, escaped, in its log line and gives the reason in the body', async () => {
+        const impl: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'CLEAN\n', engine: 'clamav' }) }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect(String(warnSpy.mock.calls[0]?.[0])).toContain(' status="CLEAN\\n"')
+        expect(JSON.stringify((err as StorageException).getResponse())).toContain('unrecognised scanner status')
+        warnSpy.mockRestore()
+      })
+
+      it('says nothing of a status or a reason for an unknown result that rejectOnUnknown refuses', async () => {
+        const impl = makeMockScanner({ status: 'unknown', engine: 'clamav' })
+        const service = await buildService(buildOptions({ impl, rejectOnUnknown: true }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect(String(warnSpy.mock.calls[0]?.[0])).toBe('Inconclusive scan result rejected: key="test/file.png" engine="clamav"')
+        expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('reason')
+        warnSpy.mockRestore()
+      })
+
+      it('names the engine only when it is a string', async () => {
+        const named: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'ok', engine: 'clamav' }) }
+        const unnamed: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'ok', engine: { secret: 'x' } }) }
+
+        const withEngine = await (await buildService(buildOptions({ impl: named }), named)).scan(SCAN_INPUT).catch((e: unknown) => e)
+        const withoutEngine = await (await buildService(buildOptions({ impl: unnamed }), unnamed)).scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect((withEngine as StorageException).getResponse()).toMatchObject({ error: { details: { engine: 'clamav' } } })
+        expect(JSON.stringify((withoutEngine as StorageException).getResponse())).not.toContain('secret')
+      })
+
+      it('still lets the exact string "clean" through and still accepts "unknown" without rejectOnUnknown', async () => {
+        const clean = makeMockScanner({ status: 'clean', engine: 'clamav' })
+        const unknown = makeMockScanner({ status: 'unknown', engine: 'clamav' })
+        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        expect((await (await buildService(buildOptions({ impl: clean }), clean)).scan(SCAN_INPUT)).status).toBe('clean')
+        expect((await (await buildService(buildOptions({ impl: unknown }), unknown)).scan(SCAN_INPUT)).status).toBe('unknown')
+      })
+    })
+
+    describe('the scan deadline (scanner.timeoutMs)', () => {
+      afterEach(() => {
+        jest.useRealTimers()
+      })
+
+      function neverSettling(): { impl: IFileScanner; seen: AbortSignal[] } {
+        const seen: AbortSignal[] = []
+        const impl: IFileScanner = {
+          scan: jest.fn((input: { signal?: AbortSignal }) => {
+            if (input.signal) seen.push(input.signal)
+            return new Promise<FileScanResult>(() => undefined)
+          }),
+        }
+        return { impl, seen }
+      }
+
+      it('rejects STORAGE_TIMEOUT (503) naming the phase, the limit, the key and the bucket, and aborts the signal it handed over', async () => {
+        const { impl, seen } = neverSettling()
+        const service = await buildService(buildOptions({ impl, timeoutMs: 30 }), impl)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_TIMEOUT)
+        expect((err as StorageException).getStatus()).toBe(503)
+        expect((err as StorageException).getResponse()).toMatchObject({
+          error: { details: { phase: 'scan', timeoutMs: 30, key: 'test/file.png', bucket: 'test-bucket' } },
+        })
+        expect(seen).toHaveLength(1)
+        expect(seen[0]?.aborted).toBe(true)
+      })
+
+      it.each([
+        ['resolves', (input: { signal?: AbortSignal }) => new Promise<FileScanResult>((resolve) => { input.signal?.addEventListener('abort', () => { resolve({ status: 'unknown', engine: 't' }) }) })],
+        ['rejects', (input: { signal?: AbortSignal }) => new Promise<FileScanResult>((_resolve, reject) => { input.signal?.addEventListener('abort', () => { reject(new Error('scanner gave up')) }) })],
+      ])('still fails STORAGE_TIMEOUT when the scanner %s as soon as its signal aborts', async (_label, scan) => {
+        // The scanner settles inside the abort listener, ahead of anything queued after the abort.
+        const impl: IFileScanner = { scan: jest.fn(scan) }
+        const service = await buildService(buildOptions({ impl, timeoutMs: 20 }), impl)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_TIMEOUT)
+      })
+
+      it('waits 60 s when scanner.timeoutMs is not set, and no longer', async () => {
+        jest.useFakeTimers()
+        const { impl } = neverSettling()
+        const service = await buildService(buildOptions({ impl }), impl)
+        let outcome: unknown = 'pending'
+        void service.scan(SCAN_INPUT).catch((e: unknown) => {
+          outcome = e
+        })
+
+        await jest.advanceTimersByTimeAsync(59_999)
+        expect(outcome).toBe('pending')
+        await jest.advanceTimersByTimeAsync(1)
+
+        expect((outcome as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_TIMEOUT)
+      })
+
+      it.each([
+        ['a scan that settles', () => Promise.resolve<FileScanResult>({ status: 'clean', engine: 'clamav' })],
+        ['a scan that fails', () => Promise.reject(new Error('engine down'))],
+      ])('leaves no timer behind after %s', async (_label, run) => {
+        jest.useFakeTimers()
+        const impl: IFileScanner = { scan: jest.fn(run) }
+        const service = await buildService(buildOptions({ impl, timeoutMs: 5000 }), impl)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        expect(jest.getTimerCount()).toBe(0)
+      })
+
+      it('hands a signal that is not aborted to a scanner that finishes in time', async () => {
+        const seen: (AbortSignal | undefined)[] = []
+        const impl: IFileScanner = {
+          scan: jest.fn((input: { signal?: AbortSignal }) => {
+            seen.push(input.signal)
+            return Promise.resolve<FileScanResult>({ status: 'clean', engine: 'clamav' })
+          }),
+        }
+        const service = await buildService(buildOptions({ impl, timeoutMs: 5000 }), impl)
+
+        await service.scan(SCAN_INPUT)
+
+        expect(seen[0]?.aborted).toBe(false)
+      })
+
+      it('does not raise an unhandled rejection when the scanner fails after the deadline', async () => {
+        let fail: (error: Error) => void = () => undefined
+        const impl: IFileScanner = { scan: jest.fn(() => new Promise<FileScanResult>((_r, reject) => { fail = reject })) }
+        const service = await buildService(buildOptions({ impl, timeoutMs: 10 }), impl)
+        const unhandled = jest.fn()
+        process.once('unhandledRejection', unhandled)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+        fail(new Error('late failure'))
+        await new Promise((resolve) => setTimeout(resolve, 20))
+
+        process.removeListener('unhandledRejection', unhandled)
+        expect(unhandled).not.toHaveBeenCalled()
+      })
+    })
+
     it('returns a "clean" result even when rejectOnUnknown is true (does not enter the unknown branch)', async () => {
       // The `status === 'unknown'` guard must gate the reject path: a clean result with
       // rejectOnUnknown enabled must still pass, never throw SCAN_INCONCLUSIVE.

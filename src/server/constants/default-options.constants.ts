@@ -15,6 +15,8 @@ export const DEFAULT_CACHE_CONTROL = 'public, max-age=31536000, immutable' as co
 export const DEFAULT_CONTENT_DISPOSITION = 'inline' as const
 export const DEFAULT_MAX_ATTEMPTS = 3 as const
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000 as const
+/** How long a file scan may run before the upload is refused, in milliseconds. */
+export const DEFAULT_SCANNER_TIMEOUT_MS = 60_000 as const
 export const DEFAULT_FORCE_PATH_STYLE = false as const
 export const DEFAULT_PUBLIC_READ = false as const
 

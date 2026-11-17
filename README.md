@@ -235,6 +235,8 @@ Options accepted by `forRoot` and `forRootAsync`:
 | `validation.mimeWhitelist`     | `string[]`                                        | —                 | No MIME check when absent. Wildcards: `'image/*'`. A value that lists several types never matches |
 | `validation.maxSizeBytes`      | `number`                                          | —                 | Maximum upload size in bytes; counted as a stream is read, so it holds with or without `size` |
 
+**Numeric options are whole numbers, checked at boot.** `validation.maxSizeBytes`, the `signedUrls` TTLs and `multipart.thresholdBytes` take a whole number of at least `1`; `multipart.partSizeBytes` takes one from 5 MiB (the S3 minimum) to 5 GiB (the S3 maximum) and `multipart.queueSize` one from `1` to `1000`. `NaN`, `Infinity`, a fraction, a string or a value out of range fails `forRoot` with `STORAGE_INVALID_CONFIG` naming the option: a comparison alone lets `NaN` through, and `NaN` on a size limit would turn the limit off. The same holds per call: a `ttlSeconds` that is not a whole number above `0` fails with `STORAGE_SIGNED_URL_TTL_INVALID`, and a declared upload `size` or a list `maxKeys` that is not a whole number (at least `0`, and at least `1`) fails with `STORAGE_VALIDATION_FAILED` naming the field, before any request is made.
+
 > **Do not use `maxRetries` or `signatureVersion`** — these are AWS SDK v2 options that do not exist in v3. The v3 SDK is SigV4-only. Use `maxAttempts` (default `3`) for retry configuration.
 
 **`requestTimeoutMs`** is passed to the S3 client's request handler as `requestTimeout` with `throwOnRequestTimeout` ([AWS SDK for JavaScript v3: `requestHandler: { requestTimeout: 3_000, ... }`][sdk-request-timeout]). It bounds one attempt, from sending the request until the response headers arrive, and an upload body counts toward it, so a large single-shot upload on a slow link needs a larger value. It does not limit reading a download stream; `bodyIdleTimeoutMs` does. With `maxAttempts` above 1 a stalled request is retried, so the total wait is the timeout times the attempts.
@@ -338,6 +340,10 @@ await storage.upload({
 ```
 
 Uploads are automatically routed to multipart when `size >= multipart.thresholdBytes` (default 5 MiB). A `Readable` without a `size` always uses multipart. Multipart aborts automatically on failure (`leavePartsOnError: false`).
+
+**What `body` may be.** A `Buffer`, a `Uint8Array`, an `ArrayBuffer`, a string or a Node `Readable`. Anything else (a `Blob`, an array of chunks, a plain object) fails with `STORAGE_VALIDATION_FAILED` (`details.field: 'body'`) before any request; it used to reach the upload as if it were a stream and fail as `STORAGE_MULTIPART_ABORTED` (500).
+
+**A stream's declared size must be true.** A stream below the multipart threshold is sent as one request that carries `Content-Length` set to `size`, and a provider stores an object as soon as it has received that many bytes. So a body longer than `size` is refused with `STORAGE_SIZE_EXCEEDED` (`details.declaredSize`) before its last byte is sent, and a body shorter than `size` with `STORAGE_VALIDATION_FAILED` (`details.field: 'size'`, `details.declaredSize` and `details.receivedSize`); either way the request is abandoned and nothing is stored. A stream on the multipart path is still refused when it is longer than `size`; a shorter one is uploaded as it is. With a pre-upload scanner the stream is read into memory first, and the same rules apply to the length that was read. A `size` that is not a whole number of at least `0` fails with `STORAGE_VALIDATION_FAILED` before any request.
 
 **The library owns a `Readable` once you pass it to `upload()`**, as with `stream.pipeline`. When the upload is rejected for any reason, the stream is destroyed without an error, which releases the file handle or socket behind it: a listener on the stream sees `'close'`, and the failure is the rejection of `upload()`. A call answered from the idempotency cache destroys the stream unread. Do not reuse a stream you passed in; open a new one to retry. No listener on the stream is needed to avoid an unhandled `'error'` event.
 
@@ -585,20 +591,27 @@ BymaxStorageModule.forRoot({
     impl: new ClamAvScanner(),
     mode: 'pre-upload',       // 'pre-upload' | 'post-upload'
     rejectOnUnknown: false,   // treat inconclusive scans as pass (true = reject)
+    timeoutMs: 60_000,        // refuse the upload when a scan takes longer (default 60000)
   },
 })
 ```
 
 **Streams in pre-upload mode.** A stream can be read once, so in `pre-upload` mode it is first read
-into memory, bounded by `validation.maxSizeBytes`, and the scanner and the upload share that buffer. A
+into memory, bounded by `validation.maxSizeBytes`, and the scanner and the upload share that buffer. A `Buffer` or `Uint8Array` body is copied once in this mode, so a change the caller makes to its own array while the scan runs reaches neither (the second copy of the body is held until the upload ends, so the body takes twice its size in memory). The library validates and scans the bytes at call time; do not change a buffer you passed until the call settles. A
 stream longer than the limit is refused with `STORAGE_VALIDATION_FAILED` as soon as it passes it, and
-with no `maxSizeBytes` it is refused with a reason that says to set it or use `post-upload`. Buffer
-bodies are not affected, and `post-upload` hands the scanner the key only, no body.
+with no `maxSizeBytes` it is refused with a reason that says to set it or use `post-upload`.
+`post-upload` hands the scanner the key only, no body.
+
+**A scan has a deadline.** `scanner.timeoutMs` (a whole number of milliseconds from `1` to `2147483647`, default `60000`; there is no setting that waits without limit) bounds a scan: past it the upload is refused with `STORAGE_TIMEOUT` (503, `details.phase: 'scan'`), and in `post-upload` mode the stored object is removed as for any other rejection. The scanner is handed an `AbortSignal` (`signal` on its input) that aborts at the deadline. **A scanner that ignores the signal keeps running after the timeout**, so repeated timeouts pile up scanner work: honour the signal, or give the scanner a limit of its own.
+
+**What counts as a verdict.** Only the exact strings `'clean'`, `'infected'` and `'unknown'` are results. Anything else (no result, `null`, `'CLEAN'`, `' clean'`, an object, a made-up status) is rejected as `STORAGE_SCAN_INCONCLUSIVE` with `details.reason: 'unrecognised scanner status'`, whatever `rejectOnUnknown` says: an object the scanner did not call clean is not stored.
 
 **What a client is told.** `STORAGE_SCAN_INFECTED` carries `details.engine` and `details.threat`, and
-`STORAGE_SCAN_INCONCLUSIVE` carries `details.engine`. The free-form `details` your scanner returns is the
+`STORAGE_SCAN_INCONCLUSIVE` carries `details.engine`; each name is cut to 200 characters, in the body and in the log, and left out when the scanner gave something that is not a string. A scanner that throws is answered with a 500, and the library logs a `Scanner failed` warning with the message (cut at 300 characters) so there is a trace of why. The free-form `details` your scanner returns is the
 scanner's own text, so it is written to the warning log (escaped and truncated) and never to the
 body of the error.
+
+In `post-upload` mode your scanner is given the key and reads the object itself, so another writer that overwrites the same key between your upload and the scan makes the verdict about their object, and an infected verdict deletes the key whichever object it now holds.
 
 **A rejected object that could not be removed.** In `post-upload` mode the object is already stored
 when the scanner rejects it, so the library deletes it and rejects `upload()` with the verdict
@@ -764,7 +777,7 @@ All errors are thrown as `StorageException extends HttpException`. The response 
 | `STORAGE_SIZE_EXCEEDED`          | 413  | `size > maxSizeBytes`                                                                                                                                                                                              |
 | `STORAGE_VALIDATION_FAILED`      | 400  | `IUploadValidator` rejected the file, or a header-bound value is not a header value (`details.field`, `details.reason`)                                                                                                                                                            |
 | `STORAGE_SCAN_INFECTED`          | 422  | Scanner returned `'infected'` (`details.threat`); `details.cleanup: 'failed'` means the object is still stored                                                                                                    |
-| `STORAGE_SCAN_INCONCLUSIVE`      | 422  | Scanner returned `'unknown'` and `rejectOnUnknown: true`                                                                                                                                                           |
+| `STORAGE_SCAN_INCONCLUSIVE`      | 422  | Scanner returned `'unknown'` and `rejectOnUnknown: true`, or a result that is not a recognised status                                                                                                                                                                 |
 | `STORAGE_OBJECT_NOT_FOUND`       | 404  | `head()`, `download()`, or `copy()` on a nonexistent key                                                                                                                                                           |
 | `STORAGE_PROVIDER_ERROR`         | 502  | The provider rejected the request (`AccessControlListNotSupported`, an `AccessDenied` on an object, any other rejection). **503** when it could not be reached (connection refused or reset, DNS failure) or answered with a server error (`SlowDown`, 500, 502, 504; not 501), which is worth retrying; **500** when it refused the credentials (`InvalidAccessKeyId`, `SignatureDoesNotMatch`), a deployment fault that a retry does not fix (a `HEAD` answer carries no body and so no code: a refused `head()` stays **502** with reason `rejected`, and the credentials case is not told apart there). `details` carries `awsCode`, `httpStatus`, `requestId` and a fixed `reason` (`unreachable`, `provider-error`, `credentials-refused` or `rejected`; never the text of the driver or of the provider) plus the operation context (`op`, `bucket`, and `key` or `prefix`) |
 | `STORAGE_SIGNED_URL_TTL_INVALID` | 400  | Per-request `ttlSeconds` ≤ 0                                                                                                                                                                                       |

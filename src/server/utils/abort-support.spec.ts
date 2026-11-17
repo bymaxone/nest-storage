@@ -10,7 +10,8 @@ import {
 } from '@aws-sdk/client-s3'
 import { MAX_TIMER_MS } from '../constants/timer.constants'
 import { getEventListeners } from 'node:events'
-import { abortable, bindToSignal, CLEANUP_DEADLINE_MS, sendOptions, throwIfAborted, within } from './abort-support'
+import { PassThrough } from 'node:stream'
+import { abortable, abortOnBodyFailure, bindToSignal, CLEANUP_DEADLINE_MS, sendOptions, throwIfAborted, within } from './abort-support'
 
 describe('abort-support', () => {
   it('keeps the cleanup deadline within what a timer can hold', () => {
@@ -184,5 +185,57 @@ describe('abort-support', () => {
       await new Promise((resolve) => setImmediate(resolve))
       expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
     })
+  })
+
+  describe('abortOnBodyFailure', () => {
+    it('aborts the signal at once when the body stream fails, and reports what it failed with', () => {
+      // The SDK pipes the body into the request and does not stop on a body error, so without this the
+      // request would wait for its timeout.
+      const body = new PassThrough()
+      const watch = abortOnBodyFailure(body, undefined)
+      const failure = new Error('body broke')
+
+      expect(watch.signal?.aborted).toBe(false)
+      body.emit('error', failure)
+
+      expect(watch.signal?.aborted).toBe(true)
+      expect(watch.failure()).toBe(failure)
+    })
+
+    it('stays pending with no failure while the body is healthy', () => {
+      const watch = abortOnBodyFailure(new PassThrough(), undefined)
+
+      expect(watch.signal?.aborted).toBe(false)
+      expect(watch.failure()).toBeUndefined()
+    })
+
+    it('keeps the caller signal in force: it aborts the combined signal, and a body failure does not abort the caller signal', () => {
+      const caller = new AbortController()
+      const body = new PassThrough()
+      const watch = abortOnBodyFailure(body, caller.signal)
+
+      body.emit('error', new Error('body broke'))
+
+      expect(watch.signal?.aborted).toBe(true)
+      expect(caller.signal.aborted).toBe(false)
+
+      const other = new AbortController()
+      const second = abortOnBodyFailure(new PassThrough(), other.signal)
+      other.abort()
+      expect(second.signal?.aborted).toBe(true)
+    })
+
+    it.each([['a Buffer', Buffer.from('x')], ['no body', undefined], ['null', null]])(
+      'hands back the caller signal untouched for %s, and reports no failure',
+      (_label, body) => {
+        const caller = new AbortController().signal
+
+        const watch = abortOnBodyFailure(body, caller)
+
+        expect(watch.signal).toBe(caller)
+        expect(watch.failure()).toBeUndefined()
+        expect(abortOnBodyFailure(body, undefined).signal).toBeUndefined()
+      },
+    )
   })
 })
