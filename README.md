@@ -597,7 +597,7 @@ bodies are not affected, and `post-upload` hands the scanner the key only, no bo
 
 **What a client is told.** `STORAGE_SCAN_INFECTED` carries `details.engine` and `details.threat`, and
 `STORAGE_SCAN_INCONCLUSIVE` carries `details.engine`. The free-form `details` your scanner returns is the
-scanner's own text, so it is written to the warning log (escaped, cut at 300 characters) and never to the
+scanner's own text, so it is written to the warning log (escaped and truncated) and never to the
 body of the error.
 
 **A rejected object that could not be removed.** In `post-upload` mode the object is already stored
