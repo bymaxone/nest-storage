@@ -13,6 +13,18 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Changed
+
+- **The provider-failure log masks more, and says less when nothing failed.** The warning that carries what
+  the driver or the provider said now also masks the credential scope and signature of an `Authorization`
+  header (`Credential=...`) and a bare access key id (`AKIA...`, `ASIA...`), still before it cuts the
+  message. A request the caller cancelled is no longer logged, and a multipart upload that fails opens its
+  line with `Multipart upload failed` (it was `Provider call failed`, which a failure of the caller's own
+  source stream is not). Nothing a client receives changes.
+
+  **Apply to a derived backend:** nothing, unless a log search matched the old line start for a multipart
+  failure or the cancelled-request warning.
+
 ## [1.1.13] - 2026-11-16
 
 ### Security

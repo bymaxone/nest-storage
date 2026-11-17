@@ -108,7 +108,7 @@ describe('the body of a failed call', () => {
     return warn.mock.calls.map((call) => String(call[0])).join('\n')
   }
 
-  async function failureOf(port: number): Promise<StorageException> {
+  async function failureOf(port: number, abortSignal?: AbortSignal): Promise<StorageException> {
     moduleRef = await Test.createTestingModule({
       imports: [
         BymaxStorageModule.forRoot({
@@ -127,7 +127,7 @@ describe('the body of a failed call', () => {
     await moduleRef.init()
     const error: unknown = await moduleRef
       .get(StorageService)
-      .download({ key: 'k' })
+      .download({ key: 'k', ...(abortSignal ? { abortSignal } : {}) })
       .catch((err: unknown) => err)
     if (!(error instanceof StorageException)) {
       throw new Error(`expected a StorageException, got ${String(error)}`)
@@ -222,5 +222,18 @@ describe('the body of a failed call', () => {
     expect(line).not.toMatch(
       /\$response|\$metadata|x-amz-request-id|content-type|application\/xml|headers/i,
     )
+  })
+
+  it('says nothing about a request the caller cancelled', async () => {
+    // The server never answers, so only the signal ends the call; the request timeout is later.
+    const controller = new AbortController()
+    setTimeout(() => {
+      controller.abort()
+    }, 30)
+
+    const error = await failureOf(silentPort, controller.signal)
+
+    expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
+    expect(logged()).toBe('')
   })
 })

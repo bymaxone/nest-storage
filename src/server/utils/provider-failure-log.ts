@@ -9,9 +9,15 @@ import { Logger } from '@nestjs/common'
 import { describeError } from './describe-error'
 import { logValue } from './log-value'
 
-/** Secrets that can sit in a message: a presigned URL's signature and credentials, an access key id. */
+/**
+ * Secrets that can sit in a message, as `name=value`: a presigned URL's signature and credentials, the
+ * credential scope and signature of an `Authorization` header, an access key id.
+ */
 const SECRET_IN_MESSAGE =
-  /(X-Amz-(?:Signature|Credential|Security-Token)|AWSAccessKeyId|Signature)=[^&\s"']+/gi
+  /(X-Amz-(?:Signature|Credential|Security-Token)|AWSAccessKeyId|Credential|Signature)=[^&\s"']+/gi
+
+/** An access key id on its own (long-term `AKIA`, temporary `ASIA`): an identifier worth keeping out of a log. */
+const BARE_ACCESS_KEY_ID = /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g
 
 /** The longest message a log line carries, so a provider that answers with a page cannot flood it. */
 const MAX_MESSAGE_LENGTH = 300
@@ -38,7 +44,9 @@ function field(value: unknown): string {
  */
 export function describeProviderFailure(err: unknown): string {
   const failure = (typeof err === 'object' && err !== null ? err : {}) as FailureLike
-  const message = describeError(err).replace(SECRET_IN_MESSAGE, '$1=[redacted]')
+  const message = describeError(err)
+    .replace(SECRET_IN_MESSAGE, '$1=[redacted]')
+    .replace(BARE_ACCESS_KEY_ID, '[redacted-key-id]')
   return [
     `name=${field(failure.name)}`,
     `code=${field(failure.Code)}`,
@@ -50,13 +58,22 @@ export function describeProviderFailure(err: unknown): string {
 
 /**
  * Logs a failed call to the provider at warn level, so that what the provider or the driver said is in
- * the host's logs while the error the caller receives holds only a fixed reason.
+ * the host's logs while the error the caller receives holds only a fixed reason. A request the caller
+ * cancelled is not a failure of the provider and is not logged.
  *
  * @param err - What the SDK threw.
  * @param context - Non-sensitive context of the call (`op`, `key`, `bucket`).
+ * @param label - How the line opens; names what failed when it was not a single provider call.
  */
-export function logProviderFailure(err: unknown, context?: Record<string, unknown>): void {
+export function logProviderFailure(
+  err: unknown,
+  context?: Record<string, unknown>,
+  label = 'Provider call failed',
+): void {
+  if ((err as { name?: unknown } | null)?.name === 'AbortError') {
+    return
+  }
   const op = typeof context?.op === 'string' ? logValue(context.op) : '-'
   const key = typeof context?.key === 'string' ? logValue(context.key) : '-'
-  logger.warn(`Provider call failed: op=${op} key=${key} ${describeProviderFailure(err)}`)
+  logger.warn(`${label}: op=${op} key=${key} ${describeProviderFailure(err)}`)
 }

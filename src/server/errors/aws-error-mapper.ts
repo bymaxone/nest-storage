@@ -17,6 +17,22 @@ interface AwsLikeError {
   Code?: string
 }
 
+/** The provider's code for a failure, or the error's name when it sent none. */
+function awsCodeOf(err: unknown): unknown {
+  const e = (err ?? {}) as AwsLikeError
+  return e.Code ?? e.name
+}
+
+/**
+ * Whether the provider said the bucket does not exist.
+ *
+ * @param err - The error thrown by the AWS SDK (typed as `unknown`).
+ * @returns `true` for `NoSuchBucket`.
+ */
+export function isNoSuchBucket(err: unknown): boolean {
+  return awsCodeOf(err) === 'NoSuchBucket'
+}
+
 /**
  * Maps an AWS SDK error to a typed `StorageException`.
  *
@@ -37,7 +53,7 @@ interface AwsLikeError {
 export function mapAwsError(err: unknown, context?: Record<string, unknown>): StorageException {
   const e = (err ?? {}) as AwsLikeError
   const httpStatus = e.$metadata?.httpStatusCode
-  const awsCode = e.Code ?? e.name
+  const awsCode = awsCodeOf(err)
   const requestId = e.$metadata?.requestId
   const details: Record<string, unknown> = {
     ...(context ?? {}),
@@ -48,7 +64,7 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
     reason: providerFailureReason(err),
   }
 
-  if (awsCode === 'NoSuchBucket') {
+  if (isNoSuchBucket(err)) {
     return new StorageException(
       STORAGE_ERROR_CODES.STORAGE_BUCKET_NOT_FOUND,
       HttpStatus.NOT_FOUND,
@@ -78,11 +94,7 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
   }
   if (e.name === 'TimeoutError') {
     logProviderFailure(err, context)
-    return new StorageException(
-      STORAGE_ERROR_CODES.STORAGE_TIMEOUT,
-      undefined,
-      details,
-    )
+    return new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, details)
   }
   logProviderFailure(err, context)
   return new StorageException(

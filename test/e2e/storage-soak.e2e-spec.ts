@@ -8,11 +8,7 @@
  */
 import { Readable } from 'node:stream'
 import { Test, type TestingModule } from '@nestjs/testing'
-import {
-  BymaxStorageModule,
-  SignedUrlService,
-  StorageService,
-} from '@bymax-one/nest-storage'
+import { BymaxStorageModule, SignedUrlService, StorageService } from '@bymax-one/nest-storage'
 import { destroyStream } from '../../src/server/utils/stream-utils'
 import { startMinio, type MinioHandle } from './fixtures/minio-container'
 
@@ -30,6 +26,52 @@ interface Sample {
 
 function openSockets(): number {
   return process.getActiveResourcesInfo().filter((name) => name === 'TCPSocketWrap').length
+}
+
+/** Heap, resident memory and open sockets now, taken after a collection when `--expose-gc` is on. */
+function takeSample(startedAt: number): Sample {
+  global.gc?.()
+  const mem = process.memoryUsage()
+  return {
+    at: Math.round((Date.now() - startedAt) / 1000),
+    heapMb: Math.round(mem.heapUsed / MB),
+    rssMb: Math.round(mem.rss / MB),
+    sockets: openSockets(),
+  }
+}
+
+/** Written straight to stderr, so the table is printed when the test ends. */
+function reportSamples(iterations: number, samples: Sample[]): void {
+  process.stderr.write(
+    `SOAK iterations=${String(iterations)} samples=\n${samples.map((s) => JSON.stringify(s)).join('\n')}\n`,
+  )
+}
+
+/** One round of the mix under test: a full and an aborted download, a buffered one, a signed URL, two uploads. */
+async function transferOnce(
+  storage: StorageService,
+  signed: SignedUrlService,
+  iteration: number,
+): Promise<void> {
+  const key = `soak/${String(iteration % 20)}.bin`
+  await storage.upload({
+    key,
+    body: Buffer.alloc(2 * MB, iteration % 256),
+    contentType: 'application/octet-stream',
+  })
+  const full = await storage.download({ key })
+  for await (const chunk of full.stream) {
+    void chunk
+  }
+  const partial = await storage.download({ key })
+  destroyStream(partial.stream)
+  await storage.downloadBuffer({ key })
+  await signed.getDownloadUrl({ key })
+  await storage.upload({
+    key: `soak/multi-${String(iteration % 5)}.bin`,
+    body: Readable.from(Array.from({ length: 6 }, () => Buffer.alloc(MB))),
+    contentType: 'application/octet-stream',
+  })
 }
 
 function median(values: number[]): number {
@@ -64,53 +106,40 @@ describeSoak('Storage E2E — soak', () => {
     await minio.container.stop()
   })
 
-  it('keeps heap and open sockets flat under sustained transfers', async () => {
-    const storage = moduleRef.get(StorageService)
-    const signed = moduleRef.get(SignedUrlService)
-    const samples: Sample[] = []
-    const started = Date.now()
-    let nextSample = started
-    let iterations = 0
+  it(
+    'keeps heap and open sockets flat under sustained transfers',
+    async () => {
+      const storage = moduleRef.get(StorageService)
+      const signed = moduleRef.get(SignedUrlService)
+      const samples: Sample[] = []
+      const started = Date.now()
+      let nextSample = started
+      let iterations = 0
 
-    while (Date.now() - started < SOAK_MS) {
-      const key = `soak/${String(iterations % 20)}.bin`
-      await storage.upload({ key, body: Buffer.alloc(2 * MB, iterations % 256), contentType: 'application/octet-stream' })
-      const full = await storage.download({ key })
-      for await (const chunk of full.stream) {
-        void chunk
+      while (Date.now() - started < SOAK_MS) {
+        await transferOnce(storage, signed, iterations)
+        iterations += 1
+
+        if (Date.now() >= nextSample) {
+          nextSample += SAMPLE_MS
+          samples.push(takeSample(started))
+        }
       }
-      const partial = await storage.download({ key })
-      destroyStream(partial.stream)
-      await storage.downloadBuffer({ key })
-      await signed.getDownloadUrl({ key })
-      await storage.upload({
-        key: `soak/multi-${String(iterations % 5)}.bin`,
-        body: Readable.from(Array.from({ length: 6 }, () => Buffer.alloc(MB))),
-        contentType: 'application/octet-stream',
-      })
-      iterations += 1
 
-      if (Date.now() >= nextSample) {
-        nextSample += SAMPLE_MS
-        global.gc?.()
-        const mem = process.memoryUsage()
-        samples.push({
-          at: Math.round((Date.now() - started) / 1000),
-          heapMb: Math.round(mem.heapUsed / MB),
-          rssMb: Math.round(mem.rss / MB),
-          sockets: openSockets(),
-        })
-      }
-    }
+      reportSamples(iterations, samples)
 
-    console.log(`SOAK iterations=${String(iterations)} samples=\n${samples.map((s) => JSON.stringify(s)).join('\n')}`)
-
-    // Warm-up is the first third; compare the first and last five samples after it.
-    const steady = samples.slice(Math.floor(samples.length / 3))
-    expect(steady.length).toBeGreaterThanOrEqual(6)
-    const head = steady.slice(0, 5)
-    const tail = steady.slice(-5)
-    expect(median(tail.map((s) => s.heapMb))).toBeLessThanOrEqual(median(head.map((s) => s.heapMb)) * 1.25 + 10)
-    expect(median(tail.map((s) => s.sockets))).toBeLessThanOrEqual(median(head.map((s) => s.sockets)) + 2)
-  }, SOAK_MS + 120_000)
+      // Warm-up is the first third; compare the first and last five samples after it.
+      const steady = samples.slice(Math.floor(samples.length / 3))
+      expect(steady.length).toBeGreaterThanOrEqual(6)
+      const head = steady.slice(0, 5)
+      const tail = steady.slice(-5)
+      expect(median(tail.map((s) => s.heapMb))).toBeLessThanOrEqual(
+        median(head.map((s) => s.heapMb)) * 1.25 + 10,
+      )
+      expect(median(tail.map((s) => s.sockets))).toBeLessThanOrEqual(
+        median(head.map((s) => s.sockets)) + 2,
+      )
+    },
+    SOAK_MS + 120_000,
+  )
 })
