@@ -5,6 +5,7 @@
  */
 import { Logger } from '@nestjs/common'
 import { SourceIdleError } from '../utils/idle-timeout'
+import { SizeLimitError } from '../utils/size-limit'
 import { mapMultipartError } from './multipart-error-mapper'
 
 function messageOf(error: { getResponse(): unknown }): string | undefined {
@@ -141,10 +142,13 @@ describe('mapMultipartError', () => {
       expect(warn).not.toHaveBeenCalled()
     })
 
-    it('logs nothing for an idle source or a source that is too long', () => {
+    it.each([
+      ['an idle source', new SourceIdleError(250)],
+      ['a source that is too long', new SizeLimitError(1024, 'declared')],
+    ])('logs nothing for %s', (_label, failure) => {
       const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
-      mapMultipartError(new SourceIdleError(250), { key: 'k', bucket: 'b' })
+      mapMultipartError(failure, { key: 'k', bucket: 'b' })
 
       expect(warn).not.toHaveBeenCalled()
     })

@@ -28,6 +28,52 @@ function openSockets(): number {
   return process.getActiveResourcesInfo().filter((name) => name === 'TCPSocketWrap').length
 }
 
+/** Heap, resident memory and open sockets now, taken after a collection when `--expose-gc` is on. */
+function takeSample(startedAt: number): Sample {
+  global.gc?.()
+  const mem = process.memoryUsage()
+  return {
+    at: Math.round((Date.now() - startedAt) / 1000),
+    heapMb: Math.round(mem.heapUsed / MB),
+    rssMb: Math.round(mem.rss / MB),
+    sockets: openSockets(),
+  }
+}
+
+/** Written straight to stderr, so the table is printed when the test ends. */
+function reportSamples(iterations: number, samples: Sample[]): void {
+  process.stderr.write(
+    `SOAK iterations=${String(iterations)} samples=\n${samples.map((s) => JSON.stringify(s)).join('\n')}\n`,
+  )
+}
+
+/** One round of the mix under test: a full and an aborted download, a buffered one, a signed URL, two uploads. */
+async function transferOnce(
+  storage: StorageService,
+  signed: SignedUrlService,
+  iteration: number,
+): Promise<void> {
+  const key = `soak/${String(iteration % 20)}.bin`
+  await storage.upload({
+    key,
+    body: Buffer.alloc(2 * MB, iteration % 256),
+    contentType: 'application/octet-stream',
+  })
+  const full = await storage.download({ key })
+  for await (const chunk of full.stream) {
+    void chunk
+  }
+  const partial = await storage.download({ key })
+  destroyStream(partial.stream)
+  await storage.downloadBuffer({ key })
+  await signed.getDownloadUrl({ key })
+  await storage.upload({
+    key: `soak/multi-${String(iteration % 5)}.bin`,
+    body: Readable.from(Array.from({ length: 6 }, () => Buffer.alloc(MB))),
+    contentType: 'application/octet-stream',
+  })
+}
+
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b)
   return sorted[Math.floor(sorted.length / 2)] ?? 0
@@ -71,44 +117,16 @@ describeSoak('Storage E2E — soak', () => {
       let iterations = 0
 
       while (Date.now() - started < SOAK_MS) {
-        const key = `soak/${String(iterations % 20)}.bin`
-        await storage.upload({
-          key,
-          body: Buffer.alloc(2 * MB, iterations % 256),
-          contentType: 'application/octet-stream',
-        })
-        const full = await storage.download({ key })
-        for await (const chunk of full.stream) {
-          void chunk
-        }
-        const partial = await storage.download({ key })
-        destroyStream(partial.stream)
-        await storage.downloadBuffer({ key })
-        await signed.getDownloadUrl({ key })
-        await storage.upload({
-          key: `soak/multi-${String(iterations % 5)}.bin`,
-          body: Readable.from(Array.from({ length: 6 }, () => Buffer.alloc(MB))),
-          contentType: 'application/octet-stream',
-        })
+        await transferOnce(storage, signed, iterations)
         iterations += 1
 
         if (Date.now() >= nextSample) {
           nextSample += SAMPLE_MS
-          global.gc?.()
-          const mem = process.memoryUsage()
-          samples.push({
-            at: Math.round((Date.now() - started) / 1000),
-            heapMb: Math.round(mem.heapUsed / MB),
-            rssMb: Math.round(mem.rss / MB),
-            sockets: openSockets(),
-          })
+          samples.push(takeSample(started))
         }
       }
 
-      // Written straight to stderr, so the table is printed when the test ends.
-      process.stderr.write(
-        `SOAK iterations=${String(iterations)} samples=\n${samples.map((s) => JSON.stringify(s)).join('\n')}\n`,
-      )
+      reportSamples(iterations, samples)
 
       // Warm-up is the first third; compare the first and last five samples after it.
       const steady = samples.slice(Math.floor(samples.length / 3))
