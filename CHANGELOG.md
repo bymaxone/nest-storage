@@ -13,6 +13,18 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Changed
+
+- **The scanner's free-form `details` no longer reaches a client.** `STORAGE_SCAN_INFECTED` and
+  `STORAGE_SCAN_INCONCLUSIVE` copied the `details` an `IFileScanner` returned into the body of the error,
+  and that text is the scanner's own: an engine message, a quarantine path, an internal address. The body
+  now carries the `engine` and, for an infected object, the `threat` name, and nothing else the scanner
+  wrote. The `details` go to the warning log, written as one escaped, truncated token; a
+  rejected inconclusive result is now logged too.
+
+  **Apply to a derived backend:** a host that read `details.details` from either error must read the log
+  line instead, or put what it needs in `threat` or `engine`. The other fields of the body are unchanged.
+
 ## [1.1.15] - 2026-11-17
 
 ### Fixed

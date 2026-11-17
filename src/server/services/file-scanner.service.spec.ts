@@ -140,6 +140,95 @@ describe('FileScannerService', () => {
       expect(resp.error.details.threat).toBe('Trojan.X')
     })
 
+    describe('the scanner\'s free-form details', () => {
+      // `details` is the scanner's own text: it reaches the operator's log, never a client's response body.
+      const SECRET = 'host-path=/srv/scan/quarantine/7f3a token=SECRETEXAMPLE'
+
+      function bodyOf(err: unknown): string {
+        return JSON.stringify((err as StorageException).getResponse())
+      }
+
+      it.each([
+        ['infected', { status: 'infected', engine: 'clamav', threat: 'Trojan.X', details: { note: SECRET } }, false],
+        ['unknown', { status: 'unknown', engine: 'clamav', details: { note: SECRET } }, true],
+      ] as const)('keeps it out of the body of a %s rejection and logs it once', async (_label, result, rejectOnUnknown) => {
+        const impl = makeMockScanner({ ...result })
+        const service = await buildService(buildOptions({ impl, rejectOnUnknown }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect(bodyOf(err)).not.toContain('SECRETEXAMPLE')
+        expect((err as StorageException).getResponse()).toMatchObject({ error: { details: { engine: 'clamav' } } })
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('SECRETEXAMPLE'))
+        warnSpy.mockRestore()
+      })
+
+      it('keeps the threat name in the body of an infected rejection', async () => {
+        const impl = makeMockScanner({ status: 'infected', engine: 'clamav', threat: 'Trojan.X', details: { note: SECRET } })
+        const service = await buildService(buildOptions({ impl }), impl)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect((err as StorageException).getResponse()).toMatchObject({ error: { details: { threat: 'Trojan.X' } } })
+      })
+
+      it('writes it in a log line as one escaped token, cut at 300 characters', async () => {
+        const impl = makeMockScanner({ status: 'infected', engine: 'clamav', details: { note: `a\nb${'x'.repeat(400)}` } })
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        const line = String(warnSpy.mock.calls[0]?.[0])
+        expect(line).not.toContain('\n')
+        expect(line).toContain('details="{\\"note\\":\\"a\\\\nb')
+        // The first 300 characters of the JSON text are kept: 13 of them are the key, the quote and `a\\nb`.
+        expect(line).toContain('x'.repeat(287))
+        expect(line).not.toContain('x'.repeat(288))
+        warnSpy.mockRestore()
+      })
+
+      it('does not fail the rejection when the details cannot be serialised', async () => {
+        const circular: Record<string, unknown> = {}
+        circular.self = circular
+        const impl = makeMockScanner({ status: 'infected', engine: 'clamav', details: circular })
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED)
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[unserialisable]'))
+        warnSpy.mockRestore()
+      })
+
+      it('still rejects when the details serialise to nothing', async () => {
+        // JSON.stringify returns undefined, without throwing, for an object whose toJSON() returns undefined.
+        const impl = makeMockScanner({ status: 'infected', engine: 'clamav', details: { toJSON: () => undefined } })
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED)
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[unserialisable]'))
+        warnSpy.mockRestore()
+      })
+
+      it('adds nothing to the log line when the scanner sent none', async () => {
+        const impl = makeMockScanner({ status: 'infected', engine: 'clamav', threat: 'Trojan.X' })
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        expect(warnSpy.mock.calls[0]?.[0]).toBe('Infected file detected: key="test/file.png" engine="clamav" threat="Trojan.X"')
+        warnSpy.mockRestore()
+      })
+    })
+
     it('returns a "clean" result even when rejectOnUnknown is true (does not enter the unknown branch)', async () => {
       // The `status === 'unknown'` guard must gate the reject path: a clean result with
       // rejectOnUnknown enabled must still pass, never throw SCAN_INCONCLUSIVE.

@@ -12,6 +12,35 @@ import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { logValue } from '../utils/log-value'
 
+/** What the log line holds when the details cannot be turned into text. */
+const UNSERIALISABLE = '[unserialisable]'
+
+/** The most characters of a scanner's own `details` a log line carries. */
+const MAX_SCANNER_DETAILS_LENGTH = 300
+
+/** `JSON.stringify` as it behaves: `undefined`, not a string, for a value whose `toJSON()` returns nothing. */
+function toJson(value: unknown): string | undefined {
+  return JSON.stringify(value)
+}
+
+/**
+ * What the scanner put in `details`, as a log suffix. The text is the scanner's, so it never reaches
+ * a response body: a client is told the engine and the threat name and nothing else.
+ *
+ * @param details - The scanner's free-form `details`.
+ * @returns ` details=<escaped, cut text>`, or an empty string when there are none.
+ */
+function scannerDetailsForLog(details: Record<string, unknown> | undefined): string {
+  if (details === undefined) return ''
+  let text: string
+  try {
+    text = toJson(details) ?? UNSERIALISABLE
+  } catch {
+    text = UNSERIALISABLE
+  }
+  return ` details=${logValue(text.slice(0, MAX_SCANNER_DETAILS_LENGTH))}`
+}
+
 /** Input shape for a scan request. */
 interface ScanInput {
   mode: 'pre-upload' | 'post-upload'
@@ -77,19 +106,18 @@ export class FileScannerService {
     const result = await this.scanner.scan(input)
 
     if (result.status === 'infected') {
-      this.logger.warn(`Infected file detected: key=${logValue(input.key)} engine=${logValue(result.engine)} threat=${logValue(result.threat ?? 'unknown')}`)
+      this.logger.warn(`Infected file detected: key=${logValue(input.key)} engine=${logValue(result.engine)} threat=${logValue(result.threat ?? 'unknown')}${scannerDetailsForLog(result.details)}`)
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED, undefined, {
         engine: result.engine,
         threat: result.threat,
-        details: result.details,
       })
     }
 
     if (result.status === 'unknown') {
       if (this.options.scanner?.rejectOnUnknown) {
+        this.logger.warn(`Inconclusive scan result rejected: key=${logValue(input.key)} engine=${logValue(result.engine)}${scannerDetailsForLog(result.details)}`)
         throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INCONCLUSIVE, undefined, {
           engine: result.engine,
-          details: result.details,
         })
       }
       this.logger.warn(`Inconclusive scan result accepted: key=${logValue(input.key)} engine=${logValue(result.engine)}`)
