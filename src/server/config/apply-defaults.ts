@@ -120,7 +120,7 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     signedUrls: resolveSignedUrls(options.signedUrls),
     multipart: { ...DEFAULT_MULTIPART, ...definedOnly(options.multipart, MULTIPART_KEYS) },
     ...(options.validation !== undefined ? { validation: definedOnly(options.validation, VALIDATION_KEYS) } : {}),
-    // `null` is no scanner, as `undefined` is: a group is an object or it is not configured.
+    // A group is an object or it is not configured. `forRoot` refuses a `null` scanner before this runs; if one reaches here it adds no scanner.
     ...(options.scanner
       ? { scanner: definedOnly(options.scanner, SCANNER_KEYS) as NonNullable<BymaxStorageModuleOptions['scanner']> }
       : {}),
