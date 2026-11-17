@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.16] - 2026-11-17
+
 ### Changed
 
 - **The scanner's free-form `details` no longer reaches a client.** `STORAGE_SCAN_INFECTED` and
@@ -24,6 +26,13 @@ note on each entry is the compatibility contract — read it, not the number.
 
   **Apply to a derived backend:** a host that read `details.details` from either error must read the log
   line instead, or put what it needs in `threat` or `engine`. The other fields of the body are unchanged.
+
+- **The `abortSignal` option documentation states what a body read ends with.** It said a `download()` stream
+  errors with the raw `AbortError` when `bodyIdleTimeoutMs` is `0` and left out `downloadBuffer()`. It now says
+  that `downloadBuffer()` and a guarded `download()` stream fail `STORAGE_REQUEST_ABORTED`, and that with the
+  guard off a `download()` stream is the SDK's own and errors with the SDK's error. The behaviour is unchanged.
+
+  **Apply to a derived backend:** nothing.
 
 ## [1.1.15] - 2026-11-17
 
@@ -895,4 +904,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.13]: https://github.com/bymaxone/nest-storage/compare/v1.1.12...v1.1.13
 [1.1.14]: https://github.com/bymaxone/nest-storage/compare/v1.1.13...v1.1.14
 [1.1.15]: https://github.com/bymaxone/nest-storage/compare/v1.1.14...v1.1.15
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.15...HEAD
+[1.1.16]: https://github.com/bymaxone/nest-storage/compare/v1.1.15...v1.1.16
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.16...HEAD
