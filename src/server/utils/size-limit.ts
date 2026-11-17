@@ -79,8 +79,8 @@ export function withExactSize(source: NodeJS.ReadableStream, declaredBytes: numb
   let seen = 0
   let held: Buffer = Buffer.alloc(0)
   const guard = new Transform({
-    transform(chunk: Buffer | string, _encoding, callback) {
-      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    // `decodeStrings` is on, so a chunk that arrives as a string has already become a `Buffer`.
+    transform(bytes: Buffer, _encoding, callback) {
       seen += bytes.byteLength
       if (seen > declaredBytes) {
         callback(new SizeLimitError(declaredBytes, 'declared'))
