@@ -50,9 +50,7 @@ describe('describeProviderFailure', () => {
     ['AWSAccessKeyId=AKIAEXAMPLE ok', 'AWSAccessKeyId=[redacted] ok'],
     ['Signature=zzz"', 'Signature=[redacted]"'],
   ])('masks a secret in the message (%s)', (message, masked) => {
-    expect(describeProviderFailure({ message })).toContain(
-      `message="${masked.replace(/"/g, '\\"')}"`,
-    )
+    expect(describeProviderFailure({ message })).toContain(`message=${JSON.stringify(masked)}`)
   })
 
   it('leaves no part of a secret when the cut falls inside it', () => {
