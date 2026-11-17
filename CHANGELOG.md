@@ -849,4 +849,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.10]: https://github.com/bymaxone/nest-storage/compare/v1.1.9...v1.1.10
 [1.1.11]: https://github.com/bymaxone/nest-storage/compare/v1.1.10...v1.1.11
 [1.1.12]: https://github.com/bymaxone/nest-storage/compare/v1.1.11...v1.1.12
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.12...HEAD
+[1.1.13]: https://github.com/bymaxone/nest-storage/compare/v1.1.12...v1.1.13
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.13...HEAD
