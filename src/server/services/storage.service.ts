@@ -441,7 +441,7 @@ export class StorageService {
       const stream = guardDownloadBody(
         response.Body as unknown as NodeJS.ReadableStream,
         this.options.bodyIdleTimeoutMs,
-        { key: finalKey, bucket },
+        context,
         options.abortSignal,
       )
       return { stream, metadata: this.toObjectMetadata(response, finalKey, bucket) }
@@ -467,7 +467,8 @@ export class StorageService {
   ): Promise<{ buffer: Buffer; metadata: ObjectMetadata }> {
     assertMaxBytes(options.maxBytes)
     const { stream, metadata } = await this.download(options)
-    return { buffer: await readDownloadBody(stream, metadata, options.maxBytes), metadata }
+    const buffer = await readDownloadBody(stream, metadata, options.maxBytes, options.abortSignal)
+    return { buffer, metadata }
   }
 
   /**

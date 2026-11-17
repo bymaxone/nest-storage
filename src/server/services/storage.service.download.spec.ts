@@ -17,7 +17,9 @@ import type { FileScannerService } from './file-scanner.service'
 
 function makePassthroughValidation(): ValidationService {
   return {
-    validate: jest.fn().mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
+    validate: jest
+      .fn()
+      .mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
   } as unknown as ValidationService
 }
 
@@ -72,8 +74,8 @@ function firstInput(send: jest.Mock): Record<string, unknown> {
 /** Extracts the `error.details` map from a rejected StorageException promise. */
 function detailsOf(err: unknown): Record<string, unknown> {
   return (
-    ((err as StorageException).getResponse() as { error: { details?: Record<string, unknown> } }).error
-      .details ?? {}
+    ((err as StorageException).getResponse() as { error: { details?: Record<string, unknown> } })
+      .error.details ?? {}
   )
 }
 
@@ -158,8 +160,8 @@ describe('StorageService — download', () => {
     expect(metadata.size).toBe(2)
   })
 
-  it('passes a source failure through unchanged, without calling it a stall', async () => {
-    // Only silence is mapped to STORAGE_TIMEOUT; a body that errors keeps its own error.
+  it('maps a source failure as a provider failure, without calling it a stall', async () => {
+    // Only silence is mapped to STORAGE_TIMEOUT; a body that errors is a failure of the provider.
     const { service, send } = makeService()
     send.mockResolvedValue({
       Body: new Readable({
@@ -170,9 +172,13 @@ describe('StorageService — download', () => {
       ContentLength: 2,
     })
 
-    const error: unknown = await service.downloadBuffer({ key: 'a.bin' }).catch((err: unknown) => err)
+    const error: unknown = await service
+      .downloadBuffer({ key: 'a.bin' })
+      .catch((err: unknown) => err)
 
-    expect(error).toMatchObject({ message: 'connection reset' })
-    expect((error as { code?: string }).code).toBeUndefined()
+    expect(error).toMatchObject({ code: 'STORAGE_PROVIDER_ERROR' })
+    expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).not.toContain(
+      'connection reset',
+    )
   })
 })

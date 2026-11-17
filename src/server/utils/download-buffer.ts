@@ -8,6 +8,7 @@ import { StorageException } from '../errors/storage-exception'
 import { sizeLimitException } from '../errors/size-limit-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import type { ObjectMetadata } from '../../shared/types/storage-types'
+import { mapBodyReadFailure } from './download-body'
 import { destroyStream, readStream, readStreamUpTo } from './stream-utils'
 
 /**
@@ -18,25 +19,18 @@ import { destroyStream, readStream, readStreamUpTo } from './stream-utils'
  */
 export function assertMaxBytes(maxBytes: number | undefined): void {
   // Stryker disable next-line ConditionalExpression: `Number.isInteger` is false for every value that is not a number, so the `typeof` test refuses nothing the next one does not (equivalent).
-  if (maxBytes !== undefined && (typeof maxBytes !== 'number' || !Number.isInteger(maxBytes) || maxBytes < 1)) {
+  if (
+    maxBytes !== undefined &&
+    (typeof maxBytes !== 'number' || !Number.isInteger(maxBytes) || maxBytes < 1)
+  ) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
       reason: 'maxBytes must be an integer >= 1',
     })
   }
 }
 
-/**
- * Reads a download body into one `Buffer`, holding at most `maxBytes` of it when a limit is given.
- * The body is released whenever the limit is crossed.
- *
- * @param stream - The (idle-guarded) download body.
- * @param metadata - The object's metadata, whose size is the `Content-Length` when there was one.
- * @param maxBytes - The most bytes to hold; `undefined` buffers the whole body.
- * @returns The body.
- * @throws StorageException `STORAGE_SIZE_EXCEEDED` when the object, by its header or by its bytes,
- *   is larger than `maxBytes`.
- */
-export async function readDownloadBody(
+/** Reads the body, or rejects with a size-limit error. */
+async function readBody(
   stream: NodeJS.ReadableStream,
   metadata: ObjectMetadata,
   maxBytes: number | undefined,
@@ -54,4 +48,34 @@ export async function readDownloadBody(
     throw sizeLimitException(maxBytes, 'max', context)
   }
   return buffer
+}
+
+/**
+ * Reads a download body into one `Buffer`, holding at most `maxBytes` of it when a limit is given.
+ * The body is released whenever the limit is crossed.
+ *
+ * @param stream - The (idle-guarded) download body.
+ * @param metadata - The object's metadata, whose size is the `Content-Length` when there was one.
+ * @param maxBytes - The most bytes to hold; `undefined` buffers the whole body.
+ * @param signal - The caller's `abortSignal`, to tell a cancelled read from a failed one.
+ * @returns The body.
+ * @throws StorageException `STORAGE_SIZE_EXCEEDED` when the object, by its header or by its bytes,
+ *   is larger than `maxBytes`; `STORAGE_REQUEST_ABORTED` when the signal aborted; otherwise a failure of
+ *   the body (a reset connection) as a failure of the provider, whether or not the idle guard is on.
+ */
+export async function readDownloadBody(
+  stream: NodeJS.ReadableStream,
+  metadata: ObjectMetadata,
+  maxBytes: number | undefined,
+  signal?: AbortSignal,
+): Promise<Buffer> {
+  try {
+    return await readBody(stream, metadata, maxBytes)
+  } catch (err) {
+    throw mapBodyReadFailure(err, signal, {
+      key: metadata.key,
+      bucket: metadata.bucket,
+      op: 'downloadBuffer',
+    })
+  }
 }

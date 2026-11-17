@@ -241,7 +241,7 @@ Options accepted by `forRoot` and `forRootAsync`:
 
 **`uploadIdleTimeoutMs`** covers what `requestTimeoutMs` cannot: a multipart upload waiting for the next bytes of a stream has no request in flight, so a source that stops delivering would hold the upload open on the provider indefinitely. After this much silence the upload is aborted (the provider is sent `AbortMultipartUpload`), your stream is destroyed and `upload()` rejects with `STORAGE_TIMEOUT` and `details.phase` set to `'source-idle'`. The clock restarts on every chunk and runs only while the library is waiting for data, so a slow but live source succeeds and a slow provider does not trip it. It defaults to the value of `requestTimeoutMs`; `0` turns it off. It applies only to a stream on the multipart path: a single-shot upload is bounded by `requestTimeoutMs`, and a `Buffer` cannot stall.
 
-**`bodyIdleTimeoutMs`** covers the other direction: `requestTimeoutMs` ends when the response headers arrive, so a provider that stops sending in the middle of a download would leave the stream, its connection and the caller waiting without limit. After this much silence while a read is pending, the stream fails with `STORAGE_TIMEOUT` and `details.phase` set to `'body-idle'`, and the connection is released. The clock runs only while the caller is waiting for data, so a consumer that is slow to read, for example a response piped to a slow client, never trips it, and every chunk restarts it. It defaults to the value of `requestTimeoutMs`; `0` turns it off. It applies to `download` and `downloadBuffer`.
+**`bodyIdleTimeoutMs`** covers the other direction: `requestTimeoutMs` ends when the response headers arrive, so a provider that stops sending in the middle of a download would leave the stream, its connection and the caller waiting without limit. After this much silence while a read is pending, the stream fails with `STORAGE_TIMEOUT` and `details.phase` set to `'body-idle'`, and the connection is released. The clock runs only while the caller is waiting for data, so a consumer that is slow to read, for example a response piped to a slow client, never trips it, and every chunk restarts it. It defaults to the value of `requestTimeoutMs`; `0` turns it off. It applies to `download` and `downloadBuffer`. A body that fails after its headers arrived (a reset connection) ends as a `StorageException` like any other failure of the provider (`STORAGE_PROVIDER_ERROR`, **503** when the connection was cut); with the guard off only `download()` is the exception, its stream being the SDK's own and so erroring with the SDK's own error, while `downloadBuffer()` is mapped in both modes.
 
 
 [aws-presigned-expiry]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html
@@ -444,8 +444,9 @@ await this.storage.upload({
   same error and `details.stored: true`: the object is already stored. The scan carries on, and an
   object it finds infected is still deleted.
 - A **download** body that is being read when the signal aborts errors as `STORAGE_REQUEST_ABORTED`
-  while the idle guard is on (the default `bodyIdleTimeoutMs`); with `bodyIdleTimeoutMs: 0` it
-  errors as the raw `AbortError`.
+  while the idle guard is on (the default `bodyIdleTimeoutMs`), and `downloadBuffer()` rejects with it in
+  both modes. With `bodyIdleTimeoutMs: 0` the stream `download()` returns is the SDK's own and errors with
+  the SDK's own error, whichever it is where the abort lands.
 - The library keeps no listener on your signal after a call, so one signal can be reused across many
   calls.
 - `copy`, `deleteMany` and the signed-URL methods take no `abortSignal`.

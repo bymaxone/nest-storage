@@ -13,6 +13,21 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A download body that fails after its headers no longer reaches the caller as the SDK's raw error.** A
+  connection reset in the middle of a body (`ECONNRESET`, message `aborted`) passed through unmapped: a
+  caller that caught only `StorageException` missed it, and a Nest handler answered 500 for it. With the idle
+  guard on (the default), a failure of the body is now mapped as any other failure of the provider
+  (`STORAGE_PROVIDER_ERROR`, **503** for a cut connection, with its fixed `reason`), and `downloadBuffer()`
+  maps it in both modes, with `STORAGE_REQUEST_ABORTED` when the caller's signal aborted. Nothing a client
+  receives carries the driver's text.
+
+  **Apply to a derived backend:** a host that caught the raw `ECONNRESET` from `download()` or
+  `downloadBuffer()` must catch `StorageException` instead (the status is 503 for a reset). With
+  `bodyIdleTimeoutMs: 0`, the stream `download()` returns is still the SDK's own and still errors with the
+  SDK's error, as documented; only `downloadBuffer()` changes there.
+
 ## [1.1.14] - 2026-11-16
 
 ### Changed

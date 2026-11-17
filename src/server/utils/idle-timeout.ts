@@ -16,6 +16,14 @@ export class SourceIdleError extends Error {
   }
 }
 
+/**
+ * Whether a value is an error, also one from another realm (a `vm` context, a test sandbox), which
+ * `instanceof Error` is not true for: re-wrapping such an error would drop its `code`.
+ */
+function isError(value: unknown): value is Error {
+  return Object.prototype.toString.call(value) === '[object Error]'
+}
+
 /** Waits for `next`, rejecting with {@link SourceIdleError} if it does not settle in `idleMs`. */
 function withinIdleTime<T>(next: Promise<T>, idleMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -29,7 +37,7 @@ function withinIdleTime<T>(next: Promise<T>, idleMs: number): Promise<T> {
       },
       (error: unknown) => {
         clearTimeout(timer)
-        reject(error instanceof Error ? error : new Error(describeError(error)))
+        reject(isError(error) ? error : new Error(describeError(error)))
       },
     )
   })

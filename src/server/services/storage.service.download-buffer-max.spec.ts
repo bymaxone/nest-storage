@@ -129,16 +129,19 @@ describe('downloadBuffer maxBytes', () => {
     expect(body.destroyed).toBe(true)
   })
 
-  it.each([4096, 5000])('returns a body that fits in maxBytes %i, including one of exactly the limit', async (limit) => {
-    // The limit itself is allowed.
-    const { service, send } = makeService()
-    const { body } = countedBody(4, 1024)
-    send.mockResolvedValue({ Body: body, ContentLength: 4096 })
+  it.each([4096, 5000])(
+    'returns a body that fits in maxBytes %i, including one of exactly the limit',
+    async (limit) => {
+      // The limit itself is allowed.
+      const { service, send } = makeService()
+      const { body } = countedBody(4, 1024)
+      send.mockResolvedValue({ Body: body, ContentLength: 4096 })
 
-    const { buffer } = await service.downloadBuffer({ key: 'ok.bin', maxBytes: limit })
+      const { buffer } = await service.downloadBuffer({ key: 'ok.bin', maxBytes: limit })
 
-    expect(buffer.length).toBe(4096)
-  })
+      expect(buffer.length).toBe(4096)
+    },
+  )
 
   it('buffers without a limit when maxBytes is not given', async () => {
     // Without maxBytes the whole body is buffered, whatever its size.
@@ -163,11 +166,15 @@ describe('downloadBuffer maxBytes', () => {
         return Promise.resolve(result)
       }
 
-      const error: unknown = await callUntyped({ key: 'a.bin', maxBytes }).catch((err: unknown) => err)
+      const error: unknown = await callUntyped({ key: 'a.bin', maxBytes }).catch(
+        (err: unknown) => err,
+      )
 
       expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
       expect(error).toBeInstanceOf(StorageException)
-      expect(JSON.stringify(error instanceof StorageException ? error.getResponse() : {})).toContain('maxBytes')
+      expect(
+        JSON.stringify(error instanceof StorageException ? error.getResponse() : {}),
+      ).toContain('maxBytes')
       expect(send).not.toHaveBeenCalled()
     },
   )
@@ -183,8 +190,8 @@ describe('downloadBuffer maxBytes', () => {
     expect(buffer.length).toBe(4096)
   })
 
-  it('passes a failure of the body mid-read through unchanged and releases it', async () => {
-    // A connection that drops while counting is the provider's error, not a size error.
+  it('maps a failure of the body mid-read as a provider failure and releases it', async () => {
+    // A connection that drops while counting is a failure of the provider, not a size error.
     const { service, send } = makeService()
     let pulled = 0
     const failure = new Error('connection reset')
@@ -204,7 +211,8 @@ describe('downloadBuffer maxBytes', () => {
       .downloadBuffer({ key: 'drop.bin', maxBytes: 4096 })
       .catch((err: unknown) => err)
 
-    expect(error).toBe(failure)
+    expect(error).toMatchObject({ code: 'STORAGE_PROVIDER_ERROR' })
+    expect((error as { cause?: unknown }).cause).toBeUndefined()
     expect(body.destroyed).toBe(true)
   })
 

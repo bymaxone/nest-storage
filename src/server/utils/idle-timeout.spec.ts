@@ -4,6 +4,7 @@
  * @layer server/utils
  */
 import { PassThrough, Readable } from 'node:stream'
+import { runInNewContext } from 'node:vm'
 import { guardIdleBody, SourceIdleError, withIdleTimeout } from './idle-timeout'
 
 async function collect(stream: AsyncIterable<unknown>): Promise<string> {
@@ -104,6 +105,27 @@ describe('withIdleTimeout', () => {
     source.destroy(new Error('boom'))
 
     await expect(failure).rejects.toThrow('boom')
+  })
+
+  it('hands on an error from another realm as it is, with its code', async () => {
+    // `instanceof Error` is false for it, and re-wrapping would drop the code a classifier reads.
+    const foreign = runInNewContext(
+      "Object.assign(new Error('aborted'), { code: 'ECONNRESET' })",
+    ) as Error
+    expect(foreign instanceof Error).toBe(false)
+    const source = new PassThrough()
+    const failure = collect(withIdleTimeout(source, 1000))
+    source.destroy(foreign)
+
+    await expect(failure).rejects.toBe(foreign)
+  })
+
+  it('turns a rejection that is not an error into one, with its description', async () => {
+    const source = new PassThrough()
+    const failure = collect(withIdleTimeout(source, 1000))
+    source.destroy('plain text' as unknown as Error)
+
+    await expect(failure).rejects.toThrow('plain text')
   })
 
   it('keeps an error from crashing the process when nothing reads the wrapper', async () => {
