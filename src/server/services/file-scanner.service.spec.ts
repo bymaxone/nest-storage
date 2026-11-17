@@ -184,7 +184,9 @@ describe('FileScannerService', () => {
         const line = String(warnSpy.mock.calls[0]?.[0])
         expect(line).not.toContain('\n')
         expect(line).toContain('details="{\\"note\\":\\"a\\\\nb')
-        expect(line.length).toBeLessThan(600)
+        // The first 300 characters of the JSON text are kept: 13 of them are the key, the quote and `a\\nb`.
+        expect(line).toContain('x'.repeat(287))
+        expect(line).not.toContain('x'.repeat(288))
         warnSpy.mockRestore()
       })
 
@@ -209,7 +211,7 @@ describe('FileScannerService', () => {
 
         await service.scan(SCAN_INPUT).catch(() => null)
 
-        expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('details=')
+        expect(warnSpy.mock.calls[0]?.[0]).toBe('Infected file detected: key="test/file.png" engine="clamav" threat="Trojan.X"')
         warnSpy.mockRestore()
       })
     })
