@@ -57,6 +57,47 @@ note on each entry is the compatibility contract — read it, not the number.
   getter throws left the wrapped read pending for good, with its timer already cleared. It is now treated as not
   being an error, and the read ends with one.
 
+- **Every option is read once.** Validation and resolution each read the options by property name, so a getter that
+  returned a valid value for the check and a hostile one for the use (`scanner.mode` that answers `'pre-upload'`
+  first and `'preupload'` after, a size limit that answers a number and then `NaN`) passed the check and was used as
+  the hostile value. `forRoot` and `forRootAsync` now copy each known option, and each key of `credentials`,
+  `signedUrls`, `multipart`, `validation` and `scanner`, into a plain object once; the copy is what is validated and
+  what is resolved. The arrays of `validation` (`mimeWhitelist`, `customValidators`) are copied once as well.
+
+  **Apply to a derived backend:** nothing to change for a plain options object. An options object whose property
+  getters answer differently from one read to the next now gets the first answer everywhere; a key that is not an
+  option is not read at all.
+
+- **A cut of scanner text never leaves half of a surrogate pair, and a scan that times out is logged.** The engine and
+  threat names of a scan result (in the response body and the log), the unrecognised status, the scanner's `details`
+  and the message of a scanner that throws were cut at a fixed length, and a cut between the two halves of an
+  emoji left a lone surrogate in a JSON body or a log line. The cut now drops the whole pair. A scan that outlasts
+  `scanner.timeoutMs` logs one `Scan timed out` warning with the key and the limit; until now only the typed
+  `STORAGE_TIMEOUT` carried it.
+
+  **Apply to a derived backend:** an engine or threat name cut at 200 characters is one character shorter when an
+  emoji sits at the cut; alert rules that matched the absence of a timeout line can match `Scan timed out`.
+
+### Changed
+
+- **Behaviour of 1.1.17 that its notes did not name.** Each is a change from 1.1.16; the `Apply` line says what to do.
+  - **A WHATWG `ReadableStream` body is refused (breaking).** 1.1.16 accepted it and stored it; 1.1.17 and later fail
+    with `STORAGE_VALIDATION_FAILED` (400, `details.field: 'body'`). **Apply:** convert it with
+    `Readable.fromWeb(stream)` before the call.
+  - **A `scanner` that is not an object is refused at boot.** `false`, `0`, `''` and `[]` booted in 1.1.16 and scanned
+    nothing; they fail `forRoot` with `STORAGE_INVALID_CONFIG` (`null` is refused too, see above). **Apply:**
+    omit `scanner` for no scanner.
+  - **`scanner.impl` must be an object with a `scan` function.** A function with a static `scan` (a class passed
+    where an instance belongs) is refused; 1.1.16 accepted it and called the static method. **Apply:** pass an
+    instance, or an object that holds the `scan` function.
+  - **Keys that are not options are dropped from the resolved `signedUrls`, `multipart`, `validation` and `scanner`.**
+    1.1.16 copied them through. **Apply:** keep such values outside the options.
+  - **`validation: null` resolves to an empty `validation`**; 1.1.16 kept the `null`. **Apply:** none; read
+    `resolved.validation` as an object, never as `null`.
+  - **A group that is a class instance is honoured.** A value served from a prototype getter (a config object built
+    as a class) is kept; 1.1.16 copied own properties only and dropped it silently.
+  - **`validation.maxSizeBytes: null` meant "no limit" in 1.1.17**; it is refused from this release (see above).
+
 ## [1.1.17] - 2026-11-17
 
 ### Fixed
