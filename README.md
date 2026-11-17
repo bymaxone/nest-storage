@@ -597,7 +597,7 @@ BymaxStorageModule.forRoot({
 ```
 
 **Streams in pre-upload mode.** A stream can be read once, so in `pre-upload` mode it is first read
-into memory, bounded by `validation.maxSizeBytes`, and the scanner and the upload share that buffer. A `Buffer` or `Uint8Array` body is copied once in this mode, so a change the caller makes to its own array while the scan runs reaches neither (the second copy of the body is held until the upload ends, so a body of up to `validation.maxSizeBytes` takes twice that much memory). The library validates and scans the bytes at call time; do not change a buffer you passed until the call settles. A
+into memory, bounded by `validation.maxSizeBytes`, and the scanner and the upload share that buffer. A `Buffer` or `Uint8Array` body is copied once in this mode, so a change the caller makes to its own array while the scan runs reaches neither (the second copy of the body is held until the upload ends, so the body takes twice its size in memory). The library validates and scans the bytes at call time; do not change a buffer you passed until the call settles. A
 stream longer than the limit is refused with `STORAGE_VALIDATION_FAILED` as soon as it passes it, and
 with no `maxSizeBytes` it is refused with a reason that says to set it or use `post-upload`.
 `post-upload` hands the scanner the key only, no body.
