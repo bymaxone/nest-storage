@@ -34,6 +34,43 @@ export function isNoSuchBucket(err: unknown): boolean {
 }
 
 /**
+ * Maps the answers a caller treats as an outcome and not a failure: a missing object, a conditional
+ * GET that matched, a precondition that failed.
+ *
+ * @param e - The error thrown by the AWS SDK.
+ * @param details - The details every mapped error carries.
+ * @returns The typed exception, or `undefined` when the answer is none of these.
+ */
+function mapAnsweredStatus(
+  e: AwsLikeError,
+  details: Record<string, unknown>,
+): StorageException | undefined {
+  const status = e.$metadata?.httpStatusCode
+  if (e.name === 'NotFound' || status === 404) {
+    return new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND,
+      HttpStatus.NOT_FOUND,
+      details,
+    )
+  }
+  if (status === 304) {
+    return new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_NOT_MODIFIED,
+      HttpStatus.NOT_MODIFIED,
+      details,
+    )
+  }
+  if (status === 412) {
+    return new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_PRECONDITION_FAILED,
+      HttpStatus.PRECONDITION_FAILED,
+      details,
+    )
+  }
+  return undefined
+}
+
+/**
  * Maps an AWS SDK error to a typed `StorageException`.
  *
  * Heuristics:
@@ -71,27 +108,8 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
       details,
     )
   }
-  if (e.name === 'NotFound' || httpStatus === 404) {
-    return new StorageException(
-      STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND,
-      HttpStatus.NOT_FOUND,
-      details,
-    )
-  }
-  if (httpStatus === 304) {
-    return new StorageException(
-      STORAGE_ERROR_CODES.STORAGE_NOT_MODIFIED,
-      HttpStatus.NOT_MODIFIED,
-      details,
-    )
-  }
-  if (httpStatus === 412) {
-    return new StorageException(
-      STORAGE_ERROR_CODES.STORAGE_PRECONDITION_FAILED,
-      HttpStatus.PRECONDITION_FAILED,
-      details,
-    )
-  }
+  const answered = mapAnsweredStatus(e, details)
+  if (answered) return answered
   if (e.name === 'TimeoutError') {
     logProviderFailure(err, context)
     return new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, details)

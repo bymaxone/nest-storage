@@ -16,10 +16,11 @@ export interface DownloadOptions {
   /**
    * Ends the call when it aborts: the request is dropped and the call rejects
    * `STORAGE_REQUEST_ABORTED` with `details.reason` set to the signal's reason name. A signal that is
-   * already aborted makes no request. A body stream already returned errors too: as
-   * `STORAGE_REQUEST_ABORTED` while the idle guard is on (the default `bodyIdleTimeoutMs`), as the
-   * raw `AbortError` when `bodyIdleTimeoutMs` is `0`. The library keeps no listener on the signal
-   * after the call.
+   * already aborted makes no request. It also ends a body that is still being read, in
+   * `downloadBuffer()` and in a `download()` stream while the idle guard is on (the default
+   * `bodyIdleTimeoutMs`): both fail `STORAGE_REQUEST_ABORTED`. With `bodyIdleTimeoutMs` set to `0`,
+   * a `download()` stream is the SDK's own and errors with the SDK's error, which is not a
+   * `StorageException`. The library keeps no listener on the signal after the call.
    */
   abortSignal?: AbortSignal
 }

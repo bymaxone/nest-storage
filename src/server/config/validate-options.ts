@@ -94,6 +94,45 @@ function assertTimerMs(options: Record<string, unknown>, name: string, min: 0 | 
 }
 
 /**
+ * Validates the optional limits, timers and encryption settings.
+ *
+ * @param options - The options object, already known to be an object.
+ * @throws StorageException with code `STORAGE_INVALID_CONFIG`.
+ */
+function assertLimitsAndEncryption(options: Record<string, unknown>): void {
+  const signedUrls = options.signedUrls
+  if (isObject(signedUrls) && typeof signedUrls.maxTtlSeconds === 'number' && signedUrls.maxTtlSeconds <= 0) {
+    throw invalid('signedUrls.maxTtlSeconds must be > 0')
+  }
+  const multipart = options.multipart
+  if (
+    isObject(multipart) &&
+    typeof multipart.partSizeBytes === 'number' &&
+    multipart.partSizeBytes < MIN_PART_SIZE_BYTES
+  ) {
+    throw invalid('multipart.partSizeBytes must be >= 5 MB (S3 hard limit)')
+  }
+  const maxAttempts = options.maxAttempts
+  if (
+    maxAttempts !== undefined &&
+    (typeof maxAttempts !== 'number' || !Number.isInteger(maxAttempts) || maxAttempts < 1)
+  ) {
+    throw invalid('maxAttempts must be an integer >= 1')
+  }
+  assertTimerMs(options, 'requestTimeoutMs', 1)
+  assertTimerMs(options, 'uploadIdleTimeoutMs', 0)
+  assertTimerMs(options, 'bodyIdleTimeoutMs', 0)
+  if (options.serverSideEncryption === 'aws:kms' && !options.kmsKeyId) {
+    throw invalid('kmsKeyId is required when serverSideEncryption === "aws:kms"')
+  }
+  for (const name of ['defaultCacheControl', 'kmsKeyId'] as const) {
+    if (options[name] !== undefined && !isHeaderValue(options[name])) {
+      throw invalid(`options.${name} must be a string of tab, space and printable ASCII characters`)
+    }
+  }
+}
+
+/**
  * Validates options at module bootstrap. Credentials may be empty (handled
  * lazily); structural fields are mandatory.
  *
@@ -126,34 +165,5 @@ export function validateOptions(options: unknown): void {
   }
   // Credentials may be empty strings — handled lazily via STORAGE_NOT_CONFIGURED.
 
-  const signedUrls = options.signedUrls
-  if (isObject(signedUrls) && typeof signedUrls.maxTtlSeconds === 'number' && signedUrls.maxTtlSeconds <= 0) {
-    throw invalid('signedUrls.maxTtlSeconds must be > 0')
-  }
-  const multipart = options.multipart
-  if (
-    isObject(multipart) &&
-    typeof multipart.partSizeBytes === 'number' &&
-    multipart.partSizeBytes < MIN_PART_SIZE_BYTES
-  ) {
-    throw invalid('multipart.partSizeBytes must be >= 5 MB (S3 hard limit)')
-  }
-  const maxAttempts = options.maxAttempts
-  if (
-    maxAttempts !== undefined &&
-    (typeof maxAttempts !== 'number' || !Number.isInteger(maxAttempts) || maxAttempts < 1)
-  ) {
-    throw invalid('maxAttempts must be an integer >= 1')
-  }
-  assertTimerMs(options, 'requestTimeoutMs', 1)
-  assertTimerMs(options, 'uploadIdleTimeoutMs', 0)
-  assertTimerMs(options, 'bodyIdleTimeoutMs', 0)
-  if (options.serverSideEncryption === 'aws:kms' && !options.kmsKeyId) {
-    throw invalid('kmsKeyId is required when serverSideEncryption === "aws:kms"')
-  }
-  for (const name of ['defaultCacheControl', 'kmsKeyId'] as const) {
-    if (options[name] !== undefined && !isHeaderValue(options[name])) {
-      throw invalid(`options.${name} must be a string of tab, space and printable ASCII characters`)
-    }
-  }
+  assertLimitsAndEncryption(options)
 }
