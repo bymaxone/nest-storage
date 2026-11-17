@@ -8,11 +8,7 @@
  */
 import { Readable } from 'node:stream'
 import { Test, type TestingModule } from '@nestjs/testing'
-import {
-  BymaxStorageModule,
-  SignedUrlService,
-  StorageService,
-} from '@bymax-one/nest-storage'
+import { BymaxStorageModule, SignedUrlService, StorageService } from '@bymax-one/nest-storage'
 import { destroyStream } from '../../src/server/utils/stream-utils'
 import { startMinio, type MinioHandle } from './fixtures/minio-container'
 
@@ -64,53 +60,68 @@ describeSoak('Storage E2E — soak', () => {
     await minio.container.stop()
   })
 
-  it('keeps heap and open sockets flat under sustained transfers', async () => {
-    const storage = moduleRef.get(StorageService)
-    const signed = moduleRef.get(SignedUrlService)
-    const samples: Sample[] = []
-    const started = Date.now()
-    let nextSample = started
-    let iterations = 0
+  it(
+    'keeps heap and open sockets flat under sustained transfers',
+    async () => {
+      const storage = moduleRef.get(StorageService)
+      const signed = moduleRef.get(SignedUrlService)
+      const samples: Sample[] = []
+      const started = Date.now()
+      let nextSample = started
+      let iterations = 0
 
-    while (Date.now() - started < SOAK_MS) {
-      const key = `soak/${String(iterations % 20)}.bin`
-      await storage.upload({ key, body: Buffer.alloc(2 * MB, iterations % 256), contentType: 'application/octet-stream' })
-      const full = await storage.download({ key })
-      for await (const chunk of full.stream) {
-        void chunk
-      }
-      const partial = await storage.download({ key })
-      destroyStream(partial.stream)
-      await storage.downloadBuffer({ key })
-      await signed.getDownloadUrl({ key })
-      await storage.upload({
-        key: `soak/multi-${String(iterations % 5)}.bin`,
-        body: Readable.from(Array.from({ length: 6 }, () => Buffer.alloc(MB))),
-        contentType: 'application/octet-stream',
-      })
-      iterations += 1
-
-      if (Date.now() >= nextSample) {
-        nextSample += SAMPLE_MS
-        global.gc?.()
-        const mem = process.memoryUsage()
-        samples.push({
-          at: Math.round((Date.now() - started) / 1000),
-          heapMb: Math.round(mem.heapUsed / MB),
-          rssMb: Math.round(mem.rss / MB),
-          sockets: openSockets(),
+      while (Date.now() - started < SOAK_MS) {
+        const key = `soak/${String(iterations % 20)}.bin`
+        await storage.upload({
+          key,
+          body: Buffer.alloc(2 * MB, iterations % 256),
+          contentType: 'application/octet-stream',
         })
+        const full = await storage.download({ key })
+        for await (const chunk of full.stream) {
+          void chunk
+        }
+        const partial = await storage.download({ key })
+        destroyStream(partial.stream)
+        await storage.downloadBuffer({ key })
+        await signed.getDownloadUrl({ key })
+        await storage.upload({
+          key: `soak/multi-${String(iterations % 5)}.bin`,
+          body: Readable.from(Array.from({ length: 6 }, () => Buffer.alloc(MB))),
+          contentType: 'application/octet-stream',
+        })
+        iterations += 1
+
+        if (Date.now() >= nextSample) {
+          nextSample += SAMPLE_MS
+          global.gc?.()
+          const mem = process.memoryUsage()
+          samples.push({
+            at: Math.round((Date.now() - started) / 1000),
+            heapMb: Math.round(mem.heapUsed / MB),
+            rssMb: Math.round(mem.rss / MB),
+            sockets: openSockets(),
+          })
+        }
       }
-    }
 
-    console.log(`SOAK iterations=${String(iterations)} samples=\n${samples.map((s) => JSON.stringify(s)).join('\n')}`)
+      // Straight to stderr: the reporter's console capture did not show this table in a long run.
+      process.stderr.write(
+        `SOAK iterations=${String(iterations)} samples=\n${samples.map((s) => JSON.stringify(s)).join('\n')}\n`,
+      )
 
-    // Warm-up is the first third; compare the first and last five samples after it.
-    const steady = samples.slice(Math.floor(samples.length / 3))
-    expect(steady.length).toBeGreaterThanOrEqual(6)
-    const head = steady.slice(0, 5)
-    const tail = steady.slice(-5)
-    expect(median(tail.map((s) => s.heapMb))).toBeLessThanOrEqual(median(head.map((s) => s.heapMb)) * 1.25 + 10)
-    expect(median(tail.map((s) => s.sockets))).toBeLessThanOrEqual(median(head.map((s) => s.sockets)) + 2)
-  }, SOAK_MS + 120_000)
+      // Warm-up is the first third; compare the first and last five samples after it.
+      const steady = samples.slice(Math.floor(samples.length / 3))
+      expect(steady.length).toBeGreaterThanOrEqual(6)
+      const head = steady.slice(0, 5)
+      const tail = steady.slice(-5)
+      expect(median(tail.map((s) => s.heapMb))).toBeLessThanOrEqual(
+        median(head.map((s) => s.heapMb)) * 1.25 + 10,
+      )
+      expect(median(tail.map((s) => s.sockets))).toBeLessThanOrEqual(
+        median(head.map((s) => s.sockets)) + 2,
+      )
+    },
+    SOAK_MS + 120_000,
+  )
 })

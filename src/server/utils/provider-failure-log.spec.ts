@@ -66,6 +66,46 @@ describe('describeProviderFailure', () => {
     expect(line).toContain(`${'a'.repeat(280)}X-Amz-Signature=[red"`)
   })
 
+  it('masks the credential scope of an Authorization header, whole', () => {
+    const message =
+      'AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20261117/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-date, Signature=abc123def'
+
+    const line = describeProviderFailure({ message })
+
+    expect(line).not.toMatch(/AKIA|abc123def|20261117|aws4_request/)
+    expect(line).toContain('AWS4-HMAC-SHA256 Credential=[redacted]')
+    expect(line).toContain('SignedHeaders=host;x-amz-date')
+  })
+
+  it.each([
+    ['an AKIA key', 'The key AKIAIOSFODNN7EXAMPLE does not exist'],
+    ['a temporary ASIA key', 'The key ASIAIOSFODNN7EXAMPLE has expired'],
+  ])('masks a bare access key id (%s)', (_label, message) => {
+    const line = describeProviderFailure({ message })
+
+    expect(line).not.toMatch(/[AI]{2,}OSFODNN7EXAMPLE|AKIA|ASIA/)
+    expect(line).toContain('[redacted-key-id]')
+  })
+
+  it('leaves a word that only looks like a key id', () => {
+    const line = describeProviderFailure({ message: 'AKIA is a prefix, and AKIAshort stays' })
+
+    expect(line).toContain('AKIA is a prefix, and AKIAshort stays')
+  })
+
+  it.each([
+    [
+      'a credential scope',
+      'Credential=AKIAIOSFODNN7EXAMPLE/20261117/us-east-1/s3/aws4_request',
+      280,
+    ],
+    ['a bare key id', ' AKIAIOSFODNN7EXAMPLE', 289],
+  ])('leaves no part of %s when the cut falls inside it', (_label, secret, padding) => {
+    const line = describeProviderFailure({ message: `${'a'.repeat(padding)}${secret}&tail` })
+
+    expect(line).not.toMatch(/AKIA|IOSFOD|20261117/)
+  })
+
   it('bounds the message, so a provider that answers with a page cannot flood the log', () => {
     const line = describeProviderFailure({ message: 'a'.repeat(5000) })
 
@@ -91,6 +131,27 @@ describe('logProviderFailure', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(
       'Provider call failed: op="head" key="a/b.bin" name="E" code=- status=- requestId=- message="m"',
+    )
+  })
+
+  it('says nothing for a request the caller cancelled', () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    logProviderFailure(
+      { name: 'AbortError', message: 'The operation was aborted' },
+      { op: 'download' },
+    )
+
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('opens the line with the label the caller gives', () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    logProviderFailure({ message: 'm' }, { op: 'upload-multipart' }, 'Multipart upload failed')
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/^Multipart upload failed: op="upload-multipart" /),
     )
   })
 

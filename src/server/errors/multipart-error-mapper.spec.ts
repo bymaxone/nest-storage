@@ -3,6 +3,7 @@
  * else an aborted multipart upload.
  * @layer server/errors
  */
+import { Logger } from '@nestjs/common'
 import { SourceIdleError } from '../utils/idle-timeout'
 import { mapMultipartError } from './multipart-error-mapper'
 
@@ -105,5 +106,47 @@ describe('mapMultipartError', () => {
     expect(detailsOf(error)).toEqual({ key: 'k', bucket: 'b', reason: 'rejected' })
     expect(error.cause).toBeUndefined()
     expect(JSON.stringify(error.getResponse())).not.toContain('part 2 failed')
+  })
+
+  describe('what it logs', () => {
+    afterEach(() => {
+      jest.restoreAllMocks()
+    })
+
+    it('logs a failed upload once, under its own label, and not as a failed provider call', () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+      mapMultipartError(new Error('source stream broke'), {
+        key: 'k',
+        bucket: 'b',
+        op: 'upload-multipart',
+      })
+
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringMatching(/^Multipart upload failed: op="upload-multipart" /),
+      )
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('source stream broke'))
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('Provider call failed'))
+    })
+
+    it('logs nothing for a missing bucket, whose code says it all', () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+      mapMultipartError(
+        { name: 'NoSuchBucket', $metadata: { httpStatusCode: 404 } },
+        { key: 'k', bucket: 'b' },
+      )
+
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    it('logs nothing for an idle source or a source that is too long', () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+      mapMultipartError(new SourceIdleError(250), { key: 'k', bucket: 'b' })
+
+      expect(warn).not.toHaveBeenCalled()
+    })
   })
 })

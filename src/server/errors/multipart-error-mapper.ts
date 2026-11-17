@@ -5,7 +5,8 @@
  */
 import { StorageException } from './storage-exception'
 import { SourceIdleError } from '../utils/idle-timeout'
-import { mapAwsError } from './aws-error-mapper'
+import { isNoSuchBucket, mapAwsError } from './aws-error-mapper'
+import { logProviderFailure } from '../utils/provider-failure-log'
 import { providerFailureReason, providerFailureStatus } from './provider-failure'
 import { mapSizeLimitError } from './size-limit-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
@@ -36,10 +37,10 @@ export function mapMultipartError(
   if (tooLong) {
     return tooLong
   }
-  const bucketMissing = mapAwsError(err, context)
-  if (bucketMissing.code === STORAGE_ERROR_CODES.STORAGE_BUCKET_NOT_FOUND) {
-    return bucketMissing
+  if (isNoSuchBucket(err)) {
+    return mapAwsError(err, context)
   }
+  logProviderFailure(err, context, 'Multipart upload failed')
   return new StorageException(
     STORAGE_ERROR_CODES.STORAGE_MULTIPART_ABORTED,
     // An outage ends the upload as an outage; any other cause is a failure of the upload itself.
