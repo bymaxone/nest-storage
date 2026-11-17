@@ -204,6 +204,19 @@ describe('FileScannerService', () => {
         warnSpy.mockRestore()
       })
 
+      it('still rejects when the details serialise to nothing', async () => {
+        // JSON.stringify returns undefined, without throwing, for an object whose toJSON() returns undefined.
+        const impl = makeMockScanner({ status: 'infected', engine: 'clamav', details: { toJSON: () => undefined } })
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED)
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[unserialisable]'))
+        warnSpy.mockRestore()
+      })
+
       it('adds nothing to the log line when the scanner sent none', async () => {
         const impl = makeMockScanner({ status: 'infected', engine: 'clamav', threat: 'Trojan.X' })
         const service = await buildService(buildOptions({ impl }), impl)

@@ -12,8 +12,16 @@ import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { logValue } from '../utils/log-value'
 
+/** What the log line holds when the details cannot be turned into text. */
+const UNSERIALISABLE = '[unserialisable]'
+
 /** The most characters of a scanner's own `details` a log line carries. */
 const MAX_SCANNER_DETAILS_LENGTH = 300
+
+/** `JSON.stringify` as it behaves: `undefined`, not a string, for a value whose `toJSON()` returns nothing. */
+function toJson(value: unknown): string | undefined {
+  return JSON.stringify(value)
+}
 
 /**
  * What the scanner put in `details`, as a log suffix. The text is the scanner's, so it never reaches
@@ -26,9 +34,9 @@ function scannerDetailsForLog(details: Record<string, unknown> | undefined): str
   if (details === undefined) return ''
   let text: string
   try {
-    text = JSON.stringify(details)
+    text = toJson(details) ?? UNSERIALISABLE
   } catch {
-    text = '[unserialisable]'
+    text = UNSERIALISABLE
   }
   return ` details=${logValue(text.slice(0, MAX_SCANNER_DETAILS_LENGTH))}`
 }
