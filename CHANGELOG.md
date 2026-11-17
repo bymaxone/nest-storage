@@ -47,6 +47,11 @@ note on each entry is the compatibility contract — read it, not the number.
   `validation.customValidators`. Omit the option for "none": `null` no longer means it. A `null` for any other option
   inside a group is still the default.
 
+  **`scanner: null` is refused; omit the key for no scanner.** 1.1.17 read a `scanner` of `null` as "no scanner", so a
+  config lookup that returned `null` for a missing key booted with scanning off. `forRoot` now fails with
+  `STORAGE_INVALID_CONFIG` ("scanner must not be null; omit it for no scanner"); a `scanner` that is `false`, `0`,
+  `''` or `[]` was already refused.
+
 - **A value that throws when it is read no longer hangs a source read.** The check that tells an `Error` from any other
   value in the idle-timeout wrapper read its `name` and `message` outside a guard: a rejection value whose property
   getter throws left the wrapped read pending for good, with its timer already cleared. It is now treated as not

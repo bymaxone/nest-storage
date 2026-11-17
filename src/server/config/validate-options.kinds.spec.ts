@@ -127,3 +127,21 @@ describe('options.region', () => {
     expect(refusal({ ...valid, region: 5 }).reason).toBe('options.region must be a non-empty string')
   })
 })
+
+describe('options.scanner', () => {
+  it('refuses null: an absent scanner scans nothing, so null may not stand for "no scanner"', () => {
+    expect(refusal({ ...valid, scanner: null }).reason).toBe('scanner must not be null; omit it for no scanner')
+  })
+
+  it('still accepts an absent scanner', () => {
+    accepts({})
+    accepts({ scanner: undefined })
+  })
+
+  it.each([false, 0, '', [], true, 'on', 42])('refuses a scanner that is %p without repeating it', (value) => {
+    const result = refusal({ ...valid, scanner: value })
+
+    expect(result.reason).toMatch(/^scanner(?: must be an object|\.impl must be an object with a scan function)$/)
+    expect(result.response).not.toContain('SENTINEL')
+  })
+})

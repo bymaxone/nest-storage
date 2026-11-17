@@ -131,13 +131,15 @@ function assertBoundedInteger(
  * Refuses a scanner configuration that would leave scanning silently off: the scanner is enabled only
  * when `impl` is there, and `getMode()` returns whatever `mode` holds, so a missing `impl` or a mode that
  * is neither value (a typo such as `'preupload'`) means nothing is scanned while the host believes it is.
- * `undefined` or `null` for the group means no scanner; `undefined` or `null` for `mode` is the default.
+ * `undefined` for the group means no scanner and `null` is refused, so a config lookup that returns `null`
+ * for a missing key cannot switch scanning off; `undefined` or `null` for `mode` is the default.
  *
  * @param scanner - The `scanner` option as the caller passed it.
  * @throws StorageException with code `STORAGE_INVALID_CONFIG` naming the key.
  */
 function assertScanner(scanner: unknown): void {
-  if (scanner === undefined || scanner === null) return
+  if (scanner === undefined) return
+  if (scanner === null) throw invalid('scanner must not be null; omit it for no scanner')
   if (!isObject(scanner)) throw invalid('scanner must be an object')
   const impl = scanner.impl as { scan?: unknown } | null | undefined
   if (!isObject(impl) || typeof impl.scan !== 'function') {
