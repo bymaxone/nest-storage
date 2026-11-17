@@ -21,7 +21,7 @@ note on each entry is the compatibility contract — read it, not the number.
   that could not be reached that text is the driver's own, such as `connect ECONNREFUSED 10.0.3.7:9000`,
   and a host that returns `getResponse()` unchanged (Nest's default) handed a caller the address and
   port of the storage service. The body now holds a fixed `details.reason` beside `awsCode`, `httpStatus`
-  and `requestId`, which stay. What the driver and the provider said is written to the log, as a warning
+  and `requestId`, which stay. What the driver and the provider said is logged for a provider failure, as a warning
   that starts `Provider call failed` (or `Multipart abort failed`), from named fields only: the error's
   name, the provider's code, the status, the request id and the message, with a signature or an access
   key id in it masked and its length bounded. The error object is not attached to the exception.
