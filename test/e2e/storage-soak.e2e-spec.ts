@@ -79,26 +79,53 @@ function median(values: number[]): number {
   return sorted[Math.floor(sorted.length / 2)] ?? 0
 }
 
+/** Starts MinIO and a module over it. */
+async function bootSoakModule(): Promise<{ minio: MinioHandle; moduleRef: TestingModule }> {
+  const minio = await startMinio('soak')
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      BymaxStorageModule.forRoot({
+        endpoint: minio.endpoint,
+        region: 'us-east-1',
+        bucket: minio.bucket,
+        forcePathStyle: true,
+        credentials: { accessKeyId: minio.accessKeyId, secretAccessKey: minio.secretAccessKey },
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED',
+      }),
+    ],
+  }).compile()
+  await moduleRef.init()
+  return { minio, moduleRef }
+}
+
+/** Runs the transfer mix for `SOAK_MS`, sampling every `SAMPLE_MS`, and prints the table. */
+async function runSoak(storage: StorageService, signed: SignedUrlService): Promise<Sample[]> {
+  const samples: Sample[] = []
+  const started = Date.now()
+  let nextSample = started
+  let iterations = 0
+
+  while (Date.now() - started < SOAK_MS) {
+    await transferOnce(storage, signed, iterations)
+    iterations += 1
+
+    if (Date.now() >= nextSample) {
+      nextSample += SAMPLE_MS
+      samples.push(takeSample(started))
+    }
+  }
+
+  reportSamples(iterations, samples)
+  return samples
+}
+
 describeSoak('Storage E2E — soak', () => {
   let minio: MinioHandle
   let moduleRef: TestingModule
 
   beforeAll(async () => {
-    minio = await startMinio('soak')
-    moduleRef = await Test.createTestingModule({
-      imports: [
-        BymaxStorageModule.forRoot({
-          endpoint: minio.endpoint,
-          region: 'us-east-1',
-          bucket: minio.bucket,
-          forcePathStyle: true,
-          credentials: { accessKeyId: minio.accessKeyId, secretAccessKey: minio.secretAccessKey },
-          requestChecksumCalculation: 'WHEN_REQUIRED',
-          responseChecksumValidation: 'WHEN_REQUIRED',
-        }),
-      ],
-    }).compile()
-    await moduleRef.init()
+    ;({ minio, moduleRef } = await bootSoakModule())
   })
 
   afterAll(async () => {
@@ -109,24 +136,7 @@ describeSoak('Storage E2E — soak', () => {
   it(
     'keeps heap and open sockets flat under sustained transfers',
     async () => {
-      const storage = moduleRef.get(StorageService)
-      const signed = moduleRef.get(SignedUrlService)
-      const samples: Sample[] = []
-      const started = Date.now()
-      let nextSample = started
-      let iterations = 0
-
-      while (Date.now() - started < SOAK_MS) {
-        await transferOnce(storage, signed, iterations)
-        iterations += 1
-
-        if (Date.now() >= nextSample) {
-          nextSample += SAMPLE_MS
-          samples.push(takeSample(started))
-        }
-      }
-
-      reportSamples(iterations, samples)
+      const samples = await runSoak(moduleRef.get(StorageService), moduleRef.get(SignedUrlService))
 
       // Warm-up is the first third; compare the first and last five samples after it.
       const steady = samples.slice(Math.floor(samples.length / 3))
