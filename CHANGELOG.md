@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.14] - 2026-11-16
+
 ### Changed
 
 - **The provider-failure log masks more, and says less when nothing failed.** The warning that carries what
@@ -862,4 +864,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.11]: https://github.com/bymaxone/nest-storage/compare/v1.1.10...v1.1.11
 [1.1.12]: https://github.com/bymaxone/nest-storage/compare/v1.1.11...v1.1.12
 [1.1.13]: https://github.com/bymaxone/nest-storage/compare/v1.1.12...v1.1.13
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.13...HEAD
+[1.1.14]: https://github.com/bymaxone/nest-storage/compare/v1.1.13...v1.1.14
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.14...HEAD
