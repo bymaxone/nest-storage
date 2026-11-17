@@ -26,6 +26,10 @@ note on each entry is the compatibility contract — read it, not the number.
 
   **Apply to a derived backend:** a host that read `details.details` from either error must read the log
   line instead, or put what it needs in `threat` or `engine`. The other fields of the body are unchanged.
+  A rejection whose `details` could not be serialised (a circular object, a `BigInt`, a `toJSON` that
+  throws) used to fail while the error body was written, and the host answered 500; it is now the typed
+  422. A host that logs the warning line for rejected scans will also see one for a rejected inconclusive
+  result, which was not logged before.
 
 - **The `abortSignal` option documentation states what a body read ends with.** It said a `download()` stream
   errors with the raw `AbortError` when `bodyIdleTimeoutMs` is `0` and left out `downloadBuffer()`. It now says
