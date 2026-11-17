@@ -597,7 +597,7 @@ BymaxStorageModule.forRoot({
 ```
 
 **Streams in pre-upload mode.** A stream can be read once, so in `pre-upload` mode it is first read
-into memory, bounded by `validation.maxSizeBytes`, and the scanner and the upload share that buffer. A `Buffer` or `Uint8Array` body is copied once in this mode, so a change the caller makes to its own array while the scan runs reaches neither. A
+into memory, bounded by `validation.maxSizeBytes`, and the scanner and the upload share that buffer. A `Buffer` or `Uint8Array` body is copied once in this mode, so a change the caller makes to its own array while the scan runs reaches neither (the second copy of the body is held until the upload ends, so a body of up to `validation.maxSizeBytes` takes twice that much memory). The library validates and scans the bytes at call time; do not change a buffer you passed until the call settles. A
 stream longer than the limit is refused with `STORAGE_VALIDATION_FAILED` as soon as it passes it, and
 with no `maxSizeBytes` it is refused with a reason that says to set it or use `post-upload`.
 `post-upload` hands the scanner the key only, no body.
@@ -610,6 +610,8 @@ with no `maxSizeBytes` it is refused with a reason that says to set it or use `p
 `STORAGE_SCAN_INCONCLUSIVE` carries `details.engine`; each name is cut to 200 characters, in the body and in the log, and left out when the scanner gave something that is not a string. A scanner that throws is answered with a 500, and the library logs a `Scanner failed` warning with the message (cut at 300 characters) so there is a trace of why. The free-form `details` your scanner returns is the
 scanner's own text, so it is written to the warning log (escaped and truncated) and never to the
 body of the error.
+
+In `post-upload` mode the scan reads the object stored under the key, so another writer that overwrites the same key between your upload and the scan makes the verdict about their object, and an infected verdict deletes the key whichever object it now holds.
 
 **A rejected object that could not be removed.** In `post-upload` mode the object is already stored
 when the scanner rejects it, so the library deletes it and rejects `upload()` with the verdict
