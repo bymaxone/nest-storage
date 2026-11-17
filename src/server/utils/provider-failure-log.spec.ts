@@ -55,6 +55,19 @@ describe('describeProviderFailure', () => {
     )
   })
 
+  it('leaves no part of a secret when the cut falls inside it', () => {
+    // The label ends before the 300th character and the value runs past it. The code masks first and
+    // cuts after; every pattern puts its label before the value, so a cut can only drop the end of a
+    // value, never leave one without its label, and the order cannot expose a part of a secret.
+    const message = `${'a'.repeat(280)}X-Amz-Signature=SECRETVALUE1234567890&tail`
+
+    const line = describeProviderFailure({ message })
+
+    expect(line).not.toContain('SECR')
+    // Masked first, then cut: the mask is what the cut lands in.
+    expect(line).toContain(`${'a'.repeat(280)}X-Amz-Signature=[red"`)
+  })
+
   it('bounds the message, so a provider that answers with a page cannot flood the log', () => {
     const line = describeProviderFailure({ message: 'a'.repeat(5000) })
 

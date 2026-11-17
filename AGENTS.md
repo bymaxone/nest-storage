@@ -238,9 +238,9 @@ observable the way you would treat a diff that logs an access key.
 `StorageException.details` is serialized into the HTTP error envelope this library returns to
 API clients, so anything reachable from a returned exception is a published surface. The mapper
 copies `awsCode`, `httpStatus` and `requestId` out of the provider error, adds a fixed `reason`
-(never the text of the driver or of the provider), and attaches nothing else from it. What the
-driver and the provider said goes to the log, as the named fields of `describeProviderFailure`
-and never the error object. Attaching the caught error as `cause` would publish the whole SDK
+(never the text of the driver or of the provider), and attaches nothing else from it. For a
+timeout or a provider error what they said goes to the log, as the named fields of
+`describeProviderFailure` and never the error object. Attaching the caught error as `cause` would publish the whole SDK
 error at once — `$metadata`, `$fault`, a `$response` whose body may be an unconsumed stream, and
 any vendor fields the service adds.
 
