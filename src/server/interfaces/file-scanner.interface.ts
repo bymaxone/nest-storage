@@ -27,5 +27,6 @@ export interface FileScanResult {
   engine: string
   /** Threat name when `status === 'infected'`. */
   threat?: string
+  /** Free-form scanner text. It is logged, escaped and cut at 300 characters, and is never put in an error body. */
   details?: Record<string, unknown>
 }

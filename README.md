@@ -595,6 +595,11 @@ stream longer than the limit is refused with `STORAGE_VALIDATION_FAILED` as soon
 with no `maxSizeBytes` it is refused with a reason that says to set it or use `post-upload`. Buffer
 bodies are not affected, and `post-upload` hands the scanner the key only, no body.
 
+**What a client is told.** `STORAGE_SCAN_INFECTED` carries `details.engine` and `details.threat`, and
+`STORAGE_SCAN_INCONCLUSIVE` carries `details.engine`. The free-form `details` your scanner returns is the
+scanner's own text, so it is written to the warning log (escaped, cut at 300 characters) and never to the
+body of the error.
+
 **A rejected object that could not be removed.** In `post-upload` mode the object is already stored
 when the scanner rejects it, so the library deletes it and rejects `upload()` with the verdict
 (`STORAGE_SCAN_INFECTED` or `STORAGE_SCAN_INCONCLUSIVE`). If that delete fails the verdict is still the
