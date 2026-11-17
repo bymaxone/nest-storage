@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.17] - 2026-11-17
+
 ### Fixed
 
 - **A size limit or a multipart setting of `NaN` or `Infinity` no longer boots.** `validation.maxSizeBytes`,
@@ -987,4 +989,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.14]: https://github.com/bymaxone/nest-storage/compare/v1.1.13...v1.1.14
 [1.1.15]: https://github.com/bymaxone/nest-storage/compare/v1.1.14...v1.1.15
 [1.1.16]: https://github.com/bymaxone/nest-storage/compare/v1.1.15...v1.1.16
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.16...HEAD
+[1.1.17]: https://github.com/bymaxone/nest-storage/compare/v1.1.16...v1.1.17
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.17...HEAD
