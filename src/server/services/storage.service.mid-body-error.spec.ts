@@ -240,15 +240,18 @@ describe('a download body that fails after its headers', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('aborted'))
   })
 
-  it('logs nothing for a request the caller cancelled', async () => {
-    afterPartialBody = 'silence'
-    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-    const storage = await storageWith({})
+  it.each(guards)(
+    'logs nothing for a request the caller cancelled, with %s',
+    async (_guard, options) => {
+      afterPartialBody = 'silence'
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      const storage = await storageWith(options)
 
-    await storage
-      .downloadBuffer({ key: 'k', abortSignal: abortWhenStarted() })
-      .catch(() => undefined)
+      await storage
+        .downloadBuffer({ key: 'k', abortSignal: abortWhenStarted() })
+        .catch(() => undefined)
 
-    expect(warn).not.toHaveBeenCalled()
-  })
+      expect(warn).not.toHaveBeenCalled()
+    },
+  )
 })

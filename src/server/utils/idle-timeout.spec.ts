@@ -120,6 +120,32 @@ describe('withIdleTimeout', () => {
     await expect(failure).rejects.toBe(foreign)
   })
 
+  it('hands on a DOMException as it is, with its name', async () => {
+    // It is an Error, but its toString tag is another one: an abort or timeout signal's reason.
+    const reason = new DOMException('timed out', 'TimeoutError')
+    const source = new PassThrough()
+    const failure = collect(withIdleTimeout(source, 1000))
+    source.destroy(reason)
+
+    await expect(failure).rejects.toBe(reason)
+  })
+
+  it.each([
+    ['an object with a message and no name', { message: 'only a message' }],
+    ['an object with a name and no message', { name: 'OnlyAName' }],
+    ['an object whose name is not text', { name: 1, message: 'a message' }],
+    ['an object whose message is not text', { name: 'Named', message: 2 }],
+  ])('turns %s into an error, as it is not one', async (_label, value) => {
+    const source = new PassThrough()
+    const failure = collect(withIdleTimeout(source, 1000))
+    source.destroy(value as unknown as Error)
+
+    const reason: unknown = await failure.catch((err: unknown) => err)
+
+    expect(reason).not.toBe(value)
+    expect(reason).toBeInstanceOf(Error)
+  })
+
   it('turns a rejection that is not an error into one, with its description', async () => {
     const source = new PassThrough()
     const failure = collect(withIdleTimeout(source, 1000))

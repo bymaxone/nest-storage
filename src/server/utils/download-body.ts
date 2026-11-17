@@ -7,7 +7,7 @@
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
-import { failureOrAbort, requestAborted } from './abort-support'
+import { requestAborted } from './abort-support'
 import { SourceIdleError, withIdleTimeout } from './idle-timeout'
 
 /**
@@ -60,7 +60,9 @@ export function mapBodyReadFailure(
   signal: AbortSignal | undefined,
   context: Record<string, unknown>,
 ): unknown {
-  return err instanceof StorageException
-    ? err
-    : failureOrAbort(signal, context, mapAwsError(err, context))
+  if (err instanceof StorageException) {
+    return err
+  }
+  // The signal is read first: mapping logs the failure, and a request the caller cancelled is not one.
+  return signal?.aborted ? requestAborted(signal, context) : mapAwsError(err, context)
 }
