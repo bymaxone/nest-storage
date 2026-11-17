@@ -419,6 +419,19 @@ describe('FileScannerService', () => {
         expect(seen[0]?.aborted).toBe(true)
       })
 
+      it.each([
+        ['resolves', (input: { signal?: AbortSignal }) => new Promise<FileScanResult>((resolve) => { input.signal?.addEventListener('abort', () => { resolve({ status: 'unknown', engine: 't' }) }) })],
+        ['rejects', (input: { signal?: AbortSignal }) => new Promise<FileScanResult>((_resolve, reject) => { input.signal?.addEventListener('abort', () => { reject(new Error('scanner gave up')) }) })],
+      ])('still fails STORAGE_TIMEOUT when the scanner %s as soon as its signal aborts', async (_label, scan) => {
+        // The scanner settles inside the abort listener, ahead of anything queued after the abort.
+        const impl: IFileScanner = { scan: jest.fn(scan) }
+        const service = await buildService(buildOptions({ impl, timeoutMs: 20 }), impl)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_TIMEOUT)
+      })
+
       it('waits 60 s when scanner.timeoutMs is not set, and no longer', async () => {
         jest.useFakeTimers()
         const { impl } = neverSettling()

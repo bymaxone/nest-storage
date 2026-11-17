@@ -177,7 +177,8 @@ export class FileScannerService {
     let timer: NodeJS.Timeout | undefined
     const deadline = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
-        controller.abort()
+        // The rejection comes first: a scanner that settles inside its abort listener queues its outcome
+        // ahead of anything queued after the abort, and would win the race over the deadline.
         reject(
           new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, {
             key: input.key,
@@ -186,6 +187,7 @@ export class FileScannerService {
             timeoutMs,
           }),
         )
+        controller.abort()
       }, timeoutMs)
     })
     try {
