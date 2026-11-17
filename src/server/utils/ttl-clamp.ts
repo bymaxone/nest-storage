@@ -34,7 +34,7 @@ export function clampTtl(
   maxTtl: number,
 ): number {
   const ttl = ttlSeconds ?? defaultTtl
-  if (typeof ttl !== 'number' || !Number.isInteger(ttl) || ttl <= 0) {
+  if (!Number.isInteger(ttl) || ttl <= 0) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SIGNED_URL_TTL_INVALID, undefined, {
       reason: Number.isFinite(ttl) && ttl <= 0 ? 'TTL must be > 0' : 'TTL must be a whole number of seconds greater than 0',
       provided: ttl,

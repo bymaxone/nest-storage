@@ -16,7 +16,8 @@ import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constant
  */
 export function assertIntegerInput(value: number | undefined, field: string, min: number): void {
   if (value === undefined) return
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < min) {
+  // `Number.isInteger` is false for NaN, Infinity, a fraction and any non-number, so it is the type check too.
+  if (!Number.isInteger(value) || value < min) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
       field,
       reason: `${field} must be an integer of at least ${String(min)}`,

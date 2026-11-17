@@ -337,6 +337,14 @@ describe('validateOptions: the numeric options in a group', () => {
     })
   })
 
+  it.each([
+    [{ multipart: { queueSize: 0 } }, 'multipart.queueSize must be an integer from 1 to 1000'],
+    [{ signedUrls: { maxTtlSeconds: 0 } }, 'signedUrls.maxTtlSeconds must be an integer from 1 to 9007199254740991'],
+    [{ validation: { maxSizeBytes: Number.NaN } }, 'validation.maxSizeBytes must be an integer from 1 to 9007199254740991'],
+  ])('states the range in the reason: %j', (extra, reason) => {
+    expect(reasonOf(() => { validateOptions({ ...valid, ...extra }) })).toBe(reason)
+  })
+
   it('states the part size range in megabytes and gigabytes', () => {
     expect(reasonOf(() => { validateOptions({ ...valid, multipart: { partSizeBytes: 1024 } }) })).toBe(
       'multipart.partSizeBytes must be an integer >= 5 MB (S3 hard limit) and <= 5 GB',

@@ -101,6 +101,7 @@ describe('StorageService.list', () => {
       const err = await service.list({ maxKeys: maxKeys as number }).catch((e: unknown) => e)
 
       expect(err).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+      expect((err as StorageException).getResponse()).toMatchObject({ error: { details: { field: 'maxKeys' } } })
       expect(send).not.toHaveBeenCalled()
     },
   )
