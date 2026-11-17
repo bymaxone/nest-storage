@@ -146,6 +146,22 @@ describe('withIdleTimeout', () => {
     expect(reason).toBeInstanceOf(Error)
   })
 
+  it.each([
+    ['null', null as unknown as Error, 'null'],
+    ['undefined', undefined as unknown as Error, 'undefined'],
+  ])('turns a source that rejects with %s into an error', async (_label, value, description) => {
+    const source = {
+      [Symbol.asyncIterator]: () => ({ next: () => Promise.reject(value) }),
+    } as unknown as NodeJS.ReadableStream
+
+    const reason: unknown = await collect(withIdleTimeout(source, 1000)).catch(
+      (err: unknown) => err,
+    )
+
+    expect(reason).toBeInstanceOf(Error)
+    expect((reason as Error).message).toBe(description)
+  })
+
   it('turns a rejection that is not an error into one, with its description', async () => {
     const source = new PassThrough()
     const failure = collect(withIdleTimeout(source, 1000))

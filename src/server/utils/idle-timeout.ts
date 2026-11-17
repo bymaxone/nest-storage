@@ -23,13 +23,8 @@ export class SourceIdleError extends Error {
  * drop its name and its `code`.
  */
 function isError(value: unknown): value is Error {
-  const candidate = value as { name?: unknown; message?: unknown } | null
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof candidate?.name === 'string' &&
-    typeof candidate.message === 'string'
-  )
+  const candidate = value as { name?: unknown; message?: unknown } | null | undefined
+  return typeof candidate?.name === 'string' && typeof candidate.message === 'string'
 }
 
 /** Waits for `next`, rejecting with {@link SourceIdleError} if it does not settle in `idleMs`. */
