@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.13] - 2026-11-16
+
 ### Security
 
 - **A failed call no longer tells its client what the driver or the provider said.** The body of a
