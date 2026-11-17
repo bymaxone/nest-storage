@@ -394,7 +394,7 @@ describe('upload size bound', () => {
       expect(putBodies).toEqual([Buffer.alloc(500, 1)])
     })
 
-    it('uploads a body shorter than a declared size that is multipart-sized, as the unscanned path does', async () => {
+    it('uploads a body shorter than a multipart-sized declared size, as a multipart upload', async () => {
       const storage = await storageWith({ ...scanning, multipart: { thresholdBytes: 100, partSizeBytes: 5 * MIB } })
 
       const result = await storage.upload({

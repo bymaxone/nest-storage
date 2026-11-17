@@ -73,7 +73,7 @@ describe('clampTtl', () => {
   })
 
   it.each([Number.NaN, Infinity, -Infinity, 1.5, '3'])(
-    'throws STORAGE_SIGNED_URL_TTL_INVALID for %p, so the URL never carries it as X-Amz-Expires',
+    'throws STORAGE_SIGNED_URL_TTL_INVALID for %p',
     (value) => {
       // `NaN <= 0` is false, so a check on the sign alone let NaN through to `X-Amz-Expires=NaN`.
       const call = (): number => clampTtl(value as number, DEFAULT_TTL, MAX_TTL)
