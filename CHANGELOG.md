@@ -27,7 +27,7 @@ note on each entry is the compatibility contract — read it, not the number.
   **Apply to a derived backend:** a call that passed a per-call `bucket` that is not a string, or an `abortSignal` that
   is not an `AbortSignal`, now fails with `STORAGE_VALIDATION_FAILED` (`details.field` is `bucket` or `abortSignal`)
   where it used to reach the provider (`exists` answers `false` and logs a warning, as for any failure that is not a
-  missing object). `details.provided` of `STORAGE_INVALID_PART_COUNT` is present only when `parts` is a number. A
+  missing object). `details.provided` of `STORAGE_INVALID_PART_COUNT` is present only when `parts` is a finite number. A
   stream-like body without `pause` and `resume` is refused with `STORAGE_VALIDATION_FAILED`.
 
 - **A configuration of the wrong kind is refused at boot, and a `null` that means "off" is refused.** `keyPrefix` that is
