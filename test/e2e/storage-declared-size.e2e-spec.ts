@@ -2,7 +2,8 @@
  * @fileoverview A single-shot stream whose declared size is wrong, against a live MinIO: a body longer
  * than declared and one shorter both end in a typed error within a bounded time and leave no object,
  * and a body of exactly the declared size is stored whole. A provider stores an object once it has
- * received `Content-Length` bytes, so a longer body used to leave a truncated object behind.
+ * received `Content-Length` bytes, so the last byte of a body is held back until the source has ended and
+ * a longer body never completes its request.
  * @layer test/e2e
  */
 import { Readable } from 'node:stream'

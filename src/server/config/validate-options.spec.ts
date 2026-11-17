@@ -312,9 +312,8 @@ describe('validateOptions', () => {
 describe('validateOptions: the numeric options in a group', () => {
   // Each option is tried with the values a comparison alone mishandles: `NaN` is neither below nor above
   // any bound, so `NaN < 1` and `NaN > 1` are both false, and a string compares as the number it spells.
-  // `NaN` on `validation.maxSizeBytes` switched the size limit off (a 10-byte upload and a stream declared
-  // 5e9 bytes were both sent); `Infinity` on `multipart.queueSize` kept the process busy on the first
-  // multipart upload (a 4 s timer never fired and the run was killed at 20 s).
+  // `NaN` on `validation.maxSizeBytes` would switch the size limit off, and `Infinity` on `multipart.queueSize`
+  // would keep the process busy from the first multipart upload, so each option is refused by name.
   const BAD = [Number.NaN, Infinity, -1, 0, 1.5, '3', null]
   const options: [string, (value: unknown) => Record<string, unknown>][] = [
     ['validation.maxSizeBytes', (value) => ({ validation: { maxSizeBytes: value } })],

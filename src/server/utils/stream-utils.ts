@@ -250,8 +250,8 @@ export function toUploadBody(body: unknown): UploadBody {
   }
   const stream = body as { pipe?: unknown } | null | undefined
   if (!(body instanceof Uint8Array) && typeof stream?.pipe !== 'function') {
-    // A Blob, an array of chunks or any other object is not a body the SDK can send: it would reach the
-    // upload as if it were a stream and fail there with a code that blames the multipart upload.
+    // A Blob, an array of chunks or any other object is not a body the SDK can send; refusing it here gives
+    // the caller a validation error instead of a failure that blames the multipart upload.
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
       field: 'body',
       reason: 'body must be a Buffer, Uint8Array, ArrayBuffer, string or readable stream',
