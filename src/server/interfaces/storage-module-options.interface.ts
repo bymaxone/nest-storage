@@ -48,6 +48,7 @@ export interface BymaxStorageModuleOptions {
   /** Default `Content-Disposition`. */
   defaultContentDisposition?: 'inline' | 'attachment'
 
+  /** Signed-URL options. A key set to `undefined` or `null` means its default. */
   signedUrls?: {
     /** Default GET TTL (seconds): a whole number of at least 1. Default: `300`. */
     defaultGetTtlSeconds?: number
@@ -57,6 +58,7 @@ export interface BymaxStorageModuleOptions {
     maxTtlSeconds?: number
   }
 
+  /** Multipart options. A key set to `undefined` or `null` means its default. */
   multipart?: {
     /** Bytes threshold to switch to multipart, a whole number of at least 1. Default: `5242880` (5 MB). */
     thresholdBytes?: number

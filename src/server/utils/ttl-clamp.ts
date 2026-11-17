@@ -33,11 +33,14 @@ export function clampTtl(
   defaultTtl: number,
   maxTtl: number,
 ): number {
-  const ttl = ttlSeconds ?? defaultTtl
+  // `null` is not "absent": a per-call value that is not a whole number above 0 is refused.
+  const requested: unknown = ttlSeconds
+  const ttl = requested === undefined ? defaultTtl : (requested as number)
   if (!Number.isInteger(ttl) || ttl <= 0) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SIGNED_URL_TTL_INVALID, undefined, {
       reason: Number.isFinite(ttl) && ttl <= 0 ? 'TTL must be > 0' : 'TTL must be a whole number of seconds greater than 0',
-      provided: ttl,
+      // Only a finite number is echoed: a string, a Symbol or a function could carry anything the caller holds.
+      ...(Number.isFinite(ttl) ? { provided: ttl } : {}),
     })
   }
   return Math.min(ttl, maxTtl)

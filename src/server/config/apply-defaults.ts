@@ -21,6 +21,34 @@ import {
 } from '../constants/default-options.constants'
 import { MAX_SIGNED_URL_TTL_SECONDS } from '../../shared/constants/default-ttls.constants'
 
+/** `unknown` when `Keys` names every key of `Group` and `never` when one is missing, so a key added to an option group cannot be dropped silently. */
+type NamesEveryKey<Group, Keys extends readonly PropertyKey[]> = Exclude<keyof Group, Keys[number]> extends never
+  ? unknown
+  : never
+
+/**
+ * The keys of an option group that hold a value, read by name: a key set to `undefined` or `null` means "use
+ * the default", so it must not overwrite one when the group is merged over its defaults. Reading by name and
+ * not by own enumerable entries keeps a value that a class instance serves from a prototype getter, which is
+ * what the validation read.
+ */
+function definedOnly<T extends object, const K extends readonly (keyof T)[]>(
+  group: T | undefined,
+  keys: K & NamesEveryKey<T, K>,
+): Partial<T> {
+  const picked: Partial<T> = {}
+  for (const key of keys) {
+    const value = group?.[key]
+    if (value !== undefined && value !== null) picked[key] = value
+  }
+  return picked
+}
+
+const SIGNED_URL_KEYS = ['defaultGetTtlSeconds', 'defaultPutTtlSeconds', 'maxTtlSeconds'] as const
+const MULTIPART_KEYS = ['thresholdBytes', 'partSizeBytes', 'queueSize'] as const
+const VALIDATION_KEYS = ['mimeWhitelist', 'maxSizeBytes', 'customValidators'] as const
+const SCANNER_KEYS = ['impl', 'mode', 'rejectOnUnknown', 'timeoutMs'] as const
+
 /**
  * Merges the signed-URL options over their defaults and caps `maxTtlSeconds` at the
  * SigV4 presign limit: the signer rejects any longer expiry, so a larger configured
@@ -29,7 +57,7 @@ import { MAX_SIGNED_URL_TTL_SECONDS } from '../../shared/constants/default-ttls.
 function resolveSignedUrls(
   configured: BymaxStorageModuleOptions['signedUrls'],
 ): ResolvedBymaxStorageOptions['signedUrls'] {
-  const merged = { ...DEFAULT_SIGNED_URLS, ...(configured ?? {}) }
+  const merged = { ...DEFAULT_SIGNED_URLS, ...definedOnly(configured, SIGNED_URL_KEYS) }
   return { ...merged, maxTtlSeconds: Math.min(merged.maxTtlSeconds, MAX_SIGNED_URL_TTL_SECONDS) }
 }
 
@@ -90,9 +118,12 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     defaultCacheControl: options.defaultCacheControl ?? DEFAULT_CACHE_CONTROL,
     defaultContentDisposition: options.defaultContentDisposition ?? DEFAULT_CONTENT_DISPOSITION,
     signedUrls: resolveSignedUrls(options.signedUrls),
-    multipart: { ...DEFAULT_MULTIPART, ...(options.multipart ?? {}) },
-    ...(options.validation !== undefined ? { validation: options.validation } : {}),
-    ...(options.scanner !== undefined ? { scanner: options.scanner } : {}),
+    multipart: { ...DEFAULT_MULTIPART, ...definedOnly(options.multipart, MULTIPART_KEYS) },
+    ...(options.validation !== undefined ? { validation: definedOnly(options.validation, VALIDATION_KEYS) } : {}),
+    // `null` is no scanner, as `undefined` is: a group is an object or it is not configured.
+    ...(options.scanner
+      ? { scanner: definedOnly(options.scanner, SCANNER_KEYS) as NonNullable<BymaxStorageModuleOptions['scanner']> }
+      : {}),
     ...(options.serverSideEncryption !== undefined
       ? { serverSideEncryption: options.serverSideEncryption }
       : {}),

@@ -130,15 +130,19 @@ describe('BymaxStorageModule', () => {
     expect(() => BymaxStorageModule.forRoot({ ...base, endpoint: '' })).toThrow(StorageException)
   })
 
-  it.each([
+  const cleanScanner: IFileScanner = { scan: () => Promise.resolve({ status: 'clean', engine: 't' }) }
+  const refusedConfigurations: [string, unknown][] = [
     ['a size limit of NaN, which would switch the limit off', { validation: { maxSizeBytes: Number.NaN } }],
     ['a multipart queue of Infinity, which would keep the process busy on the first upload', { multipart: { queueSize: Infinity } }],
-  ])('refuses to boot with %s', (_what, extra) => {
+    ['a scanner mode that is a typo, which would leave every upload unscanned', { scanner: { impl: cleanScanner, mode: 'preupload' } }],
+    ['a scanner with no implementation, which would leave scanning off', { scanner: { impl: undefined } }],
+  ]
+  it.each(refusedConfigurations)('refuses to boot with %s', (_what, extra) => {
     // `NaN` on a size limit would switch the limit off, and `Infinity` as a multipart queue would keep the
     // process busy from the first multipart upload; `forRoot` refuses both.
     let thrown: unknown
     try {
-      BymaxStorageModule.forRoot({ ...base, ...extra })
+      BymaxStorageModule.forRoot({ ...base, ...(extra as Partial<BymaxStorageModuleOptions>) })
     } catch (error) {
       thrown = error
     }
@@ -203,3 +207,27 @@ describe('BymaxStorageModule', () => {
     })
   })
 })
+
+describe('BymaxStorageModule: a group key that is set to undefined', () => {
+  it('signs a URL with the default ceiling, not X-Amz-Expires=NaN', async () => {
+    // A key set to undefined must not overwrite the default: it would resolve to NaN and put `X-Amz-Expires=NaN` in every URL.
+    const moduleRef = await Test.createTestingModule({
+      imports: [BymaxStorageModule.forRoot({
+          ...base,
+          // An explicit undefined is outside the exactOptionalPropertyTypes type, but a JavaScript caller can pass it.
+          signedUrls: { maxTtlSeconds: undefined } as unknown as NonNullable<BymaxStorageModuleOptions['signedUrls']>,
+        })],
+    }).compile()
+    await moduleRef.init()
+
+    try {
+      const url = await moduleRef.get(SignedUrlService).getDownloadUrl({ key: 'k' })
+      const text = typeof url === 'string' ? url : url.url
+
+      expect(new URL(text).searchParams.get('X-Amz-Expires')).toBe('300')
+    } finally {
+      await moduleRef.close()
+    }
+  })
+})
+

@@ -14,6 +14,8 @@ const valid: BymaxStorageModuleOptions = {
   credentials: { accessKeyId: 'k', secretAccessKey: 's' },
 }
 
+const scannerImpl = { scan: (): Promise<{ status: 'clean'; engine: string }> => Promise.resolve({ status: 'clean', engine: 't' }) }
+
 function reasonOf(fn: () => void): string {
   try {
     fn()
@@ -314,7 +316,7 @@ describe('validateOptions: the numeric options in a group', () => {
   // any bound, so `NaN < 1` and `NaN > 1` are both false, and a string compares as the number it spells.
   // `NaN` on `validation.maxSizeBytes` would switch the size limit off, and `Infinity` on `multipart.queueSize`
   // would keep the process busy from the first multipart upload, so each option is refused by name.
-  const BAD = [Number.NaN, Infinity, -1, 0, 1.5, '3', null]
+  const BAD = [Number.NaN, Infinity, -1, 0, 1.5, '3']
   const options: [string, (value: unknown) => Record<string, unknown>][] = [
     ['validation.maxSizeBytes', (value) => ({ validation: { maxSizeBytes: value } })],
     ['signedUrls.defaultGetTtlSeconds', (value) => ({ signedUrls: { defaultGetTtlSeconds: value } })],
@@ -323,7 +325,7 @@ describe('validateOptions: the numeric options in a group', () => {
     ['multipart.thresholdBytes', (value) => ({ multipart: { thresholdBytes: value } })],
     ['multipart.partSizeBytes', (value) => ({ multipart: { partSizeBytes: value } })],
     ['multipart.queueSize', (value) => ({ multipart: { queueSize: value } })],
-    ['scanner.timeoutMs', (value) => ({ scanner: { timeoutMs: value } })],
+    ['scanner.timeoutMs', (value) => ({ scanner: { impl: scannerImpl, timeoutMs: value } })],
   ]
 
   describe.each(options)('%s', (name, build) => {
@@ -357,8 +359,8 @@ describe('validateOptions: the numeric options in a group', () => {
     ['multipart.partSizeBytes', { multipart: { partSizeBytes: 5 * 1024 ** 2 } }, { multipart: { partSizeBytes: 5 * 1024 ** 2 - 1 } }],
     ['validation.maxSizeBytes', { validation: { maxSizeBytes: Number.MAX_SAFE_INTEGER } }, { validation: { maxSizeBytes: Number.MAX_SAFE_INTEGER + 1 } }],
     ['signedUrls.maxTtlSeconds', { signedUrls: { maxTtlSeconds: 1 } }, { signedUrls: { maxTtlSeconds: 0 } }],
-    ['scanner.timeoutMs', { scanner: { timeoutMs: 2_147_483_647 } }, { scanner: { timeoutMs: 2_147_483_648 } }],
-    ['scanner.timeoutMs', { scanner: { timeoutMs: 1 } }, { scanner: { timeoutMs: 0 } }],
+    ['scanner.timeoutMs', { scanner: { impl: scannerImpl, timeoutMs: 2_147_483_647 } }, { scanner: { impl: scannerImpl, timeoutMs: 2_147_483_648 } }],
+    ['scanner.timeoutMs', { scanner: { impl: scannerImpl, timeoutMs: 1 } }, { scanner: { impl: scannerImpl, timeoutMs: 0 } }],
   ])('%s: accepts its bound and refuses the next value', (_name, atBound, past) => {
     expect(() => { validateOptions({ ...valid, ...atBound }) }).not.toThrow()
     expect(() => { validateOptions({ ...valid, ...past }) }).toThrow()
@@ -368,3 +370,71 @@ describe('validateOptions: the numeric options in a group', () => {
     expect(() => { validateOptions({ ...valid, multipart: {}, signedUrls: {}, validation: {} }) }).not.toThrow()
   })
 })
+
+describe('validateOptions: nullish keys and the retry ceiling', () => {
+  it.each([undefined, null])('accepts %p for a numeric option inside a group, which means the default', (value) => {
+    expect(() => {
+      validateOptions({
+        ...valid,
+        validation: { maxSizeBytes: value },
+        signedUrls: { defaultGetTtlSeconds: value, defaultPutTtlSeconds: value, maxTtlSeconds: value },
+        multipart: { thresholdBytes: value, partSizeBytes: value, queueSize: value },
+        scanner: { impl: scannerImpl, timeoutMs: value },
+      })
+    }).not.toThrow()
+  })
+
+  it.each([1e300, Number.MAX_SAFE_INTEGER + 2])('refuses a maxAttempts of %p, above the safe-integer ceiling', (value) => {
+    expect(reasonOf(() => { validateOptions({ ...valid, maxAttempts: value }) })).toBe(
+      'maxAttempts must be an integer from 1 to 9007199254740991',
+    )
+  })
+
+  it('accepts a maxAttempts at the ceiling', () => {
+    expect(() => { validateOptions({ ...valid, maxAttempts: Number.MAX_SAFE_INTEGER }) }).not.toThrow()
+  })
+})
+
+describe('validateOptions: a scanner that would leave scanning silently off', () => {
+  // The scanner is enabled only when `impl` is there and `getMode()` returns whatever `mode` holds, so a missing
+  // `impl` or a mode that is neither value scans nothing while the host believes it does.
+  it.each([
+    ['no impl', {}],
+    ['an undefined impl', { impl: undefined }],
+    ['a null impl', { impl: null }],
+    ['a string impl', { impl: 'scanner' }],
+    ['an impl with no scan function', { impl: {} }],
+    ['an impl whose scan is not a function', { impl: { scan: 'yes' } }],
+  ])('refuses a scanner with %s', (_label, scanner) => {
+    expect(reasonOf(() => { validateOptions({ ...valid, scanner }) })).toBe('scanner.impl must be an object with a scan function')
+  })
+
+  it.each(['preupload', 'pre_upload', 'Pre-Upload', 'post_upload', '', 1, true, {}])('refuses a scanner mode of %p', (mode) => {
+    expect(reasonOf(() => { validateOptions({ ...valid, scanner: { impl: scannerImpl, mode } }) })).toBe(
+      "scanner.mode must be 'pre-upload' or 'post-upload'",
+    )
+  })
+
+  it.each(['pre-upload', 'post-upload', undefined, null])('accepts a scanner mode of %p', (mode) => {
+    expect(() => { validateOptions({ ...valid, scanner: { impl: scannerImpl, mode } }) }).not.toThrow()
+  })
+
+  it.each(['false', 'true', 0, 1, {}])('refuses a rejectOnUnknown of %p instead of reading it as a boolean', (value) => {
+    expect(reasonOf(() => { validateOptions({ ...valid, scanner: { impl: scannerImpl, rejectOnUnknown: value } }) })).toBe(
+      'scanner.rejectOnUnknown must be a boolean',
+    )
+  })
+
+  it.each([true, false, undefined, null])('accepts a rejectOnUnknown of %p', (value) => {
+    expect(() => { validateOptions({ ...valid, scanner: { impl: scannerImpl, rejectOnUnknown: value } }) }).not.toThrow()
+  })
+
+  it.each([undefined, null])('treats a scanner of %p as no scanner', (scanner) => {
+    expect(() => { validateOptions({ ...valid, scanner }) }).not.toThrow()
+  })
+
+  it.each([true, 'on', 42])('refuses a scanner that is %p, not an object', (scanner) => {
+    expect(reasonOf(() => { validateOptions({ ...valid, scanner }) })).toBe('scanner must be an object')
+  })
+})
+

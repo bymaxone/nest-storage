@@ -27,7 +27,11 @@ note on each entry is the compatibility contract — read it, not the number.
   whole number in a stated range, and `forRoot` fails with `STORAGE_INVALID_CONFIG` naming the option. Per
   call, a `ttlSeconds` that is not a whole number above 0 fails with `STORAGE_SIGNED_URL_TTL_INVALID`, and a
   declared upload `size` or a list `maxKeys` that is not a whole number fails with `STORAGE_VALIDATION_FAILED`,
-  before any request.
+  before any request, whatever the body is (a buffer, a view, a string or a stream). A key set to `undefined` or
+  `null` inside `signedUrls`, `multipart`, `validation` or `scanner` means the default: `maxTtlSeconds: undefined`
+  used to resolve to `NaN` and put `X-Amz-Expires=NaN` in every signed URL. `maxAttempts` is refused above the
+  safe-integer ceiling. The error for a TTL names no value except a finite number: a string, a `Symbol` or a
+  function the caller passed is not echoed.
 
   **Apply to a derived backend:** a configuration that booted before and is now refused at `forRoot`:
   `validation.maxSizeBytes`, a TTL or `multipart.thresholdBytes` that is `0`, negative, `NaN`, `Infinity`,
@@ -35,13 +39,30 @@ note on each entry is the compatibility contract — read it, not the number.
   value above that still is); `multipart.partSizeBytes` that is a string, `NaN`, `Infinity` or above 5 GiB;
   `multipart.queueSize` that is not a whole number from 1 to 1000. Per call, `ttlSeconds: Infinity` (it was
   clamped to the maximum), a fractional or string TTL, a fractional or negative `size`, and a `maxKeys` of
-  `Infinity`, `0`, a fraction or a string are now refused with the codes above.
+  `Infinity`, `0`, a fraction or a string are now refused with the codes above. A per-call `ttlSeconds`, `size` or
+  `maxKeys` of `null` is refused too (a `ttlSeconds` of `null` no longer reads as absent), while `undefined` or
+  `null` on an option inside a group is the default; `maxAttempts` above 9007199254740991 is refused. A
+  `getResponse()` of a TTL refusal no longer carries a non-numeric `details.provided`.
+
+- **A scanner that would leave scanning silently off is refused at boot.** `scanner: { impl: undefined }` (an optional
+  provider or a factory that returned nothing) and a `scanner.mode` that is a typo (`'preupload'`,
+  `'pre_upload'`) made the library skip both the pre-upload and the post-upload scan, so an infected upload was
+  stored (measured with an infected stand-in: 9 bytes stored under each). `forRoot` now fails with
+  `STORAGE_INVALID_CONFIG` unless `scanner.impl` is an object with a `scan` function and `scanner.mode` is
+  `'pre-upload'` or `'post-upload'`; `scanner.rejectOnUnknown` must be a boolean (unset or `null` is the default), and is no longer read as one
+  (`'false'` rejected unknown results). A `scanner` of `null` is no scanner, as `undefined` is, and an
+  `undefined` or `null` mode is the default `'pre-upload'`.
+
+  **Apply to a derived backend:** a host whose `scanner.impl` could be unset, whose `mode` was misspelt, or
+  whose `rejectOnUnknown` was a string now fails at boot instead of running unscanned; fix the configuration.
 
 - **A scan result outside the contract no longer uploads.** `scan()` returned any result that was not
   `'infected'` or an `'unknown'` it was told to reject, so no result, `null`, `'CLEAN'`, `' clean'` or an object
   as the status stored the object. Only the exact string `'clean'` passes now; `'unknown'` keeps following
   `rejectOnUnknown`, and anything else is rejected as `STORAGE_SCAN_INCONCLUSIVE` with
-  `details.reason: 'unrecognised scanner status'`, with or without `rejectOnUnknown`, and logged.
+  `details.reason: 'unrecognised scanner status'`, with or without `rejectOnUnknown`, and logged: a string status is
+  cut to 40 characters in the log line and any other status is named by its type, so none of the scanner's own
+  code runs to print it.
 
   **Apply to a derived backend:** a scanner that returned a status other than `'clean'`, `'infected'` or
   `'unknown'` (or nothing) on a clean file was uploading; fix the scanner, it is rejected now.
@@ -65,12 +86,16 @@ note on each entry is the compatibility contract — read it, not the number.
 
   **Apply to a derived backend:** a caller that passed a `size` that did not match its stream, and got an object
   of the declared length back, now gets an error; pass the true size, or none (a stream with no size uses
-  multipart). The multipart path is unchanged for a shorter stream.
+  multipart). The multipart path is unchanged for a shorter stream. A single-shot stream that delivers its
+  declared bytes and then never ends now fails `STORAGE_TIMEOUT` after `requestTimeoutMs`, because the last byte
+  is held until the source ends; it completed before. End the stream.
 
 - **A body that is not a body now fails as a validation error.** A `Blob`, an array of chunks or any other object
   that is not a `Buffer`, `Uint8Array`, `ArrayBuffer`, string or `Readable` reached the upload as if it were a
   stream and failed as `STORAGE_MULTIPART_ABORTED` (500), which blames the multipart upload. It now fails
-  `STORAGE_VALIDATION_FAILED` (400, `details.field: 'body'`) before any request.
+  `STORAGE_VALIDATION_FAILED` (400, `details.field: 'body'`) before any request. A WHATWG `ReadableStream` is
+  refused the same way, and so is an object that has a `pipe` function but is not a Node readable (it was a raw
+  `TypeError`).
 
   **Apply to a derived backend:** a handler that mapped that 500 to a client error can drop the mapping; pass
   a supported body.

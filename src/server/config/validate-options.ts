@@ -116,11 +116,36 @@ function assertBoundedInteger(
 ): void {
   if (!isObject(section)) return
   const value = section[key]
-  if (value === undefined) return
+  if (value === undefined || value === null) return
   if (typeof value !== 'number' || !Number.isInteger(value) || value < range.min || value > range.max) {
     throw invalid(
       `${group}.${key} must be an integer ${range.words ?? `from ${String(range.min)} to ${String(range.max)}`}`,
     )
+  }
+}
+
+/**
+ * Refuses a scanner configuration that would leave scanning silently off: the scanner is enabled only
+ * when `impl` is there, and `getMode()` returns whatever `mode` holds, so a missing `impl` or a mode that
+ * is neither value (a typo such as `'preupload'`) means nothing is scanned while the host believes it is.
+ * `undefined` or `null` for the group means no scanner; `undefined` or `null` for `mode` is the default.
+ *
+ * @param scanner - The `scanner` option as the caller passed it.
+ * @throws StorageException with code `STORAGE_INVALID_CONFIG` naming the key.
+ */
+function assertScanner(scanner: unknown): void {
+  if (scanner === undefined || scanner === null) return
+  if (!isObject(scanner)) throw invalid('scanner must be an object')
+  const impl = scanner.impl as { scan?: unknown } | null | undefined
+  if (!isObject(impl) || typeof impl.scan !== 'function') {
+    throw invalid('scanner.impl must be an object with a scan function')
+  }
+  const { mode, rejectOnUnknown } = scanner
+  if (mode !== undefined && mode !== null && mode !== 'pre-upload' && mode !== 'post-upload') {
+    throw invalid("scanner.mode must be 'pre-upload' or 'post-upload'")
+  }
+  if (rejectOnUnknown !== undefined && rejectOnUnknown !== null && typeof rejectOnUnknown !== 'boolean') {
+    throw invalid('scanner.rejectOnUnknown must be a boolean')
   }
 }
 
@@ -149,12 +174,16 @@ function assertNumericSections(options: Record<string, unknown>): void {
  */
 function assertLimitsAndEncryption(options: Record<string, unknown>): void {
   assertNumericSections(options)
+  assertScanner(options.scanner)
   const maxAttempts = options.maxAttempts
   if (
     maxAttempts !== undefined &&
-    (typeof maxAttempts !== 'number' || !Number.isInteger(maxAttempts) || maxAttempts < 1)
+    (typeof maxAttempts !== 'number' ||
+      !Number.isInteger(maxAttempts) ||
+      maxAttempts < 1 ||
+      maxAttempts > Number.MAX_SAFE_INTEGER)
   ) {
-    throw invalid('maxAttempts must be an integer >= 1')
+    throw invalid('maxAttempts must be an integer from 1 to 9007199254740991')
   }
   assertTimerMs(options, 'requestTimeoutMs', 1)
   assertTimerMs(options, 'uploadIdleTimeoutMs', 0)

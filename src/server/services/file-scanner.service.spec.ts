@@ -355,6 +355,33 @@ describe('FileScannerService', () => {
         warnSpy.mockRestore()
       })
 
+      it('names an unrecognised status that is not a string by its type only, and runs none of its code', async () => {
+        const hostile = { toString: jest.fn(() => 'HOSTILE-text'), valueOf: jest.fn(() => 'HOSTILE-value') }
+        const impl: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: hostile, engine: 'clamav' }) }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        expect(String(warnSpy.mock.calls[0]?.[0])).toBe('Inconclusive scan result rejected: key="test/file.png" engine="clamav" status=<object>')
+        expect(hostile.toString).not.toHaveBeenCalled()
+        expect(hostile.valueOf).not.toHaveBeenCalled()
+        warnSpy.mockRestore()
+      })
+
+      it('cuts a long unrecognised status to 40 characters in the log', async () => {
+        const impl: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'x'.repeat(100), engine: 'clamav' }) }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        const line = String(warnSpy.mock.calls[0]?.[0])
+        expect(line).toContain(` status="${'x'.repeat(40)}"`)
+        expect(line).not.toContain('x'.repeat(41))
+        warnSpy.mockRestore()
+      })
+
       it('says nothing of a status or a reason for an unknown result that rejectOnUnknown refuses', async () => {
         const impl = makeMockScanner({ status: 'unknown', engine: 'clamav' })
         const service = await buildService(buildOptions({ impl, rejectOnUnknown: true }), impl)

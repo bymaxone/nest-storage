@@ -146,8 +146,8 @@ describe('applyDefaults', () => {
     expect(r.requestTimeoutMs).toBe(60_000)
     expect(r.uploadIdleTimeoutMs).toBe(60_000)
     expect(r.cdnBaseUrl).toBe('https://cdn.example.com')
-    expect(r.validation).toBe(full.validation)
-    expect(r.scanner).toBe(full.scanner)
+    expect(r.validation).toEqual(full.validation)
+    expect(r.scanner).toEqual(full.scanner)
     expect(r.serverSideEncryption).toBe('aws:kms')
     expect(r.kmsKeyId).toBe('key-1')
     expect(r.credentials.sessionToken).toBe('t')
@@ -257,3 +257,111 @@ describe('applyDefaults', () => {
     expect(applyDefaults(base).bodyIdleTimeoutMs).toBe(30_000)
   })
 })
+
+describe('applyDefaults: an option group key that holds undefined or null', () => {
+  // A key set to `undefined` or `null` means "use the default"; spread over the defaults it would replace them,
+  // and `maxTtlSeconds: undefined` would resolve to NaN, which puts `X-Amz-Expires=NaN` in every signed URL.
+  it.each([undefined, null])('uses the default for %p in the signed-URL, multipart and size options', (value) => {
+    const resolved = applyDefaults({
+      ...base,
+      signedUrls: { defaultGetTtlSeconds: value, defaultPutTtlSeconds: value, maxTtlSeconds: value },
+      multipart: { thresholdBytes: value, partSizeBytes: value, queueSize: value },
+      validation: { maxSizeBytes: value },
+    } as unknown as BymaxStorageModuleOptions)
+
+    expect(resolved.signedUrls).toEqual({ defaultGetTtlSeconds: 300, defaultPutTtlSeconds: 300, maxTtlSeconds: 604_800 })
+    expect(resolved.multipart).toEqual({ thresholdBytes: 5_242_880, partSizeBytes: 5_242_880, queueSize: 4 })
+    expect(resolved.validation?.maxSizeBytes).toBeUndefined()
+  })
+
+  it.each([undefined, null])('leaves the scanner timeout unset for %p, so the default applies at the scan', (value) => {
+    const resolved = applyDefaults({ ...base, scanner: { impl: scanner, timeoutMs: value } } as unknown as BymaxStorageModuleOptions)
+
+    expect(resolved.scanner?.timeoutMs).toBeUndefined()
+    expect(resolved.scanner?.impl).toBe(scanner)
+  })
+
+  it('keeps every value that is set, including a falsy one that is not nullish', () => {
+    const resolved = applyDefaults({
+      ...base,
+      validation: { maxSizeBytes: 1000 },
+      multipart: { queueSize: 7 },
+      signedUrls: { defaultGetTtlSeconds: 60 },
+      scanner: { impl: scanner, rejectOnUnknown: false },
+    })
+
+    expect(resolved.scanner?.rejectOnUnknown).toBe(false)
+    expect(resolved.validation?.maxSizeBytes).toBe(1000)
+    expect(resolved.multipart.queueSize).toBe(7)
+    expect(resolved.signedUrls.defaultGetTtlSeconds).toBe(60)
+    expect(resolved.signedUrls.defaultPutTtlSeconds).toBe(300)
+  })
+})
+
+describe('applyDefaults: a scanner of null', () => {
+  it('is no scanner, as undefined is', () => {
+    expect(applyDefaults({ ...base, scanner: null } as unknown as BymaxStorageModuleOptions)).not.toHaveProperty('scanner')
+  })
+})
+
+describe('applyDefaults: a group that is a class instance', () => {
+  // Validation reads a group by property name, so a value served from a prototype getter passes it; the
+  // resolved options must carry that value, or a scanner or a size limit would be off while validated.
+  class ScannerConfig {
+    private readonly implementation = scanner
+
+    get impl(): IFileScanner {
+      return this.implementation
+    }
+
+    get mode(): 'pre-upload' | 'post-upload' {
+      return this.mode_
+    }
+
+    private readonly mode_: 'pre-upload' | 'post-upload' = 'post-upload'
+  }
+  class SizeConfig {
+    private readonly limit = 1234
+
+    get maxSizeBytes(): number {
+      return this.limit
+    }
+  }
+  class TtlConfig {
+    private readonly ceiling = 90
+
+    get maxTtlSeconds(): number {
+      return this.ceiling
+    }
+  }
+  class MultipartConfig {
+    private readonly queue = 9
+
+    get queueSize(): number {
+      return this.queue
+    }
+  }
+
+  it('keeps the values a prototype getter serves, in every group', () => {
+    const resolved = applyDefaults({
+      ...base,
+      scanner: new ScannerConfig(),
+      validation: new SizeConfig(),
+      signedUrls: new TtlConfig(),
+      multipart: new MultipartConfig(),
+    })
+
+    expect(resolved.scanner?.impl).toBe(scanner)
+    expect(resolved.scanner?.mode).toBe('post-upload')
+    expect(resolved.validation?.maxSizeBytes).toBe(1234)
+    expect(resolved.signedUrls.maxTtlSeconds).toBe(90)
+    expect(resolved.multipart.queueSize).toBe(9)
+  })
+
+  it('still carries the validators and the whitelist of the validation group', () => {
+    const resolved = applyDefaults({ ...base, validation: { mimeWhitelist: ['image/png'], customValidators: [validator] } })
+
+    expect(resolved.validation).toEqual({ mimeWhitelist: ['image/png'], customValidators: [validator] })
+  })
+})
+
