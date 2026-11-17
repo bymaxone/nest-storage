@@ -21,7 +21,10 @@ import { Upload } from '@aws-sdk/lib-storage'
 import { BYMAX_STORAGE_IDEMPOTENCY_CACHE, BYMAX_STORAGE_OPTIONS } from '../bymax-storage.constants'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
-import type { DownloadBufferOptions, DownloadOptions } from '../interfaces/download-options.interface'
+import type {
+  DownloadBufferOptions,
+  DownloadOptions,
+} from '../interfaces/download-options.interface'
 import type { ListOptions, ListResult } from '../interfaces/list-options.interface'
 import type { CopyOptions } from '../interfaces/copy-options.interface'
 import type {
@@ -37,8 +40,12 @@ import { FileScannerService } from './file-scanner.service'
 import { StorageException } from '../errors/storage-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
-import { withCleanupFailure } from '../errors/scan-cleanup-error'
-import { closeMultipartUpload, closeWhenCreated } from '../utils/multipart-abort'
+import { describeCleanupFailure, withCleanupFailure } from '../errors/scan-cleanup-error'
+import {
+  abortFailureLogger,
+  closeMultipartUpload,
+  closeWhenCreated,
+} from '../utils/multipart-abort'
 import { deleteObjectsChunk } from '../utils/delete-objects'
 import { mapBucketCheckError } from '../errors/bucket-check-error-mapper'
 import { describeError } from '../utils/describe-error'
@@ -183,7 +190,11 @@ export class StorageService {
     const input = validationInput(options, finalKey)
     const validated = await abortable(this.validation.validate(input), signal, context)
     // A stream cannot be read by the scanner and then sent: buffer it first, bounded.
-    const scanned = await abortable(this.bufferForPreUploadScan(validated.body, finalKey), signal, context)
+    const scanned = await abortable(
+      this.bufferForPreUploadScan(validated.body, finalKey),
+      signal,
+      context,
+    )
     const body = boundStreamSize(scanned, options.size, this.options)
     const validatedOptions = { ...options, body }
 
@@ -304,7 +315,7 @@ export class StorageService {
       } catch (deleteErr) {
         this.logger.error(
           `STORAGE_SCAN_CLEANUP_FAILED: the rejected object is still stored: ${logValue(finalKey)}`,
-          logValue(describeError(deleteErr)),
+          logValue(describeCleanupFailure(deleteErr)),
         )
         throw withCleanupFailure(scanErr, { key, storedKey: finalKey }, deleteErr)
       }
@@ -329,7 +340,10 @@ export class StorageService {
     try {
       const response = await this.s3Provider
         .getClient()
-        .send(new HeadObjectCommand({ Bucket: bucket, Key: finalKey }), sendOptions(options?.abortSignal))
+        .send(
+          new HeadObjectCommand({ Bucket: bucket, Key: finalKey }),
+          sendOptions(options?.abortSignal),
+        )
       return this.toObjectMetadata(response, finalKey, bucket)
     } catch (err) {
       throw failureOrAbort(options?.abortSignal, context, mapAwsError(err, context))
@@ -355,10 +369,15 @@ export class StorageService {
       ) {
         return false
       }
-      if (err instanceof StorageException && err.code === STORAGE_ERROR_CODES.STORAGE_REQUEST_ABORTED) {
+      if (
+        err instanceof StorageException &&
+        err.code === STORAGE_ERROR_CODES.STORAGE_REQUEST_ABORTED
+      ) {
         throw err
       }
-      this.logger.warn(`exists() — treating a non-404 error as "false": ${logValue(describeError(err))}`)
+      this.logger.warn(
+        `exists() — treating a non-404 error as "false": ${logValue(describeError(err))}`,
+      )
       return false
     }
   }
@@ -390,7 +409,11 @@ export class StorageService {
     options: DownloadOptions,
   ): Promise<{ stream: NodeJS.ReadableStream; metadata: ObjectMetadata }> {
     this.assertConfigured()
-    assertHeaderValues({ range: options.range, ifNoneMatch: options.ifNoneMatch, ifMatch: options.ifMatch })
+    assertHeaderValues({
+      range: options.range,
+      ifNoneMatch: options.ifNoneMatch,
+      ifMatch: options.ifMatch,
+    })
     const finalKey = this.keyResolver.normalize(options.key)
     const bucket = this.resolveBucket(options.bucket)
     const context = { key: finalKey, bucket, op: 'download' }
@@ -463,7 +486,10 @@ export class StorageService {
     try {
       await this.s3Provider
         .getClient()
-        .send(new DeleteObjectCommand({ Bucket: bucket, Key: finalKey }), sendOptions(options?.abortSignal))
+        .send(
+          new DeleteObjectCommand({ Bucket: bucket, Key: finalKey }),
+          sendOptions(options?.abortSignal),
+        )
     } catch (err) {
       const mapped = failureOrAbort(options?.abortSignal, context, mapAwsError(err, context))
       if (mapped.code !== STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND) {
@@ -651,9 +677,17 @@ export class StorageService {
     if (uploadId === undefined && lookup) {
       uploadId = await within(lookup, CLEANUP_DEADLINE_MS)
       // The caller does not wait longer, but an id that arrives later is still aborted.
-      if (uploadId === undefined) closeWhenCreated(client, bucket, finalKey, lookup)
+      if (uploadId === undefined) {
+        closeWhenCreated(client, bucket, finalKey, lookup, abortFailureLogger(this.logger, finalKey))
+      }
     }
-    const abort = await closeMultipartUpload(client, bucket, finalKey, uploadId)
+    const abort = await closeMultipartUpload(
+      client,
+      bucket,
+      finalKey,
+      uploadId,
+      abortFailureLogger(this.logger, finalKey),
+    )
     const context = { key: finalKey, bucket, op: 'upload-multipart', ...abort }
     throw abortedBy ? requestAborted(abortedBy, context) : mapMultipartError(err, context)
   }

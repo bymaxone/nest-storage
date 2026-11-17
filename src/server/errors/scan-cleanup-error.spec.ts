@@ -4,7 +4,7 @@
  */
 import { HttpStatus } from '@nestjs/common'
 import { StorageException } from './storage-exception'
-import { withCleanupFailure } from './scan-cleanup-error'
+import { describeCleanupFailure, withCleanupFailure } from './scan-cleanup-error'
 
 function detailsOf(error: unknown): Record<string, unknown> | undefined {
   const body = (error as StorageException).getResponse() as {
@@ -32,7 +32,8 @@ describe('withCleanupFailure', () => {
       key: 'a/b.bin',
       storedKey: 'tenant/a/b.bin',
       cleanup: 'failed',
-      cleanupError: 'delete refused',
+      // The body carries a fixed word for the delete failure, never its message.
+      cleanupError: 'UNKNOWN',
     })
   })
 
@@ -62,39 +63,45 @@ describe('withCleanupFailure', () => {
     expect(detailsOf(error)).toEqual({
       ...KEYS,
       cleanup: 'failed',
-      cleanupError: 'refused',
+      cleanupError: 'UNKNOWN',
     })
   })
 
-  it('describes a cleanup failure that is not an Error without throwing', () => {
+  it('reports a cleanup failure that is not a StorageException without throwing or quoting it', () => {
     const error = withCleanupFailure(
       new StorageException('STORAGE_SCAN_INFECTED'),
       KEYS,
       Object.create(null),
     )
 
-    expect(detailsOf(error)?.cleanupError).toBe('non-printable rejection value')
+    expect(detailsOf(error)?.cleanupError).toBe('UNKNOWN')
   })
 
-  it('names the provider cause when the delete failed with a StorageException', () => {
-    // `StorageException.message` is the generic 'Storage Exception'; the cause is in its details.
+  it('names only the code to a client when the delete failed with a StorageException', () => {
+    // The body names the code of the delete failure; what the provider said is for the log.
     const refused = new StorageException('STORAGE_PROVIDER_ERROR', undefined, {
-      awsMessage: 'Access Denied',
+      reason: 'rejected',
     })
 
     const error = withCleanupFailure(new StorageException('STORAGE_SCAN_INFECTED'), KEYS, refused)
 
-    expect(detailsOf(error)?.cleanupError).toBe('STORAGE_PROVIDER_ERROR: Access Denied')
+    expect(detailsOf(error)?.cleanupError).toBe('STORAGE_PROVIDER_ERROR')
+    expect(JSON.stringify((error as StorageException).getResponse())).not.toContain('Access Denied')
   })
 
-  it('names only the code when the delete failure carries no provider message', () => {
-    const error = withCleanupFailure(
-      new StorageException('STORAGE_SCAN_INFECTED'),
-      KEYS,
-      new StorageException('STORAGE_TIMEOUT'),
-    )
+  describe('describeCleanupFailure, for the log', () => {
+    it('gives the code of a StorageException, whose own message is generic', () => {
+      const refused = new StorageException('STORAGE_PROVIDER_ERROR', undefined, {
+        reason: 'rejected',
+      })
 
-    expect(detailsOf(error)?.cleanupError).toBe('STORAGE_TIMEOUT')
+      expect(describeCleanupFailure(refused)).toBe('STORAGE_PROVIDER_ERROR')
+    })
+
+    it('describes anything else by its message, without throwing', () => {
+      expect(describeCleanupFailure(new Error('delete refused'))).toBe('delete refused')
+      expect(describeCleanupFailure(Object.create(null))).toBe('non-printable rejection value')
+    })
   })
 
   it('returns anything that is not a StorageException unchanged', () => {

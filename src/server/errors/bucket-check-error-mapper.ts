@@ -6,6 +6,7 @@
 import { HttpStatus } from '@nestjs/common'
 import { StorageException } from './storage-exception'
 import { mapAwsError } from './aws-error-mapper'
+import { providerFailureReason } from './provider-failure'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
 interface HeadBucketFailure {
@@ -28,7 +29,12 @@ export function mapBucketCheckError(
 ): StorageException {
   const failure = (err ?? {}) as HeadBucketFailure
   const status = failure.$metadata?.httpStatusCode
-  const details = { ...context, httpStatus: status, awsCode: failure.name }
+  const details = {
+    ...context,
+    httpStatus: status,
+    awsCode: failure.name,
+    reason: providerFailureReason(err),
+  }
   if (status === 301 || failure.name === 'PermanentRedirect') {
     return new StorageException(
       STORAGE_ERROR_CODES.STORAGE_BUCKET_REGION_MISMATCH,

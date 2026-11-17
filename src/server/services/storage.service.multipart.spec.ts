@@ -7,6 +7,7 @@
 import { Readable } from 'node:stream'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
+import { Logger } from '@nestjs/common'
 import { StorageService } from './storage.service'
 import type { StorageException } from '../errors/storage-exception'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
@@ -21,7 +22,9 @@ import type { FileScannerService } from './file-scanner.service'
 
 function makePassthroughValidation(): ValidationService {
   return {
-    validate: jest.fn().mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
+    validate: jest
+      .fn()
+      .mockImplementation((input: { body: unknown }) => Promise.resolve({ body: input.body })),
   } as unknown as ValidationService
 }
 
@@ -93,7 +96,12 @@ function makeService(overrides: Partial<BymaxStorageModuleOptions> = {}): Harnes
 }
 
 function uploadOf(overrides: Partial<UploadOptions> = {}): UploadOptions {
-  return { key: 'a.txt', body: Readable.from([Buffer.from('data')]), contentType: 'text/plain', ...overrides }
+  return {
+    key: 'a.txt',
+    body: Readable.from([Buffer.from('data')]),
+    contentType: 'text/plain',
+    ...overrides,
+  }
 }
 
 /** Returns the constructor options of the first `Upload` instantiation. */
@@ -160,17 +168,25 @@ describe('StorageService — multipart upload', () => {
   })
 
   it('maps a failed done() to STORAGE_MULTIPART_ABORTED with details', async () => {
-    // A multipart failure surfaces the abort code and non-sensitive details (key + the
-    // underlying AWS message), never a blank details object.
+    // A multipart failure surfaces the abort code and non-sensitive details (key and a fixed
+    // reason), never a blank details object; the underlying message is in the log, not the body.
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const { service } = makeService()
     installUploader(() => Promise.reject(new Error('part failed')))
     const err = await service.upload(uploadOf({ key: 'big.bin' })).catch((e: unknown) => e)
     expect((err as StorageException).code).toBe('STORAGE_MULTIPART_ABORTED')
-    const details = ((err as StorageException).getResponse() as {
-      error: { details: Record<string, unknown> }
-    }).error.details
+    const details = (
+      (err as StorageException).getResponse() as {
+        error: { details: Record<string, unknown> }
+      }
+    ).error.details
     expect(details.key).toBe('big.bin')
     expect(details.bucket).toBe('test-bucket')
-    expect(details.awsMessage).toBe('part failed')
+    // The body carries a fixed reason; the provider's message is not in it.
+    expect(details.reason).toBe('rejected')
+    expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('part failed')
+    expect((err as StorageException).cause).toBeUndefined()
+    // What the provider said is in the log.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('part failed'))
   })
 })

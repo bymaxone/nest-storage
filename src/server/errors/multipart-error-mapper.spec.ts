@@ -25,17 +25,36 @@ describe('mapMultipartError', () => {
 
   it.each([
     ['a refused connection', { name: 'Error', code: 'ECONNREFUSED' }, 503],
-    ['an answer of 503 SlowDown', { name: 'SlowDown', Code: 'SlowDown', $metadata: { httpStatusCode: 503 } }, 503],
-    ['an SDK timeout, which has a name and no code', { name: 'TimeoutError', message: 'the request socket timed out' }, 503],
-    ['refused credentials', { name: 'InvalidAccessKeyId', Code: 'InvalidAccessKeyId', $metadata: { httpStatusCode: 403 } }, 500],
+    [
+      'an answer of 503 SlowDown',
+      { name: 'SlowDown', Code: 'SlowDown', $metadata: { httpStatusCode: 503 } },
+      503,
+    ],
+    [
+      'an SDK timeout, which has a name and no code',
+      { name: 'TimeoutError', message: 'the request socket timed out' },
+      503,
+    ],
+    [
+      'refused credentials',
+      {
+        name: 'InvalidAccessKeyId',
+        Code: 'InvalidAccessKeyId',
+        $metadata: { httpStatusCode: 403 },
+      },
+      500,
+    ],
     ['a failure of our own', new Error('boom'), 500],
-  ])('answers for %s as the cause says, keeping STORAGE_MULTIPART_ABORTED and the abort outcome', (_label, cause, status) => {
-    const error = mapMultipartError(cause, { key: 'k', bucket: 'b', abort: 'completed' })
+  ])(
+    'answers for %s as the cause says, keeping STORAGE_MULTIPART_ABORTED and the abort outcome',
+    (_label, cause, status) => {
+      const error = mapMultipartError(cause, { key: 'k', bucket: 'b', abort: 'completed' })
 
-    expect(error.code).toBe('STORAGE_MULTIPART_ABORTED')
-    expect(error.getStatus()).toBe(status)
-    expect(detailsOf(error)).toMatchObject({ abort: 'completed' })
-  })
+      expect(error.code).toBe('STORAGE_MULTIPART_ABORTED')
+      expect(error.getStatus()).toBe(status)
+      expect(detailsOf(error)).toMatchObject({ abort: 'completed' })
+    },
+  )
 
   it.each([null, undefined, Object.create(null) as object])(
     'maps a rejection value that has no message (%p) without throwing',
@@ -43,7 +62,8 @@ describe('mapMultipartError', () => {
       const error = mapMultipartError(value, { key: 'k', bucket: 'b' })
 
       expect(error.code).toBe('STORAGE_MULTIPART_ABORTED')
-      expect(typeof detailsOf(error)?.awsMessage).toBe('string')
+      // The body carries a fixed reason for a value with no message.
+      expect(detailsOf(error)?.reason).toBe('rejected')
     },
   )
 
@@ -70,17 +90,20 @@ describe('mapMultipartError', () => {
     const error = mapMultipartError(new Error('part 2 failed'), {
       key: 'k',
       abort: 'failed',
-      abortError: 'denied',
     })
 
     expect(error.code).toBe('STORAGE_MULTIPART_ABORTED')
     expect(messageOf(error)).toBe('Multipart upload failed and could not be aborted')
   })
 
-  it('maps any other failure to STORAGE_MULTIPART_ABORTED with the provider message', () => {
-    const error = mapMultipartError(new Error('part 2 failed'), { key: 'k', bucket: 'b' })
+  it('maps any other failure to STORAGE_MULTIPART_ABORTED, without the provider text', () => {
+    // The body holds a fixed reason, never the provider's message.
+    const original = new Error('part 2 failed')
+    const error = mapMultipartError(original, { key: 'k', bucket: 'b' })
 
     expect(error.code).toBe('STORAGE_MULTIPART_ABORTED')
-    expect(detailsOf(error)).toEqual({ key: 'k', bucket: 'b', awsMessage: 'part 2 failed' })
+    expect(detailsOf(error)).toEqual({ key: 'k', bucket: 'b', reason: 'rejected' })
+    expect(error.cause).toBeUndefined()
+    expect(JSON.stringify(error.getResponse())).not.toContain('part 2 failed')
   })
 })

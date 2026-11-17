@@ -130,7 +130,9 @@ describe('Storage E2E — failure reports', () => {
       key: 'bad.bin',
       storedKey: 'tenant/bad.bin',
     })
-    expect(details.cleanupError).toMatch(/^STORAGE_PROVIDER_ERROR: .*(access|denied)/i)
+    // The body names the code of the delete failure; what the provider said is logged, not returned.
+    expect(details.cleanupError).toBe('STORAGE_PROVIDER_ERROR')
+    expect(JSON.stringify(bodyOf(error))).not.toMatch(/access denied/i)
     expect(logged).toHaveBeenCalledWith(
       expect.stringMatching(/STORAGE_SCAN_CLEANUP_FAILED.*tenant\/bad\.bin/),
       expect.anything(),
@@ -184,7 +186,8 @@ describe('Storage E2E — failure reports', () => {
     const { message, details } = bodyOf(error)
     expect(message).toBe('Multipart upload failed and could not be aborted')
     expect(details).toMatchObject({ abort: 'failed', key: 'denied-abort.bin' })
-    expect(typeof details.abortError).toBe('string')
+    // The abort failure's text is logged, not returned.
+    expect(details).not.toHaveProperty('abortError')
     // The provider's own state: the upload is still open, as the report says.
     const open = await openUploads('denied-abort.bin')
     expect(open).toHaveLength(1)

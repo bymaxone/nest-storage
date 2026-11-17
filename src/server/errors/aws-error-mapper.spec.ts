@@ -10,7 +10,7 @@ interface MappedDetails {
   awsCode?: string
   httpStatus?: number
   requestId?: string
-  awsMessage?: string
+  reason?: string
   scope?: string
 }
 
@@ -31,12 +31,15 @@ describe('mapAwsError', () => {
   it.each([
     ['name', { name: 'NoSuchBucket', $metadata: { httpStatusCode: 404 } }],
     ['Code', { name: 'Unknown', Code: 'NoSuchBucket', $metadata: { httpStatusCode: 404 } }],
-  ])('should map NoSuchBucket (by %s) to STORAGE_BUCKET_NOT_FOUND, not to an absent object', (_how, failure) => {
-    // A 404 alone means "absent object"; the bucket code is the more specific fact.
-    const e = mapAwsError(failure)
-    expect(e.code).toBe('STORAGE_BUCKET_NOT_FOUND')
-    expect(e.getStatus()).toBe(HttpStatus.NOT_FOUND)
-  })
+  ])(
+    'should map NoSuchBucket (by %s) to STORAGE_BUCKET_NOT_FOUND, not to an absent object',
+    (_how, failure) => {
+      // A 404 alone means "absent object"; the bucket code is the more specific fact.
+      const e = mapAwsError(failure)
+      expect(e.code).toBe('STORAGE_BUCKET_NOT_FOUND')
+      expect(e.getStatus()).toBe(HttpStatus.NOT_FOUND)
+    },
+  )
 
   it('should keep NoSuchKey as STORAGE_OBJECT_NOT_FOUND', () => {
     expect(mapAwsError({ name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } }).code).toBe(
@@ -68,7 +71,12 @@ describe('mapAwsError', () => {
   it('should map any other error to STORAGE_PROVIDER_ERROR and preserve metadata', () => {
     // Fallback branch; `Code` wins over `name`; context is merged.
     const e = mapAwsError(
-      { Code: 'AccessDenied', name: 'Forbidden', message: 'denied', $metadata: { httpStatusCode: 403, requestId: 'req-1' } },
+      {
+        Code: 'AccessDenied',
+        name: 'Forbidden',
+        message: 'denied',
+        $metadata: { httpStatusCode: 403, requestId: 'req-1' },
+      },
       { scope: 'upload' },
     )
     expect(e.code).toBe('STORAGE_PROVIDER_ERROR')
@@ -77,30 +85,135 @@ describe('mapAwsError', () => {
     expect(details.awsCode).toBe('AccessDenied')
     expect(details.httpStatus).toBe(403)
     expect(details.requestId).toBe('req-1')
-    expect(details.awsMessage).toBe('denied')
+    // The body carries a fixed reason, never the provider's text.
+    expect(details.reason).toBe('rejected')
+    expect(JSON.stringify(e.getResponse())).not.toContain('denied')
     expect(details.scope).toBe('upload')
+  })
+
+  describe('the fixed reason in details', () => {
+    // A client reads this word, never what the driver or the provider wrote.
+    it.each([
+      [
+        'a refused connection',
+        { name: 'Error', code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 10.1.2.3:9000' },
+        'unreachable',
+      ],
+      [
+        'a connection the SDK names a timeout but whose code is a reset',
+        { name: 'TimeoutError', code: 'ECONNRESET' },
+        'unreachable',
+      ],
+      [
+        'the SDK deadline, with no code',
+        {
+          name: 'TimeoutError',
+          message: 'a request has exceeded the configured 300 ms requestTimeout',
+        },
+        'timeout',
+      ],
+      ['the SDK deadline, with ETIMEDOUT', { name: 'TimeoutError', code: 'ETIMEDOUT' }, 'timeout'],
+      [
+        'a connection that timed out at the socket, not named a TimeoutError',
+        { name: 'Error', code: 'ETIMEDOUT', message: 'connect ETIMEDOUT 10.1.2.3:9000' },
+        'unreachable',
+      ],
+      ['a TimeoutError with some other code', { name: 'TimeoutError', code: 'EOTHER' }, 'timeout'],
+      [
+        'an answer of 500',
+        { name: 'InternalError', Code: 'InternalError', $metadata: { httpStatusCode: 500 } },
+        'provider-error',
+      ],
+      [
+        'refused credentials',
+        {
+          name: 'SignatureDoesNotMatch',
+          Code: 'SignatureDoesNotMatch',
+          $metadata: { httpStatusCode: 403 },
+        },
+        'credentials-refused',
+      ],
+      [
+        'an access denied on an object',
+        { name: 'AccessDenied', Code: 'AccessDenied', $metadata: { httpStatusCode: 403 } },
+        'rejected',
+      ],
+      ['a 404', { name: 'NotFound', $metadata: { httpStatusCode: 404 } }, 'rejected'],
+    ])("says %s as %s, and not in the provider's words", (_label, failure, reason) => {
+      const e = mapAwsError(failure)
+      const details = (
+        e.getResponse() as { error: { details: MappedDetails & { reason?: string } } }
+      ).error.details
+
+      expect(details.reason).toBe(reason)
+      expect(JSON.stringify(e.getResponse())).not.toContain('10.1.2.3')
+      expect(JSON.stringify(e.getResponse())).not.toContain('requestTimeout')
+    })
   })
 
   describe('a provider that is unavailable, or that refused the credentials', () => {
     // The error shapes below are what the SDK throws for each condition, measured against local servers.
     it.each([
-      ['a refused connection', { name: 'Error', code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 127.0.0.1:9000' }],
-      ['an unknown host', { name: 'Error', code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND minio' }],
+      [
+        'a refused connection',
+        { name: 'Error', code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 127.0.0.1:9000' },
+      ],
+      [
+        'an unknown host',
+        { name: 'Error', code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND minio' },
+      ],
       ['a temporary DNS failure', { name: 'Error', code: 'EAI_AGAIN' }],
       ['an unreachable host', { name: 'Error', code: 'EHOSTUNREACH' }],
       ['a reset connection', { name: 'Error', code: 'ECONNRESET' }],
       ['a broken pipe', { name: 'Error', code: 'EPIPE' }],
-      ['a refused connection, as the SDK reports it from inside a test runner', { name: 'Error', message: 'AWS SDK error wrapper for Error: connect ECONNREFUSED 127.0.0.1:9000' }],
-      ['a reset connection, as the SDK reports it from inside a test runner', { name: 'Error', message: 'AWS SDK error wrapper for TimeoutError: connect ECONNRESET 127.0.0.1:9000' }],
-      ['every address of a host refused (the dual-stack error)', { name: 'AggregateError', code: 'ECONNREFUSED', errors: [{ code: 'ECONNREFUSED' }, { code: 'ECONNREFUSED' }] }],
-      ['every address of a host refused, as the SDK reports it from inside a test runner', { name: 'Error', message: 'AWS SDK error wrapper for AggregateError' }],
-      ['a dual-stack error that carries its codes only in errors', { name: 'AggregateError', errors: [{ code: 'ECONNREFUSED' }] }],
-      ['a wrapper for the dual-stack error with more text after it', { name: 'Error', message: 'AWS SDK error wrapper for AggregateError: all failed' }],
+      [
+        'a refused connection, as the SDK reports it from inside a test runner',
+        {
+          name: 'Error',
+          message: 'AWS SDK error wrapper for Error: connect ECONNREFUSED 127.0.0.1:9000',
+        },
+      ],
+      [
+        'a reset connection, as the SDK reports it from inside a test runner',
+        {
+          name: 'Error',
+          message: 'AWS SDK error wrapper for TimeoutError: connect ECONNRESET 127.0.0.1:9000',
+        },
+      ],
+      [
+        'every address of a host refused (the dual-stack error)',
+        {
+          name: 'AggregateError',
+          code: 'ECONNREFUSED',
+          errors: [{ code: 'ECONNREFUSED' }, { code: 'ECONNREFUSED' }],
+        },
+      ],
+      [
+        'every address of a host refused, as the SDK reports it from inside a test runner',
+        { name: 'Error', message: 'AWS SDK error wrapper for AggregateError' },
+      ],
+      [
+        'a dual-stack error that carries its codes only in errors',
+        { name: 'AggregateError', errors: [{ code: 'ECONNREFUSED' }] },
+      ],
+      [
+        'a wrapper for the dual-stack error with more text after it',
+        { name: 'Error', message: 'AWS SDK error wrapper for AggregateError: all failed' },
+      ],
       ['a read that was reset, as Node words it', { name: 'Error', message: 'read ECONNRESET' }],
-      ['a hang up, as the SDK reports it from inside a test runner', { name: 'Error', message: 'AWS SDK error wrapper for Error: socket hang up' }],
+      [
+        'a hang up, as the SDK reports it from inside a test runner',
+        { name: 'Error', message: 'AWS SDK error wrapper for Error: socket hang up' },
+      ],
       ['a failure whose cause is a reset', { name: 'Error', cause: { code: 'ECONNRESET' } }],
-      ['an answer of 503 SlowDown', { name: 'SlowDown', Code: 'SlowDown', $metadata: { httpStatusCode: 503 } }],
-      ['an answer of 500', { name: 'InternalError', Code: 'InternalError', $metadata: { httpStatusCode: 500 } }],
+      [
+        'an answer of 503 SlowDown',
+        { name: 'SlowDown', Code: 'SlowDown', $metadata: { httpStatusCode: 503 } },
+      ],
+      [
+        'an answer of 500',
+        { name: 'InternalError', Code: 'InternalError', $metadata: { httpStatusCode: 500 } },
+      ],
       ['an answer of 502 with no body', { name: 'Unknown', $metadata: { httpStatusCode: 502 } }],
       ['an answer of 504 with no body', { name: 'Unknown', $metadata: { httpStatusCode: 504 } }],
     ])('answers 503 for %s, keeping STORAGE_PROVIDER_ERROR', (_label, failure) => {
@@ -121,18 +234,49 @@ describe('mapAwsError', () => {
     )
 
     it.each([
-      ['a 403 AccessDenied on an object', { name: 'AccessDenied', Code: 'AccessDenied', $metadata: { httpStatusCode: 403 } }],
+      [
+        'a 403 AccessDenied on an object',
+        { name: 'AccessDenied', Code: 'AccessDenied', $metadata: { httpStatusCode: 403 } },
+      ],
       ['a 400', { name: 'BadRequest', Code: 'BadRequest', $metadata: { httpStatusCode: 400 } }],
       ['a 409', { name: 'Conflict', Code: 'Conflict', $metadata: { httpStatusCode: 409 } }],
-      ['a 501 the provider does not implement', { name: 'NotImplemented', $metadata: { httpStatusCode: 501 } }],
+      [
+        'a 501 the provider does not implement',
+        { name: 'NotImplemented', $metadata: { httpStatusCode: 501 } },
+      ],
       ['an error with an unrelated code', { name: 'Error', code: 'ERR_INVALID_ARG_TYPE' }],
       ['an error whose code is not a string', { name: 'Error', code: 7 }],
-      ['an answer whose own message names a socket error', { name: 'Conflict', message: 'connect ECONNRESET 10.0.0.1:80', $metadata: { httpStatusCode: 409 } }],
-      ['a message that only ends with the dual-stack wrapper text', { name: 'Error', message: 'see: AWS SDK error wrapper for AggregateError' }],
-      ['a message that mentions a socket code after other words', { name: 'Error', message: 'AWS SDK error wrapper for Error: malformed option ECONNRESET' }],
-      ['a message that starts with a syscall word but names no socket code', { name: 'Error', message: 'AWS SDK error wrapper for Error: connect to the endpoint failed' }],
-      ['a message that mentions a socket code in prose', { name: 'Error', message: 'we saw ECONNRESET earlier' }],
-      ['an error whose message names no socket error', { name: 'Error', message: 'the request is malformed' }],
+      [
+        'an answer whose own message names a socket error',
+        {
+          name: 'Conflict',
+          message: 'connect ECONNRESET 10.0.0.1:80',
+          $metadata: { httpStatusCode: 409 },
+        },
+      ],
+      [
+        'a message that only ends with the dual-stack wrapper text',
+        { name: 'Error', message: 'see: AWS SDK error wrapper for AggregateError' },
+      ],
+      [
+        'a message that mentions a socket code after other words',
+        { name: 'Error', message: 'AWS SDK error wrapper for Error: malformed option ECONNRESET' },
+      ],
+      [
+        'a message that starts with a syscall word but names no socket code',
+        {
+          name: 'Error',
+          message: 'AWS SDK error wrapper for Error: connect to the endpoint failed',
+        },
+      ],
+      [
+        'a message that mentions a socket code in prose',
+        { name: 'Error', message: 'we saw ECONNRESET earlier' },
+      ],
+      [
+        'an error whose message names no socket error',
+        { name: 'Error', message: 'the request is malformed' },
+      ],
       ['an error whose message is not text', { name: 'Error', message: 7 }],
       ['errors that carry no code', { name: 'AggregateError', errors: [{}, {}] }],
     ])('keeps 502 for %s', (_label, failure) => {
@@ -144,7 +288,11 @@ describe('mapAwsError', () => {
 
     it('reads the credentials code from Code before name', () => {
       // The provider's own code is `Code`; `name` is what the SDK called the error.
-      const e = mapAwsError({ name: 'Error', Code: 'SignatureDoesNotMatch', $metadata: { httpStatusCode: 403 } })
+      const e = mapAwsError({
+        name: 'Error',
+        Code: 'SignatureDoesNotMatch',
+        $metadata: { httpStatusCode: 403 },
+      })
 
       expect(e.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
     })
@@ -160,9 +308,9 @@ describe('mapAwsError', () => {
 
     it('keeps a 403 InvalidAccessKeyId that is not a 403 as an ordinary rejection', () => {
       // Only the answer of the provider refuses credentials: the name alone, with another status, does not.
-      expect(mapAwsError({ name: 'InvalidAccessKeyId', $metadata: { httpStatusCode: 400 } }).getStatus()).toBe(
-        HttpStatus.BAD_GATEWAY,
-      )
+      expect(
+        mapAwsError({ name: 'InvalidAccessKeyId', $metadata: { httpStatusCode: 400 } }).getStatus(),
+      ).toBe(HttpStatus.BAD_GATEWAY)
     })
   })
 
@@ -184,30 +332,28 @@ describe('mapAwsError', () => {
     ['not-found', { name: 'NotFound' }, 'STORAGE_OBJECT_NOT_FOUND'],
     ['timeout', { name: 'TimeoutError' }, 'STORAGE_TIMEOUT'],
     ['provider-error', { name: 'AccessDenied' }, 'STORAGE_PROVIDER_ERROR'],
-  ])(
-    'should never attach the caught error on the %s branch',
-    (_label, shape, expectedCode) => {
-      // `details` is serialized into the HTTP error envelope this library returns to API
-      // clients, so anything reachable from the returned exception is a published surface.
-      // A `cause` chain drags the whole SDK error with it — `$metadata`, `$fault`, an
-      // possibly-unconsumed `$response.body` stream and any vendor fields — so the mapper
-      // projects named fields instead of attaching the error.
-      //
-      // Driven across all three return paths on purpose: each constructs its own
-      // exception, so a guard on one says nothing about the others, and the not-found
-      // branch is the one `head` and `download` misses travel through.
-      const caught = { ...shape, message: 'denied', leaked: 'FIXTURE-must-not-leak' }
+  ])('should never attach the caught error on the %s branch', (_label, shape, expectedCode) => {
+    // `details` is serialized into the HTTP error envelope this library returns to API
+    // clients, so anything reachable from the returned exception is a published surface.
+    // `details` is serialized into the HTTP error envelope this library returns to API clients, so
+    // anything reachable from the returned exception is a published surface. A `cause` chain drags the
+    // whole SDK error with it (`$metadata`, `$fault`, a possibly-unconsumed `$response.body` stream and
+    // any vendor fields), so the mapper projects named fields and attaches nothing.
+    //
+    // Driven across all three return paths on purpose: each constructs its own
+    // exception, so a guard on one says nothing about the others, and the not-found
+    // branch is the one `head` and `download` misses travel through.
+    const caught = { ...shape, message: 'denied', leaked: 'FIXTURE-must-not-leak' }
 
-      const mapped = mapAwsError(caught, { key: 'k', bucket: 'b', op: 'head' })
+    const mapped = mapAwsError(caught, { key: 'k', bucket: 'b', op: 'head' })
 
-      expect(mapped.code).toBe(expectedCode)
-      expect(mapped.cause).toBeUndefined()
-      expect(JSON.stringify(mapped.getResponse())).not.toContain('FIXTURE-must-not-leak')
-    },
-  )
+    expect(mapped.code).toBe(expectedCode)
+    expect(mapped.cause).toBeUndefined()
+    expect(JSON.stringify(mapped.getResponse())).not.toContain('FIXTURE-must-not-leak')
+  })
 
   it('should project only the four named fields beside the caller context', () => {
-    // Guards the projection itself, so the `cause` assertions above cannot pass by the
+    // Guards the projection itself, so the body assertions above cannot pass by the
     // mapper having quietly stopped copying anything. `context` is spread verbatim and is
     // the caller's responsibility, not the mapper's — see the AGENTS.md rule.
     const mapped = mapAwsError(
@@ -230,7 +376,7 @@ describe('mapAwsError', () => {
       awsCode: 'AccessDenied',
       httpStatus: 403,
       requestId: 'req-1',
-      awsMessage: 'denied',
+      reason: 'rejected',
     })
   })
 })

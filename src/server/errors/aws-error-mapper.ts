@@ -6,7 +6,8 @@
  */
 import { HttpStatus } from '@nestjs/common'
 import { StorageException } from './storage-exception'
-import { providerFailureStatus } from './provider-failure'
+import { logProviderFailure } from '../utils/provider-failure-log'
+import { providerFailureReason, providerFailureStatus } from './provider-failure'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
 interface AwsLikeError {
@@ -43,7 +44,8 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
     awsCode,
     httpStatus,
     requestId,
-    awsMessage: e.message,
+    // A fixed word, never what the driver or the provider wrote.
+    reason: providerFailureReason(err),
   }
 
   if (awsCode === 'NoSuchBucket') {
@@ -61,7 +63,11 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
     )
   }
   if (httpStatus === 304) {
-    return new StorageException(STORAGE_ERROR_CODES.STORAGE_NOT_MODIFIED, HttpStatus.NOT_MODIFIED, details)
+    return new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_NOT_MODIFIED,
+      HttpStatus.NOT_MODIFIED,
+      details,
+    )
   }
   if (httpStatus === 412) {
     return new StorageException(
@@ -71,8 +77,14 @@ export function mapAwsError(err: unknown, context?: Record<string, unknown>): St
     )
   }
   if (e.name === 'TimeoutError') {
-    return new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, details)
+    logProviderFailure(err, context)
+    return new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_TIMEOUT,
+      undefined,
+      details,
+    )
   }
+  logProviderFailure(err, context)
   return new StorageException(
     STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR,
     providerFailureStatus(err),

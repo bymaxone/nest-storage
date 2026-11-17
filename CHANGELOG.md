@@ -13,6 +13,27 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Security
+
+- **A failed call no longer tells its client what the driver or the provider said.** The body of a
+  `StorageException` carried `details.awsMessage`, and for a failed multipart abort `abortError`, a
+  failed post-upload delete `cleanupError`, and `deleteMany` the text of each failure. For a provider
+  that could not be reached that text is the driver's own, such as `connect ECONNREFUSED 10.0.3.7:9000`,
+  and a host that returns `getResponse()` unchanged (Nest's default) handed a caller the address and
+  port of the storage service. The body now holds a fixed `details.reason` beside `awsCode`, `httpStatus`
+  and `requestId`, which stay. What the driver and the provider said is logged for a provider failure, as a warning
+  that starts `Provider call failed` (or `Multipart abort failed`), from named fields only: the error's
+  name, the provider's code, the status, the request id and the message, with a signature or an access
+  key id in it masked and its length bounded. The error object is not attached to the exception.
+  `deleteMany`'s `failed[].error` is the provider's error code for a key it refused, or the fixed reason
+  when the whole request failed.
+
+  **Apply to a derived backend:** a host that read `details.awsMessage`, `abortError` or the text in
+  `cleanupError` finds that text in the library's warn log instead; the exception no longer carries it,
+  so there is nothing to forward to a client by mistake. A host that matched on that text matches
+  `details.reason` (`unreachable`, `timeout`, `provider-error`, `credentials-refused` or `rejected`) or
+  `awsCode`.
+
 ## [1.1.12] - 2026-11-14
 
 ### Added
