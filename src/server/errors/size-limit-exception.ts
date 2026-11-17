@@ -37,16 +37,43 @@ export function mapSizeLimitError(
   context: Record<string, unknown>,
 ): StorageException | undefined {
   if (err instanceof SizeShortfallError) {
-    return new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
-      ...context,
-      field: 'size',
-      reason: 'The body is shorter than the declared size',
-      declaredSize: err.declaredBytes,
-      receivedSize: err.receivedBytes,
-    })
+    return declaredSizeMismatch(err.declaredBytes, err.receivedBytes, context)
   }
   if (!(err instanceof SizeLimitError)) {
     return undefined
   }
   return sizeLimitException(err.limitBytes, err.kind, context)
+}
+
+/** The details of the refusal for a body shorter than the size its caller declared. */
+function shortfallDetails(declaredBytes: number, receivedBytes: number): Record<string, unknown> {
+  return {
+    field: 'size',
+    reason: 'The body is shorter than the declared size',
+    declaredSize: declaredBytes,
+    receivedSize: receivedBytes,
+  }
+}
+
+/**
+ * The refusal for a body whose length is not the size its caller declared: longer is
+ * `STORAGE_SIZE_EXCEEDED`, shorter `STORAGE_VALIDATION_FAILED` naming `size`.
+ *
+ * @param declaredBytes - The size the caller declared.
+ * @param receivedBytes - The length the body turned out to have.
+ * @param context - Details to carry (key and bucket).
+ * @returns The exception to throw.
+ */
+export function declaredSizeMismatch(
+  declaredBytes: number,
+  receivedBytes: number,
+  context: Record<string, unknown>,
+): StorageException {
+  if (receivedBytes > declaredBytes) {
+    return sizeLimitException(declaredBytes, 'declared', context)
+  }
+  return new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
+    ...context,
+    ...shortfallDetails(declaredBytes, receivedBytes),
+  })
 }

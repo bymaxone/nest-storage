@@ -50,7 +50,8 @@ note on each entry is the compatibility contract — read it, not the number.
   if it were the whole. The last byte is now held back until the source has ended: a longer body fails
   `STORAGE_SIZE_EXCEEDED` before the request completes and a shorter one fails `STORAGE_VALIDATION_FAILED`
   (`details.field: 'size'`), each in bounded time with nothing stored. A declared `size` that is not a whole
-  number of at least 0 also fails `STORAGE_VALIDATION_FAILED` (see the entry above).
+  number of at least 0 also fails `STORAGE_VALIDATION_FAILED` (see the entry above). With a pre-upload scanner
+  the stream is read into memory first, and the same rule is applied to the length that was read.
 
   **Apply to a derived backend:** a caller that passed a `size` that did not match its stream, and got an object
   of the declared length back, now gets an error; pass the true size, or none (a stream with no size uses

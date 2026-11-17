@@ -62,10 +62,11 @@ import {
   type UploadBody,
 } from '../utils/stream-utils'
 import { assertIntegerInput } from '../utils/numeric-input'
-import { bufferStreamForScan, boundStreamSize, withBytesBody } from '../utils/upload-body'
+import { assertScannedSize, boundStreamSize, bufferStreamForScan, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { logValue } from '../utils/log-value'
-import { abortOnBodyFailure,
+import {
+  abortOnBodyFailure,
   abortable,
   bindToSignal,
   CLEANUP_DEADLINE_MS,
@@ -224,6 +225,7 @@ export class StorageService {
       signal,
       context,
     )
+    assertScannedSize(scanned, options.size, this.options.multipart.thresholdBytes, context)
     const body = boundStreamSize(scanned, options.size, this.options)
     const validatedOptions = { ...options, body }
 

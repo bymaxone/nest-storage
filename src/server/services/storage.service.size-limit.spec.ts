@@ -349,5 +349,63 @@ describe('upload size bound', () => {
       expect(putBodies[0]).toEqual(Buffer.alloc(500, 9))
     })
   })
+
+  describe('a stream with a wrong declared size, read into memory for a pre-upload scan', () => {
+    // The stream becomes a buffer before the size guard runs, and the request still carried the declared
+    // size as Content-Length: a 5000-byte buffer declared as 500 reached the provider cut to 500 bytes
+    // after the scanner had approved all 5000.
+    const scanning = {
+      validation: { maxSizeBytes: 1_000_000 },
+      scanner: {
+        impl: { scan: (): Promise<{ status: 'clean'; engine: string }> => Promise.resolve({ status: 'clean', engine: 't' }) },
+        mode: 'pre-upload' as const,
+      },
+    }
+
+    it('refuses a body longer than declared with STORAGE_SIZE_EXCEEDED and sends nothing', async () => {
+      const storage = await storageWith(scanning)
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: Readable.from([Buffer.alloc(5000, 1)]), contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_SIZE_EXCEEDED', status: 413 })
+      expect(detailsOf(error)).toMatchObject({ declaredSize: 500, key: 'k', bucket: 'b' })
+      expect(calls).toEqual([])
+    })
+
+    it('refuses a body shorter than a single-shot declared size with STORAGE_VALIDATION_FAILED and sends nothing', async () => {
+      const storage = await storageWith(scanning)
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: Readable.from([Buffer.alloc(120, 1)]), contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+      expect(detailsOf(error)).toMatchObject({ field: 'size', declaredSize: 500, receivedSize: 120 })
+      expect(calls).toEqual([])
+    })
+
+    it('stores a body of exactly the declared size', async () => {
+      const storage = await storageWith(scanning)
+
+      await storage.upload({ key: 'k', body: Readable.from([Buffer.alloc(500, 1)]), contentType: 'text/plain', size: 500 })
+
+      expect(putBodies).toEqual([Buffer.alloc(500, 1)])
+    })
+
+    it('uploads a body shorter than a declared size that is multipart-sized, as the unscanned path does', async () => {
+      const storage = await storageWith({ ...scanning, multipart: { thresholdBytes: 100, partSizeBytes: 5 * MIB } })
+
+      const result = await storage.upload({
+        key: 'k',
+        body: Readable.from([Buffer.alloc(120, 1)]),
+        contentType: 'text/plain',
+        size: 500,
+      })
+
+      expect(result.multipart).toBe(true)
+    })
+  })
 })
 

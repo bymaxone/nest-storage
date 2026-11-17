@@ -7,6 +7,7 @@ import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
 import { withExactSize, withSizeLimit } from './size-limit'
 import { pickUploadStrategy } from './upload-strategy'
+import { declaredSizeMismatch } from '../errors/size-limit-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
 import {
@@ -93,4 +94,30 @@ export async function bufferStreamForScan(
     })
   }
   return buffered
+}
+
+/**
+ * Checks a body that was read into memory for a pre-upload scan against the size its caller declared,
+ * as `boundStreamSize` does for a stream that is sent as it is read: the request carries
+ * `Content-Length` set to the declared size, so a buffer of another length would be stored cut off.
+ * Longer is always refused; shorter only where the declared size is a single-shot one, as for a stream.
+ *
+ * @param body - The body after the scan buffering.
+ * @param declaredSize - The size the caller declared, if any.
+ * @param thresholdBytes - The multipart threshold: a declared size at or above it is not single-shot.
+ * @param context - Details to carry (key and bucket).
+ * @throws StorageException `STORAGE_SIZE_EXCEEDED` or `STORAGE_VALIDATION_FAILED` on a mismatch.
+ */
+export function assertScannedSize(
+  body: UploadBody,
+  declaredSize: number | undefined,
+  thresholdBytes: number,
+  context: Record<string, unknown>,
+): void {
+  if (!isBufferLike(body) || declaredSize === undefined || body.byteLength === declaredSize) {
+    return
+  }
+  if (body.byteLength > declaredSize || declaredSize < thresholdBytes) {
+    throw declaredSizeMismatch(declaredSize, body.byteLength, context)
+  }
 }

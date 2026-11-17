@@ -5,7 +5,7 @@
  * @layer server/errors
  */
 import { SizeLimitError, SizeShortfallError } from '../utils/size-limit'
-import { mapSizeLimitError } from './size-limit-exception'
+import { declaredSizeMismatch, mapSizeLimitError } from './size-limit-exception'
 
 function bodyOf(error: { getResponse(): unknown } | undefined): { error: { code: string; details: Record<string, unknown> } } {
   return (error as { getResponse(): unknown }).getResponse() as { error: { code: string; details: Record<string, unknown> } }
@@ -42,3 +42,20 @@ describe('mapSizeLimitError', () => {
     expect(mapSizeLimitError(new Error('boom'), {})).toBeUndefined()
   })
 })
+
+describe('declaredSizeMismatch', () => {
+  it('is STORAGE_SIZE_EXCEEDED with the declared size when the body is longer', () => {
+    expect(bodyOf(declaredSizeMismatch(500, 501, { key: 'k' })).error).toMatchObject({
+      code: 'STORAGE_SIZE_EXCEEDED',
+      details: { key: 'k', declaredSize: 500 },
+    })
+  })
+
+  it('is STORAGE_VALIDATION_FAILED naming size and both lengths when the body is shorter', () => {
+    expect(bodyOf(declaredSizeMismatch(500, 499, { key: 'k' })).error).toMatchObject({
+      code: 'STORAGE_VALIDATION_FAILED',
+      details: { key: 'k', field: 'size', declaredSize: 500, receivedSize: 499 },
+    })
+  })
+})
+
