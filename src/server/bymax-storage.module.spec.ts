@@ -208,7 +208,11 @@ describe('BymaxStorageModule: a group key that is set to undefined', () => {
   it('signs a URL with the default ceiling, not X-Amz-Expires=NaN', async () => {
     // A key set to undefined must not overwrite the default: it would resolve to NaN and put `X-Amz-Expires=NaN` in every URL.
     const moduleRef = await Test.createTestingModule({
-      imports: [BymaxStorageModule.forRoot({ ...base, signedUrls: { maxTtlSeconds: undefined } })],
+      imports: [BymaxStorageModule.forRoot({
+          ...base,
+          // An explicit undefined is outside the exactOptionalPropertyTypes type, but a JavaScript caller can pass it.
+          signedUrls: { maxTtlSeconds: undefined } as unknown as BymaxStorageModuleOptions['signedUrls'],
+        })],
     }).compile()
     await moduleRef.init()
 

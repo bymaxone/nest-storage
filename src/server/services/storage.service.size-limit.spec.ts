@@ -453,5 +453,26 @@ describe('upload size bound', () => {
       expect(await scannedAndStored(make)).toEqual({ scanned: 'AAAA', stored: 'AAAA' })
     })
   })
+
+  describe('a declared size that is not a whole number, whatever the body is', () => {
+    it.each([
+      ['a Buffer', () => Buffer.from('hi')],
+      ['a Uint8Array', () => new Uint8Array([104, 105])],
+      ['a string', () => 'hi'],
+      ['a stream', () => Readable.from([Buffer.from('hi')])],
+    ])('is refused for %s with STORAGE_VALIDATION_FAILED naming size, before any request', async (_label, body) => {
+      const storage = await storageWith({})
+
+      for (const size of [Number.NaN, -1, 1.5, '3', Infinity]) {
+        const error: unknown = await storage
+          .upload({ key: 'k', body: body() as never, contentType: 'text/plain', size: size as number })
+          .catch((err: unknown) => err)
+
+        expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+        expect(detailsOf(error)).toMatchObject({ field: 'size' })
+      }
+      expect(calls).toEqual([])
+    })
+  })
 })
 

@@ -112,9 +112,9 @@ describe('toUploadBody', () => {
   })
 
   it.each([
-    ['an object with only a pipe function', { pipe: () => undefined }],
+    ['an object with only a pipe function', { pipe: (): void => undefined }],
     ['a WHATWG ReadableStream', new ReadableStream()],
-    ['an object with pipe and on but no once', { pipe: () => undefined, on: () => undefined }],
+    ['an object with pipe and on but no once', { pipe: (): void => undefined, on: (): void => undefined }],
   ])('refuses %s with STORAGE_VALIDATION_FAILED naming the body, not a raw TypeError', (_label, value) => {
     let thrown: unknown
     try {
