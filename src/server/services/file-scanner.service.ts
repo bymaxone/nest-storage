@@ -10,6 +10,7 @@ import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { IFileScanner, FileScanResult } from '../interfaces/file-scanner.interface'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { DEFAULT_SCANNER_TIMEOUT_MS } from '../constants/default-options.constants'
 import { logValue } from '../utils/log-value'
 
 /** What the log line holds when the details cannot be turned into text. */
@@ -51,6 +52,9 @@ interface ScanInput {
   size?: number
 }
 
+/** What a scanner returned, as it can be at run time: a JS scanner may return anything. */
+type ScannerOutcome = Partial<FileScanResult> | null | undefined
+
 @Injectable()
 export class FileScannerService {
   private readonly logger = new Logger(FileScannerService.name)
@@ -89,13 +93,16 @@ export class FileScannerService {
    *
    * Infected results throw `STORAGE_SCAN_INFECTED`. Inconclusive results throw
    * `STORAGE_SCAN_INCONCLUSIVE` when `rejectOnUnknown` is set; otherwise they
-   * are returned with a warning log.
+   * are returned with a warning log. Anything else (no result, a status that is not exactly
+   * `'clean'`, `'infected'` or `'unknown'`) is rejected as inconclusive whatever `rejectOnUnknown`
+   * says, and a scan that outlasts `scanner.timeoutMs` throws `STORAGE_TIMEOUT`.
    *
    * @param input - The scan input.
    * @returns The scan result when `status` is `'clean'` or `'unknown'` (non-rejecting).
    * @throws Error when called without a configured scanner.
    * @throws StorageException `STORAGE_SCAN_INFECTED` on an infected result.
-   * @throws StorageException `STORAGE_SCAN_INCONCLUSIVE` on an unknown result with `rejectOnUnknown`.
+   * @throws StorageException `STORAGE_SCAN_INCONCLUSIVE` on an unknown result with `rejectOnUnknown`, or a result outside the contract.
+   * @throws StorageException `STORAGE_TIMEOUT` when the scan outlasts `scanner.timeoutMs`.
    */
   async scan(input: ScanInput): Promise<FileScanResult> {
     if (!this.scanner) {
@@ -103,26 +110,61 @@ export class FileScannerService {
         'FileScannerService.scan() called without a configured scanner — guard with isEnabled() first.',
       )
     }
-    const result = await this.scanner.scan(input)
+    const result = await this.scanWithinDeadline(this.scanner, input)
+    const status = result?.status
+    const engine = typeof result?.engine === 'string' ? result.engine : undefined
+    const details = scannerDetailsForLog(result?.details)
 
-    if (result.status === 'infected') {
-      this.logger.warn(`Infected file detected: key=${logValue(input.key)} engine=${logValue(result.engine)} threat=${logValue(result.threat ?? 'unknown')}${scannerDetailsForLog(result.details)}`)
+    if (status === 'clean') {
+      return result as FileScanResult
+    }
+    if (status === 'infected') {
+      this.logger.warn(`Infected file detected: key=${logValue(input.key)} engine=${logValue(engine)} threat=${logValue(result?.threat ?? 'unknown')}${details}`)
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED, undefined, {
-        engine: result.engine,
-        threat: result.threat,
+        engine,
+        threat: result?.threat,
       })
     }
-
-    if (result.status === 'unknown') {
-      if (this.options.scanner?.rejectOnUnknown) {
-        this.logger.warn(`Inconclusive scan result rejected: key=${logValue(input.key)} engine=${logValue(result.engine)}${scannerDetailsForLog(result.details)}`)
-        throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INCONCLUSIVE, undefined, {
-          engine: result.engine,
-        })
-      }
-      this.logger.warn(`Inconclusive scan result accepted: key=${logValue(input.key)} engine=${logValue(result.engine)}`)
+    if (status === 'unknown' && !this.options.scanner?.rejectOnUnknown) {
+      this.logger.warn(`Inconclusive scan result accepted: key=${logValue(input.key)} engine=${logValue(engine)}`)
+      return result as FileScanResult
     }
+    // `unknown` with `rejectOnUnknown`, or a result outside the contract (no result, a status that is
+    // not exactly one of the three): the object is not known to be clean, so it is not stored.
+    const unrecognised = status !== 'unknown'
+    this.logger.warn(`Inconclusive scan result rejected: key=${logValue(input.key)} engine=${logValue(engine)}${unrecognised ? ` status=${logValue(status)}` : ''}${details}`)
+    throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INCONCLUSIVE, undefined, {
+      engine,
+      ...(unrecognised ? { reason: 'unrecognised scanner status' } : {}),
+    })
+  }
 
-    return result
+  /**
+   * Runs the scanner and gives up after `scanner.timeoutMs`: a scanner that never settles would hold
+   * the upload for good. The scanner is handed a signal that aborts then; one that ignores it keeps
+   * running, which is why the README says repeated timeouts pile up work.
+   */
+  private async scanWithinDeadline(scanner: IFileScanner, input: ScanInput): Promise<ScannerOutcome> {
+    const timeoutMs = this.options.scanner?.timeoutMs ?? DEFAULT_SCANNER_TIMEOUT_MS
+    const controller = new AbortController()
+    let timer: NodeJS.Timeout | undefined
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        controller.abort()
+        reject(
+          new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, {
+            key: input.key,
+            bucket: input.bucket,
+            phase: 'scan',
+            timeoutMs,
+          }),
+        )
+      }, timeoutMs)
+    })
+    try {
+      return await Promise.race([scanner.scan({ ...input, signal: controller.signal }), deadline])
+    } finally {
+      clearTimeout(timer)
+    }
   }
 }

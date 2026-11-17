@@ -131,6 +131,7 @@ function assertNumericSections(options: Record<string, unknown>): void {
   for (const key of ['defaultGetTtlSeconds', 'defaultPutTtlSeconds', 'maxTtlSeconds']) {
     assertBoundedInteger(options.signedUrls, 'signedUrls', key, { min: 1, max: MAX })
   }
+  assertBoundedInteger(options.scanner, 'scanner', 'timeoutMs', { min: 1, max: MAX_TIMER_MS })
   assertBoundedInteger(options.multipart, 'multipart', 'thresholdBytes', { min: 1, max: MAX })
   assertBoundedInteger(options.multipart, 'multipart', 'partSizeBytes', {
     min: MIN_PART_SIZE_BYTES,

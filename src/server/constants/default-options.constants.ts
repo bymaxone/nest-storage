@@ -1,3 +1,6 @@
+/** How long a file scan may run before the upload is refused, in milliseconds. */
+export const DEFAULT_SCANNER_TIMEOUT_MS = 60_000
+
 /**
  * @fileoverview Internal default values applied by `applyDefaults()` when the
  * consumer provides options only partially. `as const` preserves literal types.

@@ -86,6 +86,11 @@ export interface BymaxStorageModuleOptions {
     mode?: 'pre-upload' | 'post-upload'
     /** Reject when the scanner returns `'unknown'`. Default: `false`. */
     rejectOnUnknown?: boolean
+    /**
+     * Longest a scan may run, in milliseconds, an integer from `1` to `2147483647`; past it the upload
+     * is refused with `STORAGE_TIMEOUT`. There is no setting that waits without limit. Default: `60000`.
+     */
+    timeoutMs?: number
   }
 
   /** Server-side encryption. */

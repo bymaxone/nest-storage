@@ -25,6 +25,7 @@ describe('default-options constants', () => {
       DEFAULT_MULTIPART: { thresholdBytes: 5_242_880, partSizeBytes: 5_242_880, queueSize: 4 },
       DEFAULT_SCANNER_MODE: 'pre-upload',
       DEFAULT_SCANNER_REJECT_ON_UNKNOWN: false,
+      DEFAULT_SCANNER_TIMEOUT_MS: 60_000,
       DEFAULT_IDEMPOTENCY_CACHE_MAX_ENTRIES: 1000,
       DEFAULT_IDEMPOTENCY_CACHE_TTL_MS: 86_400_000,
     })
