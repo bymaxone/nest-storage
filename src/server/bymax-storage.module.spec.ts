@@ -133,6 +133,8 @@ describe('BymaxStorageModule', () => {
   it.each([
     ['a size limit of NaN, which would switch the limit off', { validation: { maxSizeBytes: Number.NaN } }],
     ['a multipart queue of Infinity, which would keep the process busy on the first upload', { multipart: { queueSize: Infinity } }],
+    ["a scanner mode that is a typo, which would leave every upload unscanned", { scanner: { impl: { scan: () => Promise.resolve({ status: 'clean', engine: 't' }) }, mode: 'preupload' } }],
+    ['a scanner with no implementation, which would leave scanning off', { scanner: { impl: undefined } }],
   ])('refuses to boot with %s', (_what, extra) => {
     // `NaN` on a size limit would switch the limit off, and `Infinity` as a multipart queue would keep the
     // process busy from the first multipart upload; `forRoot` refuses both.

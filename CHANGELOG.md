@@ -44,6 +44,18 @@ note on each entry is the compatibility contract — read it, not the number.
   `null` on an option inside a group is the default; `maxAttempts` above 9007199254740991 is refused. A
   `getResponse()` of a TTL refusal no longer carries a non-numeric `details.provided`.
 
+- **A scanner that would leave scanning silently off is refused at boot.** `scanner: { impl: undefined }` (an optional
+  provider or a factory that returned nothing) and a `scanner.mode` that is a typo (`'preupload'`,
+  `'pre_upload'`) made the library skip both the pre-upload and the post-upload scan, so an infected upload was
+  stored (measured with an infected stand-in: 9 bytes stored under each). `forRoot` now fails with
+  `STORAGE_INVALID_CONFIG` unless `scanner.impl` is an object with a `scan` function and `scanner.mode` is
+  `'pre-upload'` or `'post-upload'`; `scanner.rejectOnUnknown` must be a boolean, and is no longer read as one
+  (`'false'` rejected unknown results). A `scanner` of `null` is no scanner, as `undefined` is, and an
+  `undefined` or `null` mode is the default `'pre-upload'`.
+
+  **Apply to a derived backend:** a host whose `scanner.impl` could be unset, whose `mode` was misspelt, or
+  whose `rejectOnUnknown` was a string now fails at boot instead of running unscanned; fix the configuration.
+
 - **A scan result outside the contract no longer uploads.** `scan()` returned any result that was not
   `'infected'` or an `'unknown'` it was told to reject, so no result, `null`, `'CLEAN'`, `' clean'` or an object
   as the status stored the object. Only the exact string `'clean'` passes now; `'unknown'` keeps following

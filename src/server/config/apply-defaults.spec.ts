@@ -295,3 +295,10 @@ describe('applyDefaults: an option group key that holds undefined or null', () =
     expect(resolved.signedUrls.defaultPutTtlSeconds).toBe(300)
   })
 })
+
+describe('applyDefaults: a scanner of null', () => {
+  it('is no scanner, as undefined is', () => {
+    expect(applyDefaults({ ...base, scanner: null } as unknown as BymaxStorageModuleOptions)).not.toHaveProperty('scanner')
+  })
+})
+
