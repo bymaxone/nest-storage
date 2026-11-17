@@ -203,3 +203,23 @@ describe('BymaxStorageModule', () => {
     })
   })
 })
+
+describe('BymaxStorageModule: a group key that is set to undefined', () => {
+  it('signs a URL with the default ceiling, not X-Amz-Expires=NaN', async () => {
+    // A key set to undefined must not overwrite the default: it would resolve to NaN and put `X-Amz-Expires=NaN` in every URL.
+    const moduleRef = await Test.createTestingModule({
+      imports: [BymaxStorageModule.forRoot({ ...base, signedUrls: { maxTtlSeconds: undefined } })],
+    }).compile()
+    await moduleRef.init()
+
+    try {
+      const url = await moduleRef.get(SignedUrlService).getDownloadUrl({ key: 'k' })
+      const text = typeof url === 'string' ? url : url.url
+
+      expect(new URL(text).searchParams.get('X-Amz-Expires')).toBe('300')
+    } finally {
+      await moduleRef.close()
+    }
+  })
+})
+

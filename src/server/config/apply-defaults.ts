@@ -22,6 +22,16 @@ import {
 import { MAX_SIGNED_URL_TTL_SECONDS } from '../../shared/constants/default-ttls.constants'
 
 /**
+ * The own keys of an option group that hold a value: a key set to `undefined` or `null` means "use the
+ * default", so it must not overwrite one when the group is merged over its defaults.
+ */
+function definedOnly<T extends object>(group: T | undefined): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(group ?? {}).filter(([, value]) => value !== undefined && value !== null),
+  ) as Partial<T>
+}
+
+/**
  * Merges the signed-URL options over their defaults and caps `maxTtlSeconds` at the
  * SigV4 presign limit: the signer rejects any longer expiry, so a larger configured
  * ceiling could never produce a working URL.
@@ -29,7 +39,7 @@ import { MAX_SIGNED_URL_TTL_SECONDS } from '../../shared/constants/default-ttls.
 function resolveSignedUrls(
   configured: BymaxStorageModuleOptions['signedUrls'],
 ): ResolvedBymaxStorageOptions['signedUrls'] {
-  const merged = { ...DEFAULT_SIGNED_URLS, ...(configured ?? {}) }
+  const merged = { ...DEFAULT_SIGNED_URLS, ...definedOnly(configured) }
   return { ...merged, maxTtlSeconds: Math.min(merged.maxTtlSeconds, MAX_SIGNED_URL_TTL_SECONDS) }
 }
 
@@ -90,9 +100,11 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     defaultCacheControl: options.defaultCacheControl ?? DEFAULT_CACHE_CONTROL,
     defaultContentDisposition: options.defaultContentDisposition ?? DEFAULT_CONTENT_DISPOSITION,
     signedUrls: resolveSignedUrls(options.signedUrls),
-    multipart: { ...DEFAULT_MULTIPART, ...(options.multipart ?? {}) },
-    ...(options.validation !== undefined ? { validation: options.validation } : {}),
-    ...(options.scanner !== undefined ? { scanner: options.scanner } : {}),
+    multipart: { ...DEFAULT_MULTIPART, ...definedOnly(options.multipart) },
+    ...(options.validation !== undefined ? { validation: definedOnly(options.validation) } : {}),
+    ...(options.scanner !== undefined
+      ? { scanner: definedOnly(options.scanner) as NonNullable<BymaxStorageModuleOptions['scanner']> }
+      : {}),
     ...(options.serverSideEncryption !== undefined
       ? { serverSideEncryption: options.serverSideEncryption }
       : {}),

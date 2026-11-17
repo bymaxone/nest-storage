@@ -165,6 +165,7 @@ export class StorageService {
     if (rawBody === undefined || rawBody === null) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_BODY_MISSING)
     }
+    assertIntegerInput(requested.size, 'size', 0)
     const options = withBytesBody(requested)
     if (!options.contentType) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_CONTENT_TYPE_REQUIRED)

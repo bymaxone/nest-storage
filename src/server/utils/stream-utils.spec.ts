@@ -111,6 +111,21 @@ describe('toUploadBody', () => {
     })
   })
 
+  it.each([
+    ['an object with only a pipe function', { pipe: () => undefined }],
+    ['a WHATWG ReadableStream', new ReadableStream()],
+    ['an object with pipe and on but no once', { pipe: () => undefined, on: () => undefined }],
+  ])('refuses %s with STORAGE_VALIDATION_FAILED naming the body, not a raw TypeError', (_label, value) => {
+    let thrown: unknown
+    try {
+      toUploadBody(value)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+  })
+
   it('leaves a Buffer, a Uint8Array and a stream as they are', () => {
     // The accepted shapes pass through by identity.
     const buffer = Buffer.from('a')

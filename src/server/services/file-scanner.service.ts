@@ -23,6 +23,19 @@ const MAX_SCANNER_LABEL_LENGTH = 200
 /** The most characters of a scanner's own `details`, or of its failure message, a log line carries. */
 const MAX_SCANNER_DETAILS_LENGTH = 300
 
+/** The most characters of an unrecognised status a log line carries. */
+const MAX_STATUS_LOG_LENGTH = 40
+
+/**
+ * An unrecognised status as a log token: a string is cut and escaped, anything else is named by its type,
+ * so no `toString` of the scanner's own object runs and nothing it holds reaches the line.
+ */
+function statusForLog(status: unknown): string {
+  return typeof status === 'string'
+    ? logValue(status.slice(0, MAX_STATUS_LOG_LENGTH))
+    : `<${typeof status}>`
+}
+
 /** The engine or threat name as the scanner gave it, cut to {@link MAX_SCANNER_LABEL_LENGTH}; `undefined` when it is not a string. */
 function scannerLabel(value: unknown): string | undefined {
   return typeof value === 'string' ? value.slice(0, MAX_SCANNER_LABEL_LENGTH) : undefined
@@ -142,7 +155,7 @@ export class FileScannerService {
     // `unknown` with `rejectOnUnknown`, or a result outside the contract (no result, a status that is
     // not exactly one of the three): the object is not known to be clean, so it is not stored.
     const unrecognised = status !== 'unknown'
-    this.logger.warn(`Inconclusive scan result rejected: key=${logValue(input.key)} engine=${logValue(engine)}${unrecognised ? ` status=${logValue(status)}` : ''}${details}`)
+    this.logger.warn(`Inconclusive scan result rejected: key=${logValue(input.key)} engine=${logValue(engine)}${unrecognised ? ` status=${statusForLog(status)}` : ''}${details}`)
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INCONCLUSIVE, undefined, {
       engine,
       ...(unrecognised ? { reason: 'unrecognised scanner status' } : {}),

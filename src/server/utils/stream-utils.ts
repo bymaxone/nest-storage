@@ -248,8 +248,12 @@ export function toUploadBody(body: unknown): UploadBody {
   if (ArrayBuffer.isView(body) && !(body instanceof Uint8Array)) {
     return Buffer.from(body.buffer, body.byteOffset, body.byteLength)
   }
-  const stream = body as { pipe?: unknown } | null | undefined
-  if (!(body instanceof Uint8Array) && typeof stream?.pipe !== 'function') {
+  const stream = body as { pipe?: unknown; on?: unknown; once?: unknown } | null | undefined
+  const readable =
+    typeof stream?.pipe === 'function' &&
+    typeof stream.on === 'function' &&
+    typeof stream.once === 'function'
+  if (!(body instanceof Uint8Array) && !readable) {
     // A Blob, an array of chunks or any other object is not a body the SDK can send; refusing it here gives
     // the caller a validation error instead of a failure that blames the multipart upload.
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {

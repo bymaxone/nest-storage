@@ -339,6 +339,21 @@ describe('upload size bound', () => {
       expect(putBodies).toEqual([])
     })
 
+    it('fails STORAGE_TIMEOUT when a stream delivers its declared bytes and then never ends, and stores nothing', async () => {
+      // The last byte is held back until the source has ended, so a source that goes quiet at the declared
+      // size leaves the request incomplete until requestTimeoutMs.
+      const storage = await storageWith({ requestTimeoutMs: 300 })
+      const quiet = new Readable({ read() {} })
+      quiet.push(Buffer.alloc(500, 9))
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: quiet, contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_TIMEOUT' })
+      expect(putBodies).toEqual([])
+    })
+
     it('uploads a body of exactly the declared size, every byte of it', async () => {
       const storage = await storageWith({})
 

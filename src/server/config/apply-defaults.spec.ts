@@ -146,8 +146,8 @@ describe('applyDefaults', () => {
     expect(r.requestTimeoutMs).toBe(60_000)
     expect(r.uploadIdleTimeoutMs).toBe(60_000)
     expect(r.cdnBaseUrl).toBe('https://cdn.example.com')
-    expect(r.validation).toBe(full.validation)
-    expect(r.scanner).toBe(full.scanner)
+    expect(r.validation).toEqual(full.validation)
+    expect(r.scanner).toEqual(full.scanner)
     expect(r.serverSideEncryption).toBe('aws:kms')
     expect(r.kmsKeyId).toBe('key-1')
     expect(r.credentials.sessionToken).toBe('t')
@@ -255,5 +255,43 @@ describe('applyDefaults', () => {
     expect(applyDefaults({ ...base, bodyIdleTimeoutMs: 0 }).bodyIdleTimeoutMs).toBe(0)
     expect(applyDefaults({ ...base, requestTimeoutMs: 1234 }).bodyIdleTimeoutMs).toBe(1234)
     expect(applyDefaults(base).bodyIdleTimeoutMs).toBe(30_000)
+  })
+})
+
+describe('applyDefaults: an option group key that holds undefined or null', () => {
+  // A key set to `undefined` or `null` means "use the default"; spread over the defaults it would replace them,
+  // and `maxTtlSeconds: undefined` would resolve to NaN, which puts `X-Amz-Expires=NaN` in every signed URL.
+  it.each([undefined, null])('uses the default for %p in the signed-URL, multipart and size options', (value) => {
+    const resolved = applyDefaults({
+      ...base,
+      signedUrls: { defaultGetTtlSeconds: value, defaultPutTtlSeconds: value, maxTtlSeconds: value },
+      multipart: { thresholdBytes: value, partSizeBytes: value, queueSize: value },
+      validation: { maxSizeBytes: value },
+    } as unknown as BymaxStorageModuleOptions)
+
+    expect(resolved.signedUrls).toEqual({ defaultGetTtlSeconds: 300, defaultPutTtlSeconds: 300, maxTtlSeconds: 604_800 })
+    expect(resolved.multipart).toEqual({ thresholdBytes: 5_242_880, partSizeBytes: 5_242_880, queueSize: 4 })
+    expect(resolved.validation?.maxSizeBytes).toBeUndefined()
+  })
+
+  it.each([undefined, null])('leaves the scanner timeout unset for %p, so the default applies at the scan', (value) => {
+    const resolved = applyDefaults({ ...base, scanner: { impl: scanner, timeoutMs: value } } as unknown as BymaxStorageModuleOptions)
+
+    expect(resolved.scanner?.timeoutMs).toBeUndefined()
+    expect(resolved.scanner?.impl).toBe(scanner)
+  })
+
+  it('keeps every value that is set, including a falsy one that is not nullish', () => {
+    const resolved = applyDefaults({
+      ...base,
+      validation: { maxSizeBytes: 1000 },
+      multipart: { queueSize: 7 },
+      signedUrls: { defaultGetTtlSeconds: 60 },
+    })
+
+    expect(resolved.validation?.maxSizeBytes).toBe(1000)
+    expect(resolved.multipart.queueSize).toBe(7)
+    expect(resolved.signedUrls.defaultGetTtlSeconds).toBe(60)
+    expect(resolved.signedUrls.defaultPutTtlSeconds).toBe(300)
   })
 })

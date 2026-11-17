@@ -210,6 +210,22 @@ describe('StorageService — single-shot upload', () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['a Buffer', () => Buffer.from('hi')],
+    ['a Uint8Array', () => new Uint8Array([104, 105])],
+    ['a string', () => 'hi'],
+  ])('refuses a declared size that is not a whole number on %s, before any request', async (_label, body) => {
+    const { service, send } = makeService()
+
+    for (const size of [Number.NaN, -1, 1.5, '3', Infinity]) {
+      const err = await service.upload(uploadOf({ body: body() as never, size: size as number })).catch((e: unknown) => e)
+
+      expect(err).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+      expect((err as StorageException).getResponse()).toMatchObject({ error: { details: { field: 'size' } } })
+    }
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it('sends the bytes of a known-size stream, in one request, on the single-shot path', async () => {
     // A small stream with a declared size stays single-shot. Its body is the size guard over the
     // stream (a longer or shorter body is refused), so the bytes are what is compared.

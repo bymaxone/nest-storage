@@ -2,6 +2,7 @@
  * @fileoverview Tests for the clampTtl presign-TTL utility.
  * @layer server/utils
  */
+import { inspect } from 'node:util'
 import { clampTtl } from './ttl-clamp'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
@@ -89,6 +90,10 @@ describe('clampTtl', () => {
     },
   )
 
+  it('refuses a null ttlSeconds instead of reading it as absent', () => {
+    expect(() => clampTtl(null as unknown as number, DEFAULT_TTL, MAX_TTL)).toThrow(StorageException)
+  })
+
   it('checks the default TTL as well, so a NaN default is refused at the call', () => {
     expect(() => clampTtl(undefined, Number.NaN, MAX_TTL)).toThrow(StorageException)
   })
@@ -107,5 +112,44 @@ describe('clampTtl', () => {
     expect(reasonOf(1.5)).toBe('TTL must be a whole number of seconds greater than 0')
     expect(reasonOf(-1.5)).toBe('TTL must be > 0')
     expect(reasonOf(0)).toBe('TTL must be > 0')
+  })
+})
+
+describe('clampTtl: what a refusal carries', () => {
+  // A string, a Symbol or a function can hold anything the caller has, so none of them is echoed in the
+  // error: only a finite number is.
+  const SENTINEL = 'SENTINEL-secret-value'
+
+  function bodyOf(value: unknown): { details: Record<string, unknown>; text: string } {
+    try {
+      clampTtl(value as number, DEFAULT_TTL, MAX_TTL)
+    } catch (error) {
+      const response = (error as StorageException).getResponse() as { error: { details: Record<string, unknown> } }
+      return {
+        details: response.error.details,
+        text: `${JSON.stringify(response)} ${inspect(error, { depth: 5 })} ${(error as Error).message}`,
+      }
+    }
+    throw new Error('expected clampTtl to throw')
+  }
+
+  it.each([
+    ['a string', SENTINEL],
+    ['a Symbol', Symbol(SENTINEL)],
+    ['a function', Object.defineProperty(() => 1, 'name', { value: SENTINEL })],
+    ['an object', { toString: () => SENTINEL }],
+  ])('echoes nothing of %s', (_label, value) => {
+    const { details, text } = bodyOf(value)
+
+    expect(details).not.toHaveProperty('provided')
+    expect(text).not.toContain(SENTINEL)
+  })
+
+  it.each([0, -10, 1.5])('prints a finite number such as %p', (value) => {
+    expect(bodyOf(value).details.provided).toBe(value)
+  })
+
+  it.each([Number.NaN, Infinity, -Infinity])('does not print the non-finite %p', (value) => {
+    expect(bodyOf(value).details).not.toHaveProperty('provided')
   })
 })

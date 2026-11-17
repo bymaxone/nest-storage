@@ -314,7 +314,7 @@ describe('validateOptions: the numeric options in a group', () => {
   // any bound, so `NaN < 1` and `NaN > 1` are both false, and a string compares as the number it spells.
   // `NaN` on `validation.maxSizeBytes` would switch the size limit off, and `Infinity` on `multipart.queueSize`
   // would keep the process busy from the first multipart upload, so each option is refused by name.
-  const BAD = [Number.NaN, Infinity, -1, 0, 1.5, '3', null]
+  const BAD = [Number.NaN, Infinity, -1, 0, 1.5, '3']
   const options: [string, (value: unknown) => Record<string, unknown>][] = [
     ['validation.maxSizeBytes', (value) => ({ validation: { maxSizeBytes: value } })],
     ['signedUrls.defaultGetTtlSeconds', (value) => ({ signedUrls: { defaultGetTtlSeconds: value } })],
@@ -366,5 +366,29 @@ describe('validateOptions: the numeric options in a group', () => {
 
   it('leaves an unset group alone', () => {
     expect(() => { validateOptions({ ...valid, multipart: {}, signedUrls: {}, validation: {} }) }).not.toThrow()
+  })
+})
+
+describe('validateOptions: nullish keys and the retry ceiling', () => {
+  it.each([undefined, null])('accepts %p for a numeric option inside a group, which means the default', (value) => {
+    expect(() => {
+      validateOptions({
+        ...valid,
+        validation: { maxSizeBytes: value },
+        signedUrls: { defaultGetTtlSeconds: value, defaultPutTtlSeconds: value, maxTtlSeconds: value },
+        multipart: { thresholdBytes: value, partSizeBytes: value, queueSize: value },
+        scanner: { timeoutMs: value },
+      })
+    }).not.toThrow()
+  })
+
+  it.each([1e300, Number.MAX_SAFE_INTEGER + 2])('refuses a maxAttempts of %p, above the safe-integer ceiling', (value) => {
+    expect(reasonOf(() => { validateOptions({ ...valid, maxAttempts: value }) })).toBe(
+      'maxAttempts must be an integer from 1 to 9007199254740991',
+    )
+  })
+
+  it('accepts a maxAttempts at the ceiling', () => {
+    expect(() => { validateOptions({ ...valid, maxAttempts: Number.MAX_SAFE_INTEGER }) }).not.toThrow()
   })
 })
