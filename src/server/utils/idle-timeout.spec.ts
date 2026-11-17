@@ -4,6 +4,7 @@
  * @layer server/utils
  */
 import { PassThrough, Readable } from 'node:stream'
+import { runInNewContext } from 'node:vm'
 import { guardIdleBody, SourceIdleError, withIdleTimeout } from './idle-timeout'
 
 async function collect(stream: AsyncIterable<unknown>): Promise<string> {
@@ -104,6 +105,69 @@ describe('withIdleTimeout', () => {
     source.destroy(new Error('boom'))
 
     await expect(failure).rejects.toThrow('boom')
+  })
+
+  it('hands on an error from another realm as it is, with its code', async () => {
+    // `instanceof Error` is false for it, and re-wrapping would drop the code a classifier reads.
+    const foreign = runInNewContext(
+      "Object.assign(new Error('aborted'), { code: 'ECONNRESET' })",
+    ) as Error
+    expect(foreign instanceof Error).toBe(false)
+    const source = new PassThrough()
+    const failure = collect(withIdleTimeout(source, 1000))
+    source.destroy(foreign)
+
+    await expect(failure).rejects.toBe(foreign)
+  })
+
+  it('hands on a DOMException as it is, with its name', async () => {
+    // It is an Error, but its toString tag is another one: an abort or timeout signal's reason.
+    const reason = new DOMException('timed out', 'TimeoutError')
+    const source = new PassThrough()
+    const failure = collect(withIdleTimeout(source, 1000))
+    source.destroy(reason)
+
+    await expect(failure).rejects.toBe(reason)
+  })
+
+  it.each([
+    ['an object with a message and no name', { message: 'only a message' }],
+    ['an object with a name and no message', { name: 'OnlyAName' }],
+    ['an object whose name is not text', { name: 1, message: 'a message' }],
+    ['an object whose message is not text', { name: 'Named', message: 2 }],
+  ])('turns %s into an error, as it is not one', async (_label, value) => {
+    const source = new PassThrough()
+    const failure = collect(withIdleTimeout(source, 1000))
+    source.destroy(value as unknown as Error)
+
+    const reason: unknown = await failure.catch((err: unknown) => err)
+
+    expect(reason).not.toBe(value)
+    expect(reason).toBeInstanceOf(Error)
+  })
+
+  it.each([
+    ['null', null as unknown as Error, 'null'],
+    ['undefined', undefined as unknown as Error, 'undefined'],
+  ])('turns a source that rejects with %s into an error', async (_label, value, description) => {
+    const source = {
+      [Symbol.asyncIterator]: () => ({ next: () => Promise.reject(value) }),
+    } as unknown as NodeJS.ReadableStream
+
+    const reason: unknown = await collect(withIdleTimeout(source, 1000)).catch(
+      (err: unknown) => err,
+    )
+
+    expect(reason).toBeInstanceOf(Error)
+    expect((reason as Error).message).toBe(description)
+  })
+
+  it('turns a rejection that is not an error into one, with its description', async () => {
+    const source = new PassThrough()
+    const failure = collect(withIdleTimeout(source, 1000))
+    source.destroy('plain text' as unknown as Error)
+
+    await expect(failure).rejects.toThrow('plain text')
   })
 
   it('keeps an error from crashing the process when nothing reads the wrapper', async () => {

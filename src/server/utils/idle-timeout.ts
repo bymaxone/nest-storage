@@ -16,6 +16,17 @@ export class SourceIdleError extends Error {
   }
 }
 
+/**
+ * Whether a value is an error: an object with a `name` and a `message`, which an `Error`, a
+ * `DOMException` (an abort or timeout signal's reason) and an error from another realm (a `vm` context,
+ * a test sandbox) all are, though `instanceof Error` is not true for an error from another realm.
+ * Re-wrapping one would drop its name and its `code`.
+ */
+function isError(value: unknown): value is Error {
+  const candidate = value as { name?: unknown; message?: unknown } | null | undefined
+  return typeof candidate?.name === 'string' && typeof candidate.message === 'string'
+}
+
 /** Waits for `next`, rejecting with {@link SourceIdleError} if it does not settle in `idleMs`. */
 function withinIdleTime<T>(next: Promise<T>, idleMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -29,7 +40,7 @@ function withinIdleTime<T>(next: Promise<T>, idleMs: number): Promise<T> {
       },
       (error: unknown) => {
         clearTimeout(timer)
-        reject(error instanceof Error ? error : new Error(describeError(error)))
+        reject(isError(error) ? error : new Error(describeError(error)))
       },
     )
   })
