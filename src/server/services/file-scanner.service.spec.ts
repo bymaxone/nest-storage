@@ -343,6 +343,30 @@ describe('FileScannerService', () => {
         }
       })
 
+      it('names the unrecognised status, escaped, in its log line and gives the reason in the body', async () => {
+        const impl: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'CLEAN\n', engine: 'clamav' }) }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect(String(warnSpy.mock.calls[0]?.[0])).toContain(' status="CLEAN\\n"')
+        expect(JSON.stringify((err as StorageException).getResponse())).toContain('unrecognised scanner status')
+        warnSpy.mockRestore()
+      })
+
+      it('says nothing of a status or a reason for an unknown result that rejectOnUnknown refuses', async () => {
+        const impl = makeMockScanner({ status: 'unknown', engine: 'clamav' })
+        const service = await buildService(buildOptions({ impl, rejectOnUnknown: true }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        expect(String(warnSpy.mock.calls[0]?.[0])).toBe('Inconclusive scan result rejected: key="test/file.png" engine="clamav"')
+        expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('reason')
+        warnSpy.mockRestore()
+      })
+
       it('names the engine only when it is a string', async () => {
         const named: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'ok', engine: 'clamav' }) }
         const unnamed: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'ok', engine: { secret: 'x' } }) }

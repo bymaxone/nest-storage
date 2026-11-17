@@ -69,6 +69,7 @@ export function declaredSizeMismatch(
   receivedBytes: number,
   context: Record<string, unknown>,
 ): StorageException {
+  // Stryker disable next-line EqualityOperator: both callers pass lengths that differ, so the two arms never meet at equality and `>=` gives the same answer (equivalent).
   if (receivedBytes > declaredBytes) {
     return sizeLimitException(declaredBytes, 'declared', context)
   }

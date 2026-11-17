@@ -324,6 +324,7 @@ describe('validateOptions: the numeric options in a group', () => {
     ['multipart.thresholdBytes', (value) => ({ multipart: { thresholdBytes: value } })],
     ['multipart.partSizeBytes', (value) => ({ multipart: { partSizeBytes: value } })],
     ['multipart.queueSize', (value) => ({ multipart: { queueSize: value } })],
+    ['scanner.timeoutMs', (value) => ({ scanner: { timeoutMs: value } })],
   ]
 
   describe.each(options)('%s', (name, build) => {
@@ -357,6 +358,8 @@ describe('validateOptions: the numeric options in a group', () => {
     ['multipart.partSizeBytes', { multipart: { partSizeBytes: 5 * 1024 ** 2 } }, { multipart: { partSizeBytes: 5 * 1024 ** 2 - 1 } }],
     ['validation.maxSizeBytes', { validation: { maxSizeBytes: Number.MAX_SAFE_INTEGER } }, { validation: { maxSizeBytes: Number.MAX_SAFE_INTEGER + 1 } }],
     ['signedUrls.maxTtlSeconds', { signedUrls: { maxTtlSeconds: 1 } }, { signedUrls: { maxTtlSeconds: 0 } }],
+    ['scanner.timeoutMs', { scanner: { timeoutMs: 2_147_483_647 } }, { scanner: { timeoutMs: 2_147_483_648 } }],
+    ['scanner.timeoutMs', { scanner: { timeoutMs: 1 } }, { scanner: { timeoutMs: 0 } }],
   ])('%s: accepts its bound and refuses the next value', (_name, atBound, past) => {
     expect(() => { validateOptions({ ...valid, ...atBound }) }).not.toThrow()
     expect(() => { validateOptions({ ...valid, ...past }) }).toThrow()

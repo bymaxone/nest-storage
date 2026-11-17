@@ -112,7 +112,7 @@ describe('withExactSize', () => {
     const { error } = await drain(withExactSize(Readable.from([Buffer.from('abc')]), 5))
 
     expect(error).toBeInstanceOf(SizeShortfallError)
-    expect(error).toMatchObject({ declaredBytes: 5, receivedBytes: 3 })
+    expect(error).toMatchObject({ declaredBytes: 5, receivedBytes: 3, name: 'SizeShortfallError' })
     expect((error as Error).message).toBe('The upload body has 3 bytes, fewer than the 5 declared')
   })
 

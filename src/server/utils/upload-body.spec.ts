@@ -5,7 +5,8 @@
  */
 import { Readable } from 'node:stream'
 import type { StorageException } from '../errors/storage-exception'
-import { assertScannedSize } from './upload-body'
+import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
+import { assertScannedSize, boundStreamSize } from './upload-body'
 
 const THRESHOLD = 1000
 const CONTEXT = { key: 'k', bucket: 'b' }
@@ -56,3 +57,56 @@ describe('assertScannedSize', () => {
     expect(outcome(Buffer.alloc(10), THRESHOLD + 500)).toBeUndefined()
   })
 })
+
+describe('boundStreamSize', () => {
+  const options = (maxSizeBytes?: number): ResolvedBymaxStorageOptions =>
+    ({
+      multipart: { thresholdBytes: THRESHOLD },
+      ...(maxSizeBytes === undefined ? {} : { validation: { maxSizeBytes } }),
+    }) as unknown as ResolvedBymaxStorageOptions
+
+  async function read(body: unknown): Promise<{ bytes: number; error: unknown }> {
+    let bytes = 0
+    try {
+      for await (const chunk of body as AsyncIterable<Buffer>) bytes += chunk.length
+      return { bytes, error: undefined }
+    } catch (error) {
+      return { bytes, error }
+    }
+  }
+
+  it('leaves a buffer alone, and a stream with no declared size and no maximum', () => {
+    const buffer = Buffer.alloc(5)
+    const stream = Readable.from([Buffer.alloc(5)])
+
+    expect(boundStreamSize(buffer, 5, options())).toBe(buffer)
+    expect(boundStreamSize(stream, undefined, options())).toBe(stream)
+  })
+
+  it('holds a single-shot stream to exactly its declared size: shorter fails with a shortfall, longer with a limit', async () => {
+    expect((await read(boundStreamSize(Readable.from([Buffer.alloc(120)]), 500, options()))).error).toMatchObject({
+      name: 'SizeShortfallError',
+    })
+    expect((await read(boundStreamSize(Readable.from([Buffer.alloc(600)]), 500, options()))).error).toMatchObject({
+      name: 'SizeLimitError',
+      kind: 'declared',
+    })
+    expect((await read(boundStreamSize(Readable.from([Buffer.alloc(500)]), 500, options()))).error).toBeUndefined()
+  })
+
+  it('uploads a multipart-sized stream shorter than declared as it is, and refuses one that is longer', async () => {
+    // The multipart path never stored a truncated object, so a shorter body stays accepted there.
+    const shorter = await read(boundStreamSize(Readable.from([Buffer.alloc(120)]), THRESHOLD + 500, options()))
+    const longer = await read(boundStreamSize(Readable.from([Buffer.alloc(THRESHOLD + 600)]), THRESHOLD + 500, options()))
+
+    expect(shorter).toEqual({ bytes: 120, error: undefined })
+    expect(longer.error).toMatchObject({ name: 'SizeLimitError', kind: 'declared' })
+  })
+
+  it('caps a stream with no declared size at the maximum', async () => {
+    const outcome = await read(boundStreamSize(Readable.from([Buffer.alloc(30)]), undefined, options(20)))
+
+    expect(outcome.error).toMatchObject({ name: 'SizeLimitError', kind: 'max', limitBytes: 20 })
+  })
+})
+
