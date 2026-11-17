@@ -50,7 +50,7 @@ note on each entry is the compatibility contract — read it, not the number.
   mode a buffer body is now copied once, and the scanner and the upload both use the copy.
 
   **Apply to a derived backend:** a pre-upload scan holds a second copy of a buffer body while the upload
-  runs; the extra memory is the size of the body, which `validation.maxSizeBytes` bounds.
+  runs; the extra memory is the size of the body.
 
 - **A stream whose declared `size` is wrong no longer leaves a truncated object.** A stream below the multipart
   threshold goes as one request with `Content-Length` set to `size`; a provider stores the object once it has

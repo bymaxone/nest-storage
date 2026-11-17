@@ -599,8 +599,8 @@ BymaxStorageModule.forRoot({
 **Streams in pre-upload mode.** A stream can be read once, so in `pre-upload` mode it is first read
 into memory, bounded by `validation.maxSizeBytes`, and the scanner and the upload share that buffer. A `Buffer` or `Uint8Array` body is copied once in this mode, so a change the caller makes to its own array while the scan runs reaches neither. A
 stream longer than the limit is refused with `STORAGE_VALIDATION_FAILED` as soon as it passes it, and
-with no `maxSizeBytes` it is refused with a reason that says to set it or use `post-upload`. Buffer
-bodies are not affected, and `post-upload` hands the scanner the key only, no body.
+with no `maxSizeBytes` it is refused with a reason that says to set it or use `post-upload`.
+`post-upload` hands the scanner the key only, no body.
 
 **A scan has a deadline.** `scanner.timeoutMs` (a whole number of milliseconds from `1` to `2147483647`, default `60000`; there is no setting that waits without limit) bounds a scan: past it the upload is refused with `STORAGE_TIMEOUT` (503, `details.phase: 'scan'`), and in `post-upload` mode the stored object is removed as for any other rejection. The scanner is handed an `AbortSignal` (`signal` on its input) that aborts at the deadline. **A scanner that ignores the signal keeps running after the timeout**, so repeated timeouts pile up scanner work: honour the signal, or give the scanner a limit of its own.
 
