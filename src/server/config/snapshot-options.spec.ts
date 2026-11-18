@@ -89,6 +89,20 @@ describe('snapshotOptions', () => {
     expect(snapshot.validation.mimeWhitelist).not.toBe(sparse)
   })
 
+  it('copies the custom validators once as well, and adds no key for a group or an array that was not given', () => {
+    const validators = [{ name: 'v', validate: () => Promise.resolve({ ok: true }) }]
+
+    const snapshot = snapshotOptions({ ...base, validation: { customValidators: validators } }) as {
+      validation: { customValidators: unknown[] }
+    }
+    const bare = snapshotOptions({ ...base, validation: { maxSizeBytes: 5 } }) as { validation: object }
+
+    expect(snapshot.validation.customValidators).toEqual(validators)
+    expect(snapshot.validation.customValidators).not.toBe(validators)
+    expect(Object.keys(bare.validation)).toEqual(['maxSizeBytes'])
+    expect(Object.keys(snapshotOptions(base) as object).sort()).toEqual(Object.keys(base).sort())
+  })
+
   it('keeps an array whose iterator throws as it is, so its owner\'s error surfaces and nothing is hidden', () => {
     const hostile = ['image/png']
     Object.defineProperty(hostile, Symbol.iterator, {

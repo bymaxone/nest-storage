@@ -25,6 +25,14 @@ describe('cutText', () => {
     expect(cutText(`ab${EMOJI}c`, 4)).toBe(`ab${EMOJI}`)
   })
 
+  it('returns a string that fits exactly as it is, even when it ends in a lone high surrogate', () => {
+    expect(cutText('ab\uD83D', 3)).toBe('ab\uD83D')
+  })
+
+  it.each(['\uD800', '\uD83D', '\uDBFF'])('drops a high surrogate (%j) left at the cut, at both ends of the range', (high) => {
+    expect(cutText(`a${high}b`, 2)).toBe('a')
+  })
+
   it('keeps a lone low surrogate that is not half of a pair at the cut', () => {
     expect(cutText('a\uDE00bc', 3)).toBe('a\uDE00b')
   })
