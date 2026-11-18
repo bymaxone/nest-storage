@@ -22,6 +22,7 @@ function keysOf<T extends object>() {
 
 type Options = BymaxStorageModuleOptions
 
+/** Every top-level key of the module options; the compiler refuses a list that leaves one out. */
 export const OPTION_KEYS = keysOf<Options>()([
   'endpoint',
   'region',
@@ -48,8 +49,13 @@ export const OPTION_KEYS = keysOf<Options>()([
   'bodyIdleTimeoutMs',
 ])
 
+/** Every key of `credentials`; the compiler refuses a list that leaves one out. */
 export const CREDENTIAL_KEYS = keysOf<Options['credentials']>()(['accessKeyId', 'secretAccessKey', 'sessionToken'])
+/** Every key of the `signedUrls` group; the compiler refuses a list that leaves one out. */
 export const SIGNED_URL_KEYS = keysOf<NonNullable<Options['signedUrls']>>()(['defaultGetTtlSeconds', 'defaultPutTtlSeconds', 'maxTtlSeconds'])
+/** Every key of the `multipart` group; the compiler refuses a list that leaves one out. */
 export const MULTIPART_KEYS = keysOf<NonNullable<Options['multipart']>>()(['thresholdBytes', 'partSizeBytes', 'queueSize'])
+/** Every key of the `validation` group; the compiler refuses a list that leaves one out. */
 export const VALIDATION_KEYS = keysOf<NonNullable<Options['validation']>>()(['mimeWhitelist', 'maxSizeBytes', 'customValidators'])
+/** Every key of the `scanner` group; the compiler refuses a list that leaves one out. */
 export const SCANNER_KEYS = keysOf<NonNullable<Options['scanner']>>()(['impl', 'mode', 'rejectOnUnknown', 'timeoutMs'])
