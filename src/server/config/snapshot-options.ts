@@ -39,7 +39,7 @@ function pickGroup(value: unknown, keys: readonly string[]): unknown {
 /**
  * The array copied once, so a hole becomes `undefined` (which validation refuses as a value that is not a
  * string) and a later change to the caller's array is not seen. A value that is not an array is kept as it is.
- * An array whose iterator throws is kept as it is too: its owner's own error then surfaces at boot.
+ * An array whose iterator throws is kept as it is too, and validation then refuses it as the wrong kind.
  */
 function copyArray(value: unknown): unknown {
   if (!Array.isArray(value)) return value

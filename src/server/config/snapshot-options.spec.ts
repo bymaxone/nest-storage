@@ -103,7 +103,7 @@ describe('snapshotOptions', () => {
     expect(Object.keys(snapshotOptions(base) as object).sort()).toEqual(Object.keys(base).sort())
   })
 
-  it('keeps an array whose iterator throws as it is, so its owner\'s error surfaces and nothing is hidden', () => {
+  it('keeps an array whose iterator throws as it is, for validation to refuse it as the wrong kind', () => {
     const hostile = ['image/png']
     Object.defineProperty(hostile, Symbol.iterator, {
       value: () => {
