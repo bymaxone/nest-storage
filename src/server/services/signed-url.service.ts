@@ -21,6 +21,7 @@ import type { SignedUrlResult } from '../../shared/types/signed-url-types'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { StorageException } from '../errors/storage-exception'
+import { resolveBucket as resolveBucketInput } from '../utils/call-input'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { buildACL } from '../utils/header-utils'
@@ -192,7 +193,8 @@ export class SignedUrlService {
     if (!Number.isInteger(options.parts) || options.parts < 1 || options.parts > MAX_MULTIPART_PARTS) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT, undefined, {
         reason: `parts must be an integer from 1 to ${String(MAX_MULTIPART_PARTS)}`,
-        provided: options.parts,
+        // Only a number is repeated: any other value is the caller's to keep.
+        ...(Number.isFinite(options.parts) ? { provided: options.parts } : {}),
       })
     }
     const finalKey = this.keyResolver.normalize(options.key)
@@ -260,10 +262,6 @@ export class SignedUrlService {
 
   /** Resolves the target bucket from a per-call override or the module default. */
   private resolveBucket(perCall?: string): string {
-    const bucket = perCall ?? this.options.bucket
-    if (!bucket) {
-      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_BUCKET_UNDEFINED)
-    }
-    return bucket
+    return resolveBucketInput(perCall, this.options.bucket)
   }
 }

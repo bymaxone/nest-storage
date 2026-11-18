@@ -162,6 +162,28 @@ describe('withIdleTimeout', () => {
     expect((reason as Error).message).toBe(description)
   })
 
+  it('settles, with an error, when the rejection value throws on being inspected', async () => {
+    // Reading `name` of this value throws. The check that tells an error from anything else must not
+    // let that throw escape: it would leave the wrapped read pending for good, with its timer cleared.
+    const hostile = {
+      get name(): string {
+        throw new Error('name getter')
+      },
+    } as unknown as Error
+    const source = {
+      [Symbol.asyncIterator]: () => ({ next: () => Promise.reject(hostile) }),
+    } as unknown as NodeJS.ReadableStream
+    const stalled = Symbol('stalled')
+
+    const reason: unknown = await Promise.race([
+      collect(withIdleTimeout(source, 1000)).catch((err: unknown) => err),
+      new Promise((resolve) => setTimeout(() => { resolve(stalled) }, 400)),
+    ])
+
+    expect(reason).not.toBe(stalled)
+    expect(reason).toBeInstanceOf(Error)
+  })
+
   it('turns a rejection that is not an error into one, with its description', async () => {
     const source = new PassThrough()
     const failure = collect(withIdleTimeout(source, 1000))

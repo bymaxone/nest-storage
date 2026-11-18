@@ -13,6 +13,50 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A per-call value of the wrong kind no longer reaches the provider call or a log line.** A per-call `bucket` that
+  is not a string (a `Symbol`, a function, an array, an object, a number) was repeated in `details.bucket` of the
+  error it caused, on every method that takes a bucket, and an `abortSignal` that was not an `AbortSignal` (a string,
+  a `Symbol`, a `BigInt`) was handed to the SDK, which named the value in its own error message, and that message is
+  logged as `Provider call failed`. Both are now refused before any request with `STORAGE_VALIDATION_FAILED` (400)
+  naming `bucket` or `abortSignal`, and nothing of the value. `getMultipartUploadUrls` no longer puts a `parts` that
+  is not a number in `details.provided`. A body that has `pipe`, `on` and `once` but no `pause` or `resume` is refused
+  with `STORAGE_VALIDATION_FAILED` naming `body`, where it used to be waited on until `STORAGE_TIMEOUT`.
+
+  **Apply to a derived backend:** a call that passed a per-call `bucket` that is not a string, or an `abortSignal` that
+  is not an `AbortSignal`, now fails with `STORAGE_VALIDATION_FAILED` (`details.field` is `bucket` or `abortSignal`)
+  where it used to reach the provider (`exists` answers `false` and logs a warning, as for any failure that is not a
+  missing object). `details.provided` of `STORAGE_INVALID_PART_COUNT` is present only when `parts` is a finite number. A
+  stream-like body without `pause` and `resume` is refused with `STORAGE_VALIDATION_FAILED`.
+
+- **A configuration of the wrong kind is refused at boot, and a `null` that means "off" is refused.** `keyPrefix` that is
+  an array or an object was accepted and failed later as a raw `TypeError`; `validation.mimeWhitelist` that is a string
+  was accepted; `validation.customValidators` that is not an array was accepted; and a `region` with a space, a slash
+  or a newline in it was sent on to the SDK, which repeats it in its error messages. `forRoot` now refuses each with
+  `STORAGE_INVALID_CONFIG` naming the option and repeating nothing of the value: `keyPrefix` must be a string,
+  `mimeWhitelist` an array of strings, `customValidators` an array, and `region` 1 to 63 letters, digits, `.`, `_` or
+  `-` starting with a letter or digit. `validation.maxSizeBytes: null`, `validation.mimeWhitelist: null` and
+  `validation.customValidators: null` are refused as well: leaving each out means no size limit, every type allowed or
+  no custom validator, so a `null` from a config lookup of a missing key must not switch the protection off (1.1.17
+  read `maxSizeBytes: null` as "no limit").
+
+  **Apply to a derived backend:** a configuration that booted and is now refused: a `keyPrefix` that is not a string, a
+  `validation.mimeWhitelist` or `customValidators` that is not an array (and a `mimeWhitelist` with a non-string
+  entry), a `region` outside the shape above, and a `null` for `validation.maxSizeBytes`, `validation.mimeWhitelist` or
+  `validation.customValidators`. Omit the option for "none": `null` no longer means it. A `null` for any other option
+  inside a group is still the default.
+
+  **`scanner: null` is refused; omit the key for no scanner.** 1.1.17 read a `scanner` of `null` as "no scanner", so a
+  config lookup that returned `null` for a missing key booted with scanning off. `forRoot` now fails with
+  `STORAGE_INVALID_CONFIG` ("scanner must not be null; omit it for no scanner"); a `scanner` that is `false`, `0`,
+  `''` or `[]` was already refused.
+
+- **A value that throws when it is read no longer hangs a source read.** The check that tells an `Error` from any other
+  value in the idle-timeout wrapper read its `name` and `message` outside a guard: a rejection value whose property
+  getter throws left the wrapped read pending for good, with its timer already cleared. It is now treated as not
+  being an error, and the read ends with one.
+
 ## [1.1.17] - 2026-11-17
 
 ### Fixed

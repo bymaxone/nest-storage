@@ -23,6 +23,7 @@ import type {
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { StorageException } from '../errors/storage-exception'
+import { resolveBucket as resolveBucketInput } from '../utils/call-input'
 import { isNoLifecycleConfiguration, mapLifecycleError } from '../errors/lifecycle-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -307,10 +308,6 @@ export class BucketLifecycleService {
   }
 
   private resolveBucket(perCall?: string): string {
-    const bucket = perCall ?? this.options.bucket
-    if (!bucket) {
-      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_BUCKET_UNDEFINED)
-    }
-    return bucket
+    return resolveBucketInput(perCall, this.options.bucket)
   }
 }

@@ -376,7 +376,8 @@ describe('validateOptions: nullish keys and the retry ceiling', () => {
     expect(() => {
       validateOptions({
         ...valid,
-        validation: { maxSizeBytes: value },
+        // `maxSizeBytes` has no default (omitting it means no limit), so `null` is refused for it: see validate-options.kinds.spec.ts.
+        validation: { maxSizeBytes: undefined },
         signedUrls: { defaultGetTtlSeconds: value, defaultPutTtlSeconds: value, maxTtlSeconds: value },
         multipart: { thresholdBytes: value, partSizeBytes: value, queueSize: value },
         scanner: { impl: scannerImpl, timeoutMs: value },
@@ -429,8 +430,10 @@ describe('validateOptions: a scanner that would leave scanning silently off', ()
     expect(() => { validateOptions({ ...valid, scanner: { impl: scannerImpl, rejectOnUnknown: value } }) }).not.toThrow()
   })
 
-  it.each([undefined, null])('treats a scanner of %p as no scanner', (scanner) => {
-    expect(() => { validateOptions({ ...valid, scanner }) }).not.toThrow()
+  // Only `undefined` is no scanner: a `null` that a config lookup returns for a missing key must not turn scanning
+  // off, so it is refused (see validate-options.kinds.spec.ts).
+  it('treats an absent scanner as no scanner', () => {
+    expect(() => { validateOptions({ ...valid, scanner: undefined }) }).not.toThrow()
   })
 
   it.each([true, 'on', 42])('refuses a scanner that is %p, not an object', (scanner) => {

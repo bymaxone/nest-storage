@@ -248,11 +248,18 @@ export function toUploadBody(body: unknown): UploadBody {
   if (ArrayBuffer.isView(body) && !(body instanceof Uint8Array)) {
     return Buffer.from(body.buffer, body.byteOffset, body.byteLength)
   }
-  const stream = body as { pipe?: unknown; on?: unknown; once?: unknown } | null | undefined
+  const stream = body as
+    | { pipe?: unknown; on?: unknown; once?: unknown; pause?: unknown; resume?: unknown }
+    | null
+    | undefined
+  // The surface this library drives: `pipe`, the event methods, and `pause`/`resume` for backpressure. An
+  // object without them is not a stream, and one that merely looks like it would be waited on until the timeout.
   const readable =
     typeof stream?.pipe === 'function' &&
     typeof stream.on === 'function' &&
-    typeof stream.once === 'function'
+    typeof stream.once === 'function' &&
+    typeof stream.pause === 'function' &&
+    typeof stream.resume === 'function'
   if (!(body instanceof Uint8Array) && !readable) {
     // A Blob, an array of chunks or any other object is not a body the SDK can send; refusing it here gives
     // the caller a validation error instead of a failure that blames the multipart upload.
