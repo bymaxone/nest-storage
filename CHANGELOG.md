@@ -13,6 +13,27 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An option group of the wrong kind is refused at boot.** `validation`, `signedUrls` or `multipart` given as `false`,
+  `0`, a string, `true` or an array booted without error and was ignored, so `validation: enabled && { ... }` with
+  `enabled` false left uploads unvalidated. `forRoot` and `forRootAsync` now fail with `STORAGE_INVALID_CONFIG`
+  (`options.<group> must be an object`), repeating nothing of the value; `undefined` and `null` still mean "not
+  configured". `credentials` given as an array is refused as well; before, `forRoot` copied any array given for a
+  group into an empty group.
+
+  **Apply to a derived backend:** a configuration that passed one of those values for a group now fails at boot.
+  Pass an object, or leave the group out.
+
+- **`validation.customValidators` entries are checked at boot.** An entry that is not an object with a `validate`
+  function (`42`, `null`, `{}`, a bare function) booted and then failed the first upload with a raw `TypeError`
+  (500). It now fails `forRoot` with `STORAGE_INVALID_CONFIG`. A `mimeWhitelist` that throws when it is read (a proxy,
+  a throwing index getter) is refused as "must be an array of strings" instead of surfacing the thrown error.
+
+  **Apply to a derived backend:** a list that held anything but validator objects now fails at boot; a class
+  instance that serves `validate` from its prototype is accepted. The README option table now has the
+  `validation.customValidators` row.
+
 ## [1.1.18] - 2026-11-18
 
 ### Fixed

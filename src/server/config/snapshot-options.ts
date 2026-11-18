@@ -28,15 +28,18 @@ function pick(source: Record<string, unknown>, keys: readonly string[]): Record<
   return copy
 }
 
-/** The copy of an option group; a value that is not an object is kept as it is, for validation to refuse. */
+/**
+ * The copy of an option group; a value that is not an object, and an array (which would otherwise become an
+ * empty group), is kept as it is, for validation to refuse.
+ */
 function pickGroup(value: unknown, keys: readonly string[]): unknown {
-  return isObject(value) ? pick(value, keys) : value
+  return isObject(value) && !Array.isArray(value) ? pick(value, keys) : value
 }
 
 /**
  * The array copied once, so a hole becomes `undefined` (which validation refuses as a value that is not a
  * string) and a later change to the caller's array is not seen. A value that is not an array is kept as it is.
- * An array whose iterator throws is kept as it is too: its owner's own error then surfaces at boot.
+ * An array whose iterator throws is kept as it is too, and validation then refuses it as the wrong kind.
  */
 function copyArray(value: unknown): unknown {
   if (!Array.isArray(value)) return value

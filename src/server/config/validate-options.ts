@@ -170,7 +170,7 @@ function assertValidationKinds(validation: unknown): void {
   if (mimeWhitelist === null) {
     throw invalid('validation.mimeWhitelist must not be null; omit it to allow every type')
   }
-  if (mimeWhitelist !== undefined && (!Array.isArray(mimeWhitelist) || !Array.from(mimeWhitelist as unknown[]).every((entry) => typeof entry === 'string'))) {
+  if (mimeWhitelist !== undefined && !isStringArray(mimeWhitelist)) {
     throw invalid('validation.mimeWhitelist must be an array of strings')
   }
   if (customValidators === null) {
@@ -178,6 +178,44 @@ function assertValidationKinds(validation: unknown): void {
   }
   if (customValidators !== undefined && !Array.isArray(customValidators)) {
     throw invalid('validation.customValidators must be an array')
+  }
+  if (customValidators !== undefined && !isValidatorList(customValidators as unknown[])) {
+    throw invalid('validation.customValidators must hold objects with a validate function')
+  }
+}
+
+/** Whether `value` is an array whose every entry, holes included, is a string; a value that throws when read is not. */
+function isStringArray(value: unknown): boolean {
+  try {
+    return Array.isArray(value) && Array.from(value as unknown[]).every((entry) => typeof entry === 'string')
+  } catch {
+    return false
+  }
+}
+
+/** Whether every entry is an object with a `validate` function, which is what the upload path calls; reads each entry once. */
+function isValidatorList(entries: unknown[]): boolean {
+  try {
+    return Array.from(entries).every((entry) => isObject(entry) && typeof entry.validate === 'function')
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Refuses an option group that is not an object: `false`, `0`, a string or an array would otherwise be read
+ * as "no group", so a toggle such as `validation: enabled && {...}` would boot with the protection off.
+ * `undefined` and `null` still mean "not configured".
+ *
+ * @param options - The options object, already known to be an object.
+ * @throws StorageException with code `STORAGE_INVALID_CONFIG` naming the group, never repeating its value.
+ */
+function assertGroupKinds(options: Record<string, unknown>): void {
+  for (const group of ['signedUrls', 'multipart', 'validation']) {
+    const value = options[group]
+    if (value !== undefined && value !== null && (!isObject(value) || Array.isArray(value))) {
+      throw invalid(`options.${group} must be an object`)
+    }
   }
 }
 
@@ -205,6 +243,7 @@ function assertNumericSections(options: Record<string, unknown>): void {
  * @throws StorageException with code `STORAGE_INVALID_CONFIG`.
  */
 function assertLimitsAndEncryption(options: Record<string, unknown>): void {
+  assertGroupKinds(options)
   assertNumericSections(options)
   assertValidationKinds(options.validation)
   assertScanner(options.scanner)
@@ -271,6 +310,9 @@ export function validateOptions(options: unknown): void {
   }
   if (!isObject(options.credentials)) {
     throw invalid('options.credentials is required')
+  }
+  if (Array.isArray(options.credentials)) {
+    throw invalid('options.credentials must be an object')
   }
   // Credentials may be empty strings — handled lazily via STORAGE_NOT_CONFIGURED.
 

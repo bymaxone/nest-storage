@@ -103,7 +103,7 @@ describe('snapshotOptions', () => {
     expect(Object.keys(snapshotOptions(base) as object).sort()).toEqual(Object.keys(base).sort())
   })
 
-  it('keeps an array whose iterator throws as it is, so its owner\'s error surfaces and nothing is hidden', () => {
+  it('keeps an array whose iterator throws as it is, for validation to refuse it as the wrong kind', () => {
     const hostile = ['image/png']
     Object.defineProperty(hostile, Symbol.iterator, {
       value: () => {
@@ -116,6 +116,26 @@ describe('snapshotOptions', () => {
     }
 
     expect(snapshot.validation.mimeWhitelist).toBe(hostile)
+  })
+})
+
+describe('forRoot refuses an option group of the wrong kind', () => {
+  it.each(['validation', 'signedUrls', 'multipart', 'scanner', 'credentials'])(
+    '%s that is an array is refused and not copied into an empty group',
+    (group) => {
+      for (const value of [[], ['x']]) {
+        expect(() => BymaxStorageModule.forRoot({ ...base, [group]: value })).toThrow(
+          expect.objectContaining({ code: 'STORAGE_INVALID_CONFIG' }) as Error,
+        )
+      }
+    },
+  )
+
+  it('keeps an array where an option group is expected, for validation to refuse', () => {
+    const list = ['x']
+
+    expect(snapshotOptions({ ...base, validation: list })).toMatchObject({ validation: list })
+    expect((snapshotOptions({ ...base, validation: list }) as { validation: unknown }).validation).toBe(list)
   })
 })
 
