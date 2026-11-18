@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.18] - 2026-11-18
+
 ### Fixed
 
 - **A per-call value of the wrong kind no longer reaches the provider call or a log line.** A per-call `bucket` that
@@ -52,10 +54,15 @@ note on each entry is the compatibility contract — read it, not the number.
   `STORAGE_INVALID_CONFIG` ("scanner must not be null; omit it for no scanner"); a `scanner` that is `false`, `0`,
   `''` or `[]` was already refused.
 
+  **Apply to a derived backend:** a `scanner` of `null` now fails `forRoot` and `forRootAsync` with
+  `STORAGE_INVALID_CONFIG`; omit the key to run no scanner.
+
 - **A value that throws when it is read no longer hangs a source read.** The check that tells an `Error` from any other
   value in the idle-timeout wrapper read its `name` and `message` outside a guard: a rejection value whose property
   getter throws left the wrapped read pending for good, with its timer already cleared. It is now treated as not
   being an error, and the read ends with one.
+
+  **Apply to a derived backend:** nothing to change; a read that used to stay pending in that case now ends with an error.
 
 - **Every option is read once.** Validation and resolution each read the options by property name, so a getter that
   returned a valid value for the check and a hostile one for the use (`scanner.mode` that answers `'pre-upload'`
@@ -1100,4 +1107,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.15]: https://github.com/bymaxone/nest-storage/compare/v1.1.14...v1.1.15
 [1.1.16]: https://github.com/bymaxone/nest-storage/compare/v1.1.15...v1.1.16
 [1.1.17]: https://github.com/bymaxone/nest-storage/compare/v1.1.16...v1.1.17
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.17...HEAD
+[1.1.18]: https://github.com/bymaxone/nest-storage/compare/v1.1.17...v1.1.18
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.18...HEAD
