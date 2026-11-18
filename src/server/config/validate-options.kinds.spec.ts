@@ -114,6 +114,27 @@ describe('validation.customValidators', () => {
     },
   )
 
+  it('refuses a list that throws when it is read, and an entry whose validate getter throws, as not validators', () => {
+    const throwingIterator = [{ validate: () => undefined }]
+    Object.defineProperty(throwingIterator, Symbol.iterator, {
+      value: () => {
+        throw new Error('SENTINEL iterator ran')
+      },
+    })
+    const throwingGetter = {
+      get validate(): () => void {
+        throw new Error('SENTINEL getter ran')
+      },
+    }
+
+    for (const value of [throwingIterator, [throwingGetter]]) {
+      const result = refusal({ ...valid, validation: { customValidators: value } })
+
+      expect(result.reason).toBe('validation.customValidators must hold objects with a validate function')
+      expect(result.response).not.toContain('SENTINEL')
+    }
+  })
+
   it('accepts a validator that is a class instance serving validate from its prototype', () => {
     class Checker {
       validate(): Promise<{ ok: true }> {
