@@ -194,7 +194,7 @@ export class SignedUrlService {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT, undefined, {
         reason: `parts must be an integer from 1 to ${String(MAX_MULTIPART_PARTS)}`,
         // Only a number is repeated: any other value is the caller's to keep.
-        ...(typeof options.parts === 'number' && Number.isFinite(options.parts) ? { provided: options.parts } : {}),
+        ...(Number.isFinite(options.parts) ? { provided: options.parts } : {}),
       })
     }
     const finalKey = this.keyResolver.normalize(options.key)

@@ -116,6 +116,14 @@ describe('toUploadBody', () => {
     ['a WHATWG ReadableStream', new ReadableStream()],
     ['an object with pipe and on but no once', { pipe: (): void => undefined, on: (): void => undefined }],
     ['an object with pipe and once but no on', { pipe: (): void => undefined, once: (): void => undefined }],
+    [
+      'an object with pipe, once, pause and resume but no on',
+      { pipe: (): void => undefined, once: (): void => undefined, pause: (): void => undefined, resume: (): void => undefined },
+    ],
+    [
+      'an object with pipe, on, pause and resume but no once',
+      { pipe: (): void => undefined, on: (): void => undefined, pause: (): void => undefined, resume: (): void => undefined },
+    ],
     ['an object with pipe, on and once but no pause or resume', { pipe: (): void => undefined, on: (): void => undefined, once: (): void => undefined }],
     ['an object with pipe, on, once and pause but no resume', { pipe: (): void => undefined, on: (): void => undefined, once: (): void => undefined, pause: (): void => undefined }],
     ['an object with pipe, on, once and resume but no pause', { pipe: (): void => undefined, on: (): void => undefined, once: (): void => undefined, resume: (): void => undefined }],

@@ -19,7 +19,7 @@ const hostile: [string, unknown][] = [
   ['a Date', new Date(0)],
 ]
 
-function refusal(run: () => unknown): { code: unknown; status: unknown; response: string; field: unknown } {
+function refusal(run: () => unknown): { code: unknown; status: unknown; response: string; field: unknown; reason: unknown } {
   let thrown: unknown
   try {
     run()
@@ -27,12 +27,13 @@ function refusal(run: () => unknown): { code: unknown; status: unknown; response
     thrown = error
   }
   const exception = thrown as { code?: unknown; status?: unknown; getResponse?: () => unknown }
-  const response = exception.getResponse?.() as { error?: { details?: { field?: unknown } } } | undefined
+  const response = exception.getResponse?.() as { error?: { details?: { field?: unknown; reason?: unknown } } } | undefined
   return {
     code: exception.code,
     status: exception.status,
     response: JSON.stringify(response),
     field: response?.error?.details?.field,
+    reason: response?.error?.details?.reason,
   }
 }
 
@@ -51,7 +52,7 @@ describe('resolveBucket', () => {
   it.each(hostile)('refuses %s as a validation error that names the bucket and echoes nothing', (_what, value) => {
     const result = refusal(() => resolveBucket(value, 'default'))
 
-    expect(result).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400, field: 'bucket' })
+    expect(result).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400, field: 'bucket', reason: 'bucket must be a string' })
     expect(result.response).not.toContain('SENTINEL')
     expect(result.response).not.toContain('12345')
   })
@@ -100,8 +101,19 @@ describe('assertAbortSignal', () => {
         assertAbortSignal(value)
       })
 
-      expect(result).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400, field: 'abortSignal' })
+      expect(result).toMatchObject({
+        code: 'STORAGE_VALIDATION_FAILED',
+        status: 400,
+        field: 'abortSignal',
+        reason: 'abortSignal must be an AbortSignal',
+      })
       expect(result.response).not.toContain('SENTINEL')
     },
   )
+
+  it('refuses a function that carries the signal surface: a signal is an object', () => {
+    const lookalike = Object.assign((): void => undefined, { aborted: false, addEventListener: (): void => undefined })
+
+    expect(refusal(() => { assertAbortSignal(lookalike) })).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', field: 'abortSignal' })
+  })
 })
