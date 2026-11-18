@@ -228,3 +228,12 @@ describe.each(['validation', 'signedUrls', 'multipart'])('options.%s', (group) =
     accepts({ [group]: value })
   })
 })
+
+describe('options.credentials', () => {
+  it.each([[[]], [[SENTINEL]]])('refuses credentials that are an array %p, without repeating it', (value) => {
+    const result = refusal({ ...valid, credentials: value })
+
+    expect(result.reason).toBe('options.credentials must be an object')
+    expect(result.response).not.toContain('SENTINEL')
+  })
+})
