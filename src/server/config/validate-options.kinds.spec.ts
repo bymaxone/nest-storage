@@ -69,6 +69,28 @@ describe('validation.mimeWhitelist', () => {
     )
   })
 
+  it('refuses a whitelist that throws when it is read, as the wrong kind and not as its own error', () => {
+    const throwingIndex = new Proxy(['image/png'], {
+      get: (target, key, receiver) => {
+        if (key === '0') throw new Error('SENTINEL index getter ran')
+        return Reflect.get(target, key, receiver) as unknown
+      },
+    })
+    const throwingIterator = ['image/png']
+    Object.defineProperty(throwingIterator, Symbol.iterator, {
+      value: () => {
+        throw new Error('SENTINEL iterator ran')
+      },
+    })
+
+    for (const value of [throwingIndex, throwingIterator]) {
+      const result = refusal({ ...valid, validation: { mimeWhitelist: value } })
+
+      expect(result.reason).toBe('validation.mimeWhitelist must be an array of strings')
+      expect(result.response).not.toContain('SENTINEL')
+    }
+  })
+
   it.each([[[]], [['image/png', 'application/*']], [undefined]])('accepts %p', (value) => {
     accepts({ validation: { mimeWhitelist: value } })
   })
@@ -80,6 +102,26 @@ describe('validation.customValidators', () => {
 
     expect(result.reason).toBe('validation.customValidators must be an array')
     expect(result.response).not.toContain('SENTINEL')
+  })
+
+  it.each([[[42]], [[null]], [[{}]], [[() => undefined]], [[{ validate: 'x' }]], [[{ name: 'v' }]], [[SENTINEL]], [[{ validate: () => undefined }, 5]]])(
+    'refuses the entries %p, which are not validators, without repeating them',
+    (value) => {
+      const result = refusal({ ...valid, validation: { customValidators: value } })
+
+      expect(result.reason).toBe('validation.customValidators must hold objects with a validate function')
+      expect(result.response).not.toContain('SENTINEL')
+    },
+  )
+
+  it('accepts a validator that is a class instance serving validate from its prototype', () => {
+    class Checker {
+      validate(): Promise<{ ok: true }> {
+        return Promise.resolve({ ok: true })
+      }
+    }
+
+    accepts({ validation: { customValidators: [new Checker()] } })
   })
 
   it('refuses null: an absent list runs no validator, so null may not stand for "none"', () => {
@@ -147,5 +189,21 @@ describe('options.scanner', () => {
 
     expect(result.reason).toMatch(/^scanner(?: must be an object|\.impl must be an object with a scan function)$/)
     expect(result.response).not.toContain('SENTINEL')
+  })
+})
+
+describe.each(['validation', 'signedUrls', 'multipart'])('options.%s', (group) => {
+  it.each([[false], [0], [''], ['x'], [true], [42], [[]], [[SENTINEL]], [Symbol(SENTINEL)]])(
+    'refuses a group that is %p, which is not an object, without repeating it',
+    (value) => {
+      const result = refusal({ ...valid, [group]: value })
+
+      expect(result.reason).toBe(`options.${group} must be an object`)
+      expect(result.response).not.toContain('SENTINEL')
+    },
+  )
+
+  it.each([[undefined], [null], [{}]])('accepts a group that is %p', (value) => {
+    accepts({ [group]: value })
   })
 })

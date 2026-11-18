@@ -28,9 +28,12 @@ function pick(source: Record<string, unknown>, keys: readonly string[]): Record<
   return copy
 }
 
-/** The copy of an option group; a value that is not an object is kept as it is, for validation to refuse. */
+/**
+ * The copy of an option group; a value that is not an object, and an array (which would otherwise become an
+ * empty group), is kept as it is, for validation to refuse.
+ */
 function pickGroup(value: unknown, keys: readonly string[]): unknown {
-  return isObject(value) ? pick(value, keys) : value
+  return isObject(value) && !Array.isArray(value) ? pick(value, keys) : value
 }
 
 /**
