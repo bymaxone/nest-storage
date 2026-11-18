@@ -75,7 +75,7 @@ note on each entry is the compatibility contract — read it, not the number.
   `scanner.timeoutMs` logs one `Scan timed out` warning with the key and the limit; until now only the typed
   `STORAGE_TIMEOUT` carried it.
 
-  **Apply to a derived backend:** an engine or threat name cut at 200 characters is one character shorter when an
+  **Apply to a derived backend:** an engine or threat name cut at its limit is one character shorter when an
   emoji sits at the cut; alert rules that matched the absence of a timeout line can match `Scan timed out`.
 
 ### Changed
