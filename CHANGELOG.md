@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.18] - 2026-11-18
+
 ### Fixed
 
 - **A per-call value of the wrong kind no longer reaches the provider call or a log line.** A per-call `bucket` that
@@ -1100,4 +1102,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.15]: https://github.com/bymaxone/nest-storage/compare/v1.1.14...v1.1.15
 [1.1.16]: https://github.com/bymaxone/nest-storage/compare/v1.1.15...v1.1.16
 [1.1.17]: https://github.com/bymaxone/nest-storage/compare/v1.1.16...v1.1.17
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.17...HEAD
+[1.1.18]: https://github.com/bymaxone/nest-storage/compare/v1.1.17...v1.1.18
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.18...HEAD
