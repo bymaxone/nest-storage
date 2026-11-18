@@ -60,9 +60,9 @@ note on each entry is the compatibility contract — read it, not the number.
 - **Every option is read once.** Validation and resolution each read the options by property name, so a getter that
   returned a valid value for the check and a hostile one for the use (`scanner.mode` that answers `'pre-upload'`
   first and `'preupload'` after, a size limit that answers a number and then `NaN`) passed the check and was used as
-  the hostile value. `forRoot` and `forRootAsync` now copy each known option, and each key of `credentials`,
-  `signedUrls`, `multipart`, `validation` and `scanner`, into a plain object once; the copy is what is validated and
-  what is resolved. The arrays of `validation` (`mimeWhitelist`, `customValidators`) are copied once as well.
+  the hostile value. `forRoot` and `forRootAsync` now copy each known option, and each key of the option groups, into a
+  plain object once; the copy is what is validated and what is resolved. The arrays of `validation` are copied once
+  as well.
 
   **Apply to a derived backend:** nothing to change for a plain options object. An options object whose property
   getters answer differently from one read to the next now gets the first answer everywhere; a key that is not an
