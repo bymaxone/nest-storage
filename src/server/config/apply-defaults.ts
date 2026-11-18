@@ -19,12 +19,14 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   DEFAULT_SIGNED_URLS,
 } from '../constants/default-options.constants'
+import {
+  MULTIPART_KEYS,
+  SCANNER_KEYS,
+  SIGNED_URL_KEYS,
+  VALIDATION_KEYS,
+  type NamesEveryKey,
+} from './option-keys'
 import { MAX_SIGNED_URL_TTL_SECONDS } from '../../shared/constants/default-ttls.constants'
-
-/** `unknown` when `Keys` names every key of `Group` and `never` when one is missing, so a key added to an option group cannot be dropped silently. */
-type NamesEveryKey<Group, Keys extends readonly PropertyKey[]> = Exclude<keyof Group, Keys[number]> extends never
-  ? unknown
-  : never
 
 /**
  * The keys of an option group that hold a value, read by name: a key set to `undefined` or `null` means "use
@@ -44,10 +46,6 @@ function definedOnly<T extends object, const K extends readonly (keyof T)[]>(
   return picked
 }
 
-const SIGNED_URL_KEYS = ['defaultGetTtlSeconds', 'defaultPutTtlSeconds', 'maxTtlSeconds'] as const
-const MULTIPART_KEYS = ['thresholdBytes', 'partSizeBytes', 'queueSize'] as const
-const VALIDATION_KEYS = ['mimeWhitelist', 'maxSizeBytes', 'customValidators'] as const
-const SCANNER_KEYS = ['impl', 'mode', 'rejectOnUnknown', 'timeoutMs'] as const
 
 /**
  * Merges the signed-URL options over their defaults and caps `maxTtlSeconds` at the

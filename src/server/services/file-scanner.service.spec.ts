@@ -297,14 +297,16 @@ describe('FileScannerService', () => {
         warnSpy.mockRestore()
       })
 
-      it('does not log the deadline, which is a typed error that names itself', async () => {
+      it('does not log the deadline as a scanner failure: it has its own line, and only that one', async () => {
         const impl: IFileScanner = { scan: jest.fn(() => new Promise<FileScanResult>(() => undefined)) }
         const service = await buildService(buildOptions({ impl, timeoutMs: 10 }), impl)
         const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
         await service.scan(SCAN_INPUT).catch(() => null)
 
-        expect(warnSpy).not.toHaveBeenCalled()
+        // The deadline is logged as a timeout (see 'a scan that outlasts its deadline'), never as `Scanner failed`.
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+        expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('Scanner failed')
         warnSpy.mockRestore()
       })
     })
@@ -582,6 +584,72 @@ describe('FileScannerService', () => {
       // caller must guard with isEnabled() — the error message names the required guard
       const service = await buildService(buildOptions(), null)
       await expect(service.scan(SCAN_INPUT)).rejects.toThrow('guard with isEnabled')
+    })
+
+    describe('a cut never leaves half of a surrogate pair', () => {
+      // An emoji is two UTF-16 units; a cut between them leaves a lone surrogate that is not text.
+      const EMOJI = '\u{1F600}'
+      const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|\\ud83d/i
+
+      it('in the engine and threat names, which a client reads, at 200', async () => {
+        const name = `${'a'.repeat(199)}${EMOJI}b`
+        const impl = makeMockScanner({ status: 'infected', engine: name, threat: name })
+        const service = await buildService(buildOptions({ impl }), impl)
+        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+
+        const { engine, threat } = ((err as StorageException).getResponse() as { error: { details: Record<string, string> } }).error.details
+        expect(engine).toBe('a'.repeat(199))
+        expect(threat).toBe('a'.repeat(199))
+        expect(`${String(engine)}${String(threat)}`).not.toMatch(LONE_SURROGATE)
+      })
+
+      it.each([
+        ['an unrecognised status, at 40', { status: `${'a'.repeat(39)}${EMOJI}b`, engine: 'clamav' }, 'a'.repeat(39)],
+        ['the details of a scanner, at 300', { status: 'infected', engine: 'clamav', details: { n: `${'a'.repeat(293)}${EMOJI}b` } }, 'a'.repeat(293)],
+      ])('in the log: %s', async (_what, result, kept) => {
+        const impl: IFileScanner = { scan: jest.fn().mockResolvedValue(result) }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        const line = String(warnSpy.mock.calls[0]?.[0])
+        expect(line).toContain(kept)
+        expect(line).not.toMatch(LONE_SURROGATE)
+        warnSpy.mockRestore()
+      })
+
+      it('in the message of a scanner that throws, at 300', async () => {
+        const impl: IFileScanner = { scan: jest.fn().mockRejectedValue(new Error(`${'a'.repeat(299)}${EMOJI}b`)) }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        const line = String(warnSpy.mock.calls[0]?.[0])
+        expect(line).toContain('a'.repeat(299))
+        expect(line).not.toMatch(LONE_SURROGATE)
+        warnSpy.mockRestore()
+      })
+    })
+
+    describe('a scan that outlasts its deadline', () => {
+      it('is logged once, naming the key and the limit and nothing the scanner holds', async () => {
+        const impl: IFileScanner = { scan: jest.fn(() => new Promise<FileScanResult>(() => undefined)) }
+        const service = await buildService(buildOptions({ impl, timeoutMs: 20 }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        await service.scan(SCAN_INPUT).catch(() => null)
+
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+        const line = String(warnSpy.mock.calls[0]?.[0])
+        expect(line).toContain('Scan timed out')
+        expect(line).toContain('key="test/file.png"')
+        expect(line).toContain('timeoutMs=20')
+        warnSpy.mockRestore()
+      })
     })
   })
 

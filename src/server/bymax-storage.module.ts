@@ -23,6 +23,7 @@ import type {
 } from './interfaces/storage-module-options.interface'
 import { validateOptions } from './config/validate-options'
 import { applyDefaults } from './config/apply-defaults'
+import { snapshotOptions } from './config/snapshot-options'
 import type { ResolvedBymaxStorageOptions } from './config/resolved-options'
 import {
   DEFAULT_IDEMPOTENCY_CACHE_MAX_ENTRIES,
@@ -38,7 +39,9 @@ import { FileScannerService } from './services/file-scanner.service'
 import { IdempotencyCache } from './utils/idempotency-cache'
 
 /** Validates raw options and materializes the fully-resolved options shape. */
-function resolveAsyncOptions(options: BymaxStorageModuleOptions): ResolvedBymaxStorageOptions {
+function resolveAsyncOptions(raw: BymaxStorageModuleOptions): ResolvedBymaxStorageOptions {
+  // Every option is read once, here: the copy is what is validated and what is resolved.
+  const options = snapshotOptions(raw) as BymaxStorageModuleOptions
   validateOptions(options)
   const resolved = applyDefaults(options)
   const configured = options.signedUrls?.maxTtlSeconds

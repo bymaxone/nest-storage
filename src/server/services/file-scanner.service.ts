@@ -13,6 +13,7 @@ import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constant
 import { DEFAULT_SCANNER_TIMEOUT_MS } from '../constants/default-options.constants'
 import { describeError } from '../utils/describe-error'
 import { logValue } from '../utils/log-value'
+import { cutText } from '../utils/cut-text'
 
 /** What the log line holds when the details cannot be turned into text. */
 const UNSERIALISABLE = '[unserialisable]'
@@ -32,13 +33,13 @@ const MAX_STATUS_LOG_LENGTH = 40
  */
 function statusForLog(status: unknown): string {
   return typeof status === 'string'
-    ? logValue(status.slice(0, MAX_STATUS_LOG_LENGTH))
+    ? logValue(cutText(status, MAX_STATUS_LOG_LENGTH))
     : `<${typeof status}>`
 }
 
 /** The engine or threat name as the scanner gave it, cut to {@link MAX_SCANNER_LABEL_LENGTH}; `undefined` when it is not a string. */
 function scannerLabel(value: unknown): string | undefined {
-  return typeof value === 'string' ? value.slice(0, MAX_SCANNER_LABEL_LENGTH) : undefined
+  return typeof value === 'string' ? cutText(value, MAX_SCANNER_LABEL_LENGTH) : undefined
 }
 
 /** `JSON.stringify` as it behaves: `undefined`, not a string, for a value whose `toJSON()` returns nothing. */
@@ -61,7 +62,7 @@ function scannerDetailsForLog(details: Record<string, unknown> | undefined): str
   } catch {
     text = UNSERIALISABLE
   }
-  return ` details=${logValue(text.slice(0, MAX_SCANNER_DETAILS_LENGTH))}`
+  return ` details=${logValue(cutText(text, MAX_SCANNER_DETAILS_LENGTH))}`
 }
 
 /** Input shape for a scan request. */
@@ -172,7 +173,7 @@ export class FileScannerService {
     } catch (err) {
       if (!(err instanceof StorageException)) {
         this.logger.warn(
-          `Scanner failed: key=${logValue(input.key)} error=${logValue(describeError(err).slice(0, MAX_SCANNER_DETAILS_LENGTH))}`,
+          `Scanner failed: key=${logValue(input.key)} error=${logValue(cutText(describeError(err), MAX_SCANNER_DETAILS_LENGTH))}`,
         )
       }
       throw err
@@ -190,6 +191,7 @@ export class FileScannerService {
     let timer: NodeJS.Timeout | undefined
     const deadline = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
+        this.logger.warn(`Scan timed out: key=${logValue(input.key)} timeoutMs=${String(timeoutMs)}`)
         // The rejection comes first: a scanner that settles inside its abort listener queues its outcome
         // ahead of anything queued after the abort, and would win the race over the deadline.
         reject(
