@@ -44,6 +44,11 @@ function scannerLabel(value: unknown): string | undefined {
   return typeof value === 'string' ? cutText(value, MAX_SCANNER_LABEL_LENGTH) : undefined
 }
 
+/** An engine or threat name as a log field: control characters escaped; no field when it is not a string. */
+function labelForLog(label: string | undefined): string | undefined {
+  return label === undefined ? undefined : escapeForLog(label)
+}
+
 /** `JSON.stringify` as it behaves: `undefined`, not a string, for a value whose `toJSON()` returns nothing. */
 function toJson(value: unknown): string | undefined {
   return JSON.stringify(value)
@@ -150,7 +155,7 @@ export class FileScannerService {
       emit(this.logger, 'warn', {
         event: STORAGE_LOG_EVENTS.scanInfected,
         message: 'Infected file detected',
-        engine: engine === undefined ? undefined : escapeForLog(engine),
+        engine: labelForLog(engine),
         threat: escapeForLog(threat ?? 'unknown'),
         ...details,
       })
@@ -163,7 +168,7 @@ export class FileScannerService {
       emit(this.logger, 'warn', {
         event: STORAGE_LOG_EVENTS.scanInconclusiveAccepted,
         message: 'Inconclusive scan result accepted',
-        engine: engine === undefined ? undefined : escapeForLog(engine),
+        engine: labelForLog(engine),
       })
       return result as FileScanResult
     }
@@ -179,7 +184,7 @@ export class FileScannerService {
     emit(this.logger, 'warn', {
       event: STORAGE_LOG_EVENTS.scanInconclusiveRejected,
       message: 'Inconclusive scan result rejected',
-      engine: engine === undefined ? undefined : escapeForLog(engine),
+      engine: labelForLog(engine),
       ...(unrecognised ? { status: statusForLog(status) } : {}),
       ...details,
     })
