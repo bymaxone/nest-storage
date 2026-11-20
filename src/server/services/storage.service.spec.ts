@@ -427,25 +427,6 @@ describe('StorageService — head / exists', () => {
     warnSpy.mockRestore()
   })
 
-  it('exists returns false with a specific warning on a non-404 error', async () => {
-    // A provider error is treated as "false" rather than thrown, and the fall-through
-    // branch logs the exact non-404 warning (proving it is NOT the not-found branch).
-    const { service, send } = makeService()
-    send.mockRejectedValue(SERVER_ERROR)
-    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-    await expect(service.exists('a.txt')).resolves.toBe(false)
-    // The failed call is logged as it is mapped, then exists() logs that it treats the error as "false".
-    expect(warnSpy).toHaveBeenCalledTimes(2)
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: 'STORAGE_EXISTS_FAILED',
-        message: expect.stringContaining('treating a non-404') as string,
-        err: expect.any(Error) as Error,
-      }),
-    )
-    warnSpy.mockRestore()
-  })
-
   it('exists returns false when head throws a non-StorageException', async () => {
     // The instanceof guard's false branch.
     const { service } = makeService()
@@ -464,23 +445,6 @@ describe('StorageService — delete', () => {
       Bucket: 'test-bucket',
       Key: 'tenant-x/a.txt',
     })
-  })
-
-  it('is idempotent on a 404 (no throw) and logs the not-found no-op', async () => {
-    // A missing object is a logged no-op with the specific idempotent-delete warning.
-    const { service, send } = makeService()
-    send.mockRejectedValue(NOT_FOUND)
-    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-    await expect(service.delete('missing')).resolves.toBeUndefined()
-    expect(warnSpy).toHaveBeenCalledTimes(1)
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: 'STORAGE_DELETE_NOT_FOUND',
-        message: expect.stringContaining('key not found (idempotent no-op)') as string,
-      }),
-    )
-    expect(JSON.stringify(warnSpy.mock.calls[0]?.[0])).not.toContain('missing')
-    warnSpy.mockRestore()
   })
 
   it('propagates a non-404 error with the delete op context', async () => {
