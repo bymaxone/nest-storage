@@ -11,9 +11,11 @@ import type { IFileScanner, FileScanResult } from '../interfaces/file-scanner.in
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { DEFAULT_SCANNER_TIMEOUT_MS } from '../constants/default-options.constants'
-import { describeError } from '../utils/describe-error'
-import { logValue } from '../utils/log-value'
+import { escapeForLog } from '../utils/log-value'
 import { cutText } from '../utils/cut-text'
+import { emit } from '../utils/log-event'
+import { STORAGE_LOG_EVENTS } from '../utils/log-events'
+import { failureError } from '../utils/provider-failure-log'
 
 /** What the log line holds when the details cannot be turned into text. */
 const UNSERIALISABLE = '[unserialisable]'
@@ -28,12 +30,12 @@ const MAX_SCANNER_DETAILS_LENGTH = 300
 const MAX_STATUS_LOG_LENGTH = 40
 
 /**
- * An unrecognised status as a log token: a string is cut and escaped, anything else is named by its type,
- * so no `toString` of the scanner's own object runs and nothing it holds reaches the line.
+ * An unrecognised status as a log field: a string is cut and escaped, anything else is named by its type,
+ * so no `toString` of the scanner's own object runs and nothing it holds reaches the log.
  */
 function statusForLog(status: unknown): string {
   return typeof status === 'string'
-    ? logValue(cutText(status, MAX_STATUS_LOG_LENGTH))
+    ? escapeForLog(cutText(status, MAX_STATUS_LOG_LENGTH))
     : `<${typeof status}>`
 }
 
@@ -42,27 +44,32 @@ function scannerLabel(value: unknown): string | undefined {
   return typeof value === 'string' ? cutText(value, MAX_SCANNER_LABEL_LENGTH) : undefined
 }
 
+/** An engine or threat name as a log field: control characters escaped; no field when it is not a string. */
+function labelForLog(label: string | undefined): string | undefined {
+  return label === undefined ? undefined : escapeForLog(label)
+}
+
 /** `JSON.stringify` as it behaves: `undefined`, not a string, for a value whose `toJSON()` returns nothing. */
 function toJson(value: unknown): string | undefined {
   return JSON.stringify(value)
 }
 
 /**
- * What the scanner put in `details`, as a log suffix. The text is the scanner's, so it never reaches
- * a response body: a client is told the engine and the threat name and nothing else.
+ * What the scanner put in `details`, as a log field. The text is the scanner's, so it never reaches a
+ * response body: a client is told the engine and the threat name and nothing else.
  *
  * @param details - The scanner's free-form `details`.
- * @returns ` details=<escaped, cut text>`, or an empty string when there are none.
+ * @returns The details as escaped, cut text, or no field when there are none.
  */
-function scannerDetailsForLog(details: Record<string, unknown> | undefined): string {
-  if (details === undefined) return ''
+function scannerDetailsForLog(details: Record<string, unknown> | undefined): { details?: string } {
+  if (details === undefined) return {}
   let text: string
   try {
     text = toJson(details) ?? UNSERIALISABLE
   } catch {
     text = UNSERIALISABLE
   }
-  return ` details=${logValue(cutText(text, MAX_SCANNER_DETAILS_LENGTH))}`
+  return { details: escapeForLog(cutText(text, MAX_SCANNER_DETAILS_LENGTH)) }
 }
 
 /** Input shape for a scan request. */
@@ -145,20 +152,42 @@ export class FileScannerService {
       return result as FileScanResult
     }
     if (status === 'infected') {
-      this.logger.warn(`Infected file detected: key=${logValue(input.key)} engine=${logValue(engine)} threat=${logValue(threat ?? 'unknown')}${details}`)
+      emit(this.logger, 'warn', {
+        event: STORAGE_LOG_EVENTS.scanInfected,
+        message: 'Infected file detected',
+        engine: labelForLog(engine),
+        threat: escapeForLog(threat ?? 'unknown'),
+        ...details,
+      })
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED, undefined, {
         engine,
         threat,
       })
     }
     if (status === 'unknown' && !this.options.scanner?.rejectOnUnknown) {
-      this.logger.warn(`Inconclusive scan result accepted: key=${logValue(input.key)} engine=${logValue(engine)}`)
+      emit(this.logger, 'warn', {
+        event: STORAGE_LOG_EVENTS.scanInconclusiveAccepted,
+        message: 'Inconclusive scan result accepted',
+        engine: labelForLog(engine),
+      })
       return result as FileScanResult
     }
-    // `unknown` with `rejectOnUnknown`, or a result outside the contract (no result, a status that is
-    // not exactly one of the three): the object is not known to be clean, so it is not stored.
+    return this.rejectInconclusive(status, engine, details)
+  }
+
+  /**
+   * `unknown` with `rejectOnUnknown`, or a result outside the contract (no result, a status that is not
+   * exactly one of the three): the object is not known to be clean, so it is not stored.
+   */
+  private rejectInconclusive(status: unknown, engine: string | undefined, details: { details?: string }): never {
     const unrecognised = status !== 'unknown'
-    this.logger.warn(`Inconclusive scan result rejected: key=${logValue(input.key)} engine=${logValue(engine)}${unrecognised ? ` status=${statusForLog(status)}` : ''}${details}`)
+    emit(this.logger, 'warn', {
+      event: STORAGE_LOG_EVENTS.scanInconclusiveRejected,
+      message: 'Inconclusive scan result rejected',
+      engine: labelForLog(engine),
+      ...(unrecognised ? { status: statusForLog(status) } : {}),
+      ...details,
+    })
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INCONCLUSIVE, undefined, {
       engine,
       ...(unrecognised ? { reason: 'unrecognised scanner status' } : {}),
@@ -178,9 +207,11 @@ export class FileScannerService {
       return await this.scanWithinDeadline(scanner, input, caller)
     } catch (err) {
       if (!(err instanceof StorageException)) {
-        this.logger.warn(
-          `Scanner failed: key=${logValue(input.key)} error=${logValue(cutText(describeError(err), MAX_SCANNER_DETAILS_LENGTH))}`,
-        )
+        emit(this.logger, 'warn', {
+          event: STORAGE_LOG_EVENTS.scanFailed,
+          message: 'Scanner failed',
+          err: failureError(err),
+        })
       }
       throw err
     }
@@ -201,7 +232,11 @@ export class FileScannerService {
     let timer: NodeJS.Timeout | undefined
     const deadline = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
-        this.logger.warn(`Scan timed out: key=${logValue(input.key)} timeoutMs=${String(timeoutMs)}`)
+        emit(this.logger, 'warn', {
+          event: STORAGE_LOG_EVENTS.scanTimeout,
+          message: 'Scan timed out',
+          timeoutMs,
+        })
         // The rejection comes first: a scanner that settles inside its abort listener queues its outcome
         // ahead of anything queued after the abort, and would win the race over the deadline.
         reject(

@@ -234,10 +234,15 @@ describe('a download body that fails after its headers', () => {
     expect(error.cause).toBeUndefined()
     expect(JSON.stringify(error)).not.toMatch(/ECONN|aborted/i)
     expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('Provider call failed: op="download"'),
-    )
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('aborted'))
+    const entry = warn.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(entry).toMatchObject({
+      event: 'STORAGE_PROVIDER_CALL_FAILED',
+      message: 'Provider call failed',
+      operation: 'download',
+    })
+    expect((entry.err as Error).message).toMatch(/aborted/)
+    const outside = JSON.stringify({ ...entry, err: undefined })
+    expect(outside).not.toMatch(/ECONN|aborted|socket/i)
   })
 
   it.each(guards)(

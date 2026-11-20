@@ -13,6 +13,23 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Changed
+
+- **The library's log lines are object events.** Every operational line is now an object with an `event` code
+  (`STORAGE_*`), a `message` with the library's own text and named fields, through the Nest `Logger`; the README has
+  a "Log events" table. What the provider, the scanner or the host raised goes under `err` as a fresh error (name,
+  provider code, masked and cut message), never into the text, and never the SDK's own error. The key you passed is
+  no longer logged by the provider-failure and scan events, the client-ready line no longer carries the endpoint or
+  the region, and a host logger that throws can no longer fail the call being logged. A host `LoggerService` method that is
+  async and rejects is still an unhandled rejection, which ends the Node process unless the application
+  handles `unhandledRejection`: Nest's `Logger` drops the value the method returns before the library can see it.
+
+  **Apply to a derived backend:** a log rule or an alert that matched the text of these lines (`Provider call failed`,
+  `Scan timed out`, `Scanner failed`, `Infected file detected`, `S3Client initialized`, the exists and delete
+  warnings, the TTL clamp) now matches the `event` code and reads the fields; the library text is kept in `message`.
+  A sink that stringifies the message sees an object: use a logger that writes object messages as fields. Anything
+  that relied on the key, the endpoint or the region in these lines reads them from the call or the configuration.
+
 ### Fixed
 
 - **An option group of the wrong kind is refused at boot.** `validation`, `signedUrls` or `multipart` given as `false`,

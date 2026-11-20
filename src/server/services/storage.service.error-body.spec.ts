@@ -4,12 +4,13 @@
  * host's default exception handler as `getResponse()`, so that body must hold a fixed `reason` and the
  * protocol-level `awsCode`, `httpStatus` and `requestId`, and nothing a client could use to map the
  * host (an address, a port, a driver sentence, a bucket detail the provider wrote). What the driver and
- * the provider said is in the library's warn log, as a fixed projection of the error and never the
- * error itself, and `JSON.stringify` of the exception holds none of it. Driven through the real SDK.
+ * the provider said is in the library's warn entry, under `err`, a fresh error built from a fixed
+ * projection and never the SDK's own, and `JSON.stringify` of the exception holds none of it. Driven through the real SDK.
  * @layer server/services
  */
 import { createServer, type Server, type ServerResponse } from 'node:http'
 import { createServer as createNetServer } from 'node:net'
+import { inspect } from 'node:util'
 import type { AddressInfo } from 'node:net'
 import { Logger } from '@nestjs/common'
 import { Test, type TestingModule } from '@nestjs/testing'
@@ -103,9 +104,25 @@ describe('the body of a failed call', () => {
     moduleRef = undefined
   })
 
-  /** Everything the library logged at warn level during the call. */
-  function logged(): string {
-    return warn.mock.calls.map((call) => String(call[0])).join('\n')
+  /** The entries the library logged at warn level during the call. */
+  function entries(): Record<string, unknown>[] {
+    return warn.mock.calls.map((call) => call[0] as Record<string, unknown>)
+  }
+
+  /** What the library logged as `err`: the message of each fresh error. */
+  function loggedErrors(): string {
+    return entries()
+      .map((entry) => (entry.err as Error).message)
+      .join('\n')
+  }
+
+  /** The library's own fields of every entry, without `err`. */
+  function outsideErr(): string {
+    return JSON.stringify(
+      entries().map((entry) =>
+        Object.fromEntries(Object.entries(entry).filter(([k]) => k !== 'err')),
+      ),
+    )
   }
 
   async function failureOf(port: number, abortSignal?: AbortSignal): Promise<StorageException> {
@@ -143,7 +160,8 @@ describe('the body of a failed call', () => {
     expect(clientText(error)).not.toContain(String(closedPort))
     expect(clientText(error)).not.toMatch(/ECONN|connect|getaddrinfo|socket/i)
     // The host's logs still have it.
-    expect(logged()).toContain(String(closedPort))
+    expect(loggedErrors()).toContain(String(closedPort))
+    expect(outsideErr()).not.toContain(String(closedPort))
   })
 
   it('does not tell a client what the SDK said about a deadline', async () => {
@@ -152,7 +170,8 @@ describe('the body of a failed call', () => {
     expect(error).toMatchObject({ code: 'STORAGE_TIMEOUT' })
     expect(detailsOf(error).reason).toBe('timeout')
     expect(clientText(error)).not.toMatch(/requestTimeout|smithy|node-http-handler|300 ms/i)
-    expect(logged()).toMatch(/requestTimeout|300/)
+    expect(loggedErrors()).toMatch(/requestTimeout|300/)
+    expect(outsideErr()).not.toMatch(/requestTimeout|300 ms/)
   })
 
   it('does not repeat the sentence of a provider that is in trouble, and keeps the protocol facts', async () => {
@@ -166,7 +185,8 @@ describe('the body of a failed call', () => {
     })
     expect(clientText(error)).not.toContain('bucket-internal-7')
     expect(clientText(error)).not.toContain('reduce')
-    expect(logged()).toContain('bucket-internal-7')
+    expect(loggedErrors()).toContain('bucket-internal-7')
+    expect(outsideErr()).not.toContain('bucket-internal-7')
   })
 
   it('does not repeat the sentence of a provider that refused the request', async () => {
@@ -180,7 +200,8 @@ describe('the body of a failed call', () => {
     })
     expect(clientText(error)).not.toContain('arn:aws')
     expect(clientText(error)).not.toContain('internal-svc')
-    expect(logged()).toContain('internal-svc')
+    expect(loggedErrors()).toContain('internal-svc')
+    expect(outsideErr()).not.toContain('internal-svc')
   })
 
   it('keeps the request id the provider gave, so that its support can find the request', async () => {
@@ -203,25 +224,33 @@ describe('the body of a failed call', () => {
   })
 
   it('logs a fixed projection of the error, never the error: no response, no header, no secret', async () => {
-    // A logger serializes what it is given, so the line holds named fields only. The stand-in answers
-    // with a header and a message that carry a signature; none of it may reach the log.
+    // A logger serializes what it is given, so the entry holds named fields and a fresh error only.
+    // The stand-in answers with a header and a message that carry a signature; none of it may reach
+    // the entry, `err` included.
     nextAnswer = {
       status: 403,
       code: 'AccessDenied',
       message: 'Denied for X-Amz-Signature=abc123def&other AWSAccessKeyId=AKIASECRET99',
     }
     const error = await failureOf(answeringPort)
-    const line = logged()
+    const [entry] = entries()
+    const whole = inspect(entry, { depth: 6 })
 
     expect(error).toMatchObject({ code: 'STORAGE_PROVIDER_ERROR' })
-    expect(line).toContain('code="AccessDenied"')
-    expect(line).toContain('status="403"')
-    expect(line).toContain('requestId="REQ-123"')
-    expect(line).not.toMatch(/abc123def|AKIASECRET99/)
-    expect(line).toContain('X-Amz-Signature=[redacted]')
-    expect(line).not.toMatch(
+    expect(entries()).toHaveLength(1)
+    expect(entry).toMatchObject({
+      event: 'STORAGE_PROVIDER_CALL_FAILED',
+      awsCode: 'AccessDenied',
+      httpStatus: 403,
+      requestId: 'REQ-123',
+    })
+    expect((entry?.err as Error & { awsCode?: string }).awsCode).toBe('AccessDenied')
+    expect((entry?.err as Error).message).toContain('X-Amz-Signature=[redacted]')
+    expect(whole).not.toMatch(/abc123def|AKIASECRET99/)
+    expect(whole).not.toMatch(
       /\$response|\$metadata|x-amz-request-id|content-type|application\/xml|headers/i,
     )
+    expect(whole).not.toMatch(/'k'|bucket/i)
   })
 
   it('says nothing about a request the caller cancelled', async () => {
@@ -234,6 +263,6 @@ describe('the body of a failed call', () => {
     const error = await failureOf(silentPort, controller.signal)
 
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
-    expect(logged()).toBe('')
+    expect(warn).not.toHaveBeenCalled()
   })
 })

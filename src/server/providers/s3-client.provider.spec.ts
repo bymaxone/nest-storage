@@ -28,8 +28,11 @@ describe('S3ClientProvider', () => {
     provider.onModuleInit()
     expect(provider.isConfigured()).toBe(true)
     expect(provider.getClient()).toBeInstanceOf(S3Client)
-    // createClient logs the initialization line with the endpoint/region.
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('S3Client initialized'))
+    // createClient logs one initialization entry, without the endpoint or the region.
+    expect(logSpy).toHaveBeenCalledTimes(1)
+    const entry = logSpy.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(entry).toEqual({ event: 'STORAGE_CLIENT_READY', message: 'S3Client initialized' })
+    expect(JSON.stringify(entry)).not.toMatch(/localhost|us-east-1/)
     logSpy.mockRestore()
   })
 
@@ -63,7 +66,13 @@ describe('S3ClientProvider', () => {
     expect(() => provider.getClient()).toThrow('S3Client is not available')
     expect(provider.getClientOrNull()).toBeNull()
     // The missing-credentials path must emit the specific warning.
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('credentials are missing'))
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'STORAGE_CREDENTIALS_MISSING',
+        message: expect.stringContaining('credentials are missing') as string,
+      }),
+    )
     warnSpy.mockRestore()
   })
 
@@ -100,16 +109,17 @@ describe('S3ClientProvider', () => {
     }).not.toThrow()
   })
 
-  it('logs only the protocol, host and port of the endpoint, never its credentials, path or query', () => {
-    // The boot line must identify the store without carrying anything secret from a mistaken endpoint.
+  it('logs a ready entry that carries nothing of the endpoint, neither its credentials, host, path nor query', () => {
+    // The boot entry must not carry anything secret from a mistaken endpoint, so it carries no part of it.
     const provider = makeProvider({ endpoint: 'https://AKIAEXAMPLE:SECRETEXAMPLE@s3.example.com:9000/base?token=T' })
     const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
 
     provider.onModuleInit()
 
-    const lines = logSpy.mock.calls.map((call) => String(call[0]))
-    expect(lines).toContain('S3Client initialized: endpoint=https://s3.example.com:9000 region=us-east-1')
-    expect(lines.join('\n')).not.toMatch(/AKIAEXAMPLE|SECRETEXAMPLE|token=|\/base/)
+    expect(logSpy).toHaveBeenCalledTimes(1)
+    const entry = logSpy.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(entry).toEqual({ event: 'STORAGE_CLIENT_READY', message: 'S3Client initialized' })
+    expect(JSON.stringify(entry)).not.toMatch(/AKIAEXAMPLE|SECRETEXAMPLE|token=|\/base|s3\.example\.com|9000|us-east-1/)
     logSpy.mockRestore()
   })
 })

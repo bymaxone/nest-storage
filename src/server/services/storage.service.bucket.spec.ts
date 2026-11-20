@@ -99,7 +99,13 @@ describe('StorageService — missing bucket', () => {
 
     await expect(service.delete('a')).resolves.toBeUndefined()
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('idempotent no-op'))
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'STORAGE_DELETE_NOT_FOUND',
+        message: expect.stringContaining('idempotent no-op') as string,
+      }),
+    )
     warn.mockRestore()
   })
 

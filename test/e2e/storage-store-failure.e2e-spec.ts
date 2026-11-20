@@ -7,6 +7,7 @@
  * @layer test/e2e
  */
 import { Logger } from '@nestjs/common'
+import { inspect } from 'node:util'
 import { Test, type TestingModule } from '@nestjs/testing'
 import {
   BymaxStorageModule,
@@ -53,7 +54,7 @@ describe('Storage E2E — store failure', () => {
     logged = []
     for (const level of ['log', 'warn', 'error', 'debug', 'verbose'] as const) {
       jest.spyOn(Logger.prototype, level).mockImplementation((...args: unknown[]) => {
-        logged.push(args.map(String).join(' '))
+        logged.push(args.map((arg) => (typeof arg === 'string' ? arg : inspect(arg, { depth: 6 }))).join(' '))
       })
     }
     proxy.setMode('pass')

@@ -614,7 +614,7 @@ with no `maxSizeBytes` it is refused with a reason that says to set it or use `p
 **What counts as a verdict.** Only the exact strings `'clean'`, `'infected'` and `'unknown'` are results. Anything else (no result, `null`, `'CLEAN'`, `' clean'`, an object, a made-up status) is rejected as `STORAGE_SCAN_INCONCLUSIVE` with `details.reason: 'unrecognised scanner status'`, whatever `rejectOnUnknown` says: an object the scanner did not call clean is not stored.
 
 **What a client is told.** `STORAGE_SCAN_INFECTED` carries `details.engine` and `details.threat`, and
-`STORAGE_SCAN_INCONCLUSIVE` carries `details.engine`; each name is cut, in the body and in the log, and left out when the scanner gave something that is not a string. A scanner that throws is answered with a 500, and the library logs a `Scanner failed` warning with the message (cut) so there is a trace of why; a scan that outlasts `scanner.timeoutMs` is logged as `Scan timed out` with the key and the limit. A cut never leaves half of a surrogate pair, so an emoji at the cut is dropped whole. The free-form `details` your scanner returns is the
+`STORAGE_SCAN_INCONCLUSIVE` carries `details.engine`; each name is cut, in the body and in the log, and left out when the scanner gave something that is not a string. A scanner that throws is answered with a 500, and the library logs a `STORAGE_SCAN_FAILED` event with the error under `err` (its message cut) so there is a trace of why; a scan that outlasts `scanner.timeoutMs` is logged as `STORAGE_SCAN_TIMEOUT` with the limit (see [Log events](#-log-events)). The free-form `details` your scanner returns is the
 scanner's own text, so it is written to the warning log (escaped and truncated) and never to the
 body of the error.
 
@@ -822,6 +822,28 @@ try {
 
 ---
 
+## 📋 Log events
+
+Every operational line the library writes is an **object** through the Nest `Logger`: an `event` code, a `message` with the library's own text, and the fields below. What the provider, the scanner or the host raised goes under `err`, as a fresh error built from its name, its provider code and its message (secrets masked, cut, control characters escaped); never into `message`, and never the SDK's own error, so no response, header or `cause` reaches a log. No field of an event carries the key you passed, the bucket, the endpoint or the region, except `storedKey` of `STORAGE_SCAN_CLEANUP_FAILED`, which an operator needs to remove the object. What the provider or the scanner wrote under `err` is their own text and can name the host, the key or the bucket. A host logger that throws does not change the call being logged. A host `LoggerService` method that is async and rejects is an unhandled rejection, and Node ends the process on it unless the application handles `unhandledRejection`: Nest's `Logger` drops the value a host method returns before the library can see it, so handle rejections inside your logger.
+
+| Code | Level | When | Fields |
+| --- | --- | --- | --- |
+| `STORAGE_TTL_CLAMPED` | warn | `signedUrls.maxTtlSeconds` is above the SigV4 limit and the limit is used | `configuredSeconds`, `appliedSeconds` |
+| `STORAGE_CREDENTIALS_MISSING` | warn | the module starts without credentials; operations then throw `STORAGE_NOT_CONFIGURED` | none |
+| `STORAGE_CLIENT_READY` | log | the S3 client is created | none |
+| `STORAGE_PROVIDER_CALL_FAILED` | warn | a call to the provider failed (a request you cancelled is not logged) | `operation`, `awsCode`, `httpStatus`, `requestId`, `reason`, `err` |
+| `STORAGE_MULTIPART_ABORT_FAILED` | warn | aborting a failed multipart upload failed, so the upload stays open on the provider | `err` |
+| `STORAGE_SCAN_INFECTED` | warn | the scanner said `infected` | `engine`, `threat`, `details` (the scanner's own, cut) |
+| `STORAGE_SCAN_INCONCLUSIVE_ACCEPTED` | warn | the scanner said `unknown` and `rejectOnUnknown` is off | `engine` |
+| `STORAGE_SCAN_INCONCLUSIVE_REJECTED` | warn | `unknown` with `rejectOnUnknown`, or a result outside the contract | `engine`, `status` (when unrecognised), `details` |
+| `STORAGE_SCAN_FAILED` | warn | the scanner threw | `err` |
+| `STORAGE_SCAN_TIMEOUT` | warn | the scan outlasted `scanner.timeoutMs` | `timeoutMs` |
+| `STORAGE_SCAN_CLEANUP_FAILED` | error | the object a scan rejected could not be deleted and is still stored | `storedKey`, `cleanupFailure` |
+| `STORAGE_EXISTS_FAILED` | warn | `exists()` met a failure that is not a 404 and answered `false` | `err` |
+| `STORAGE_DELETE_NOT_FOUND` | warn | `delete()` found no such key (an idempotent no-op) | none |
+
+---
+
 ## 🚫 What This Library Does NOT Do
 
 - **Detect a file's real type.** The MIME check reads the declared `Content-Type` only; plug in an
@@ -917,12 +939,13 @@ injected into every service, so `credentials` is attached as a non-enumerable ac
 is what a structured logger or an error reporter capturing a scope would otherwise pick up. Reading it
 on purpose is unchanged.
 
-### Error payloads carry the operation, and that includes the key
+### Error payloads carry the operation, and the key you passed
 
-`details` holds the provider's error code and message, the HTTP status, the request id, and the
-operation context the call site supplies: the operation, the bucket, and the resolved key or prefix.
-That is enough to diagnose a failure, and it means an object key reaches whatever consumes the
-exception, so if a key is itself sensitive in your deployment, do not log the envelope verbatim.
+`details` holds the provider's error code, the HTTP status, the request id, a fixed `reason`, and the
+operation context the call site supplies: the operation and the `key`, `bucket` or `prefix` the caller
+passed (see _What `details` repeats_). Neither the text of the provider nor anything the host configured is
+in it. An object key you passed still reaches whatever consumes the exception, so if a key is itself
+sensitive in your deployment, do not log the envelope verbatim.
 
 ### `keyPrefix` is a namespace, not an access boundary
 
