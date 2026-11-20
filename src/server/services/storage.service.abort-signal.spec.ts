@@ -242,6 +242,7 @@ describe('abortSignal', () => {
       .catch((err: unknown) => err)
 
     expect(detailsOf(error)).toMatchObject({ key: 'k', op: 'upload' })
+    expect(detailsOf(error)).not.toHaveProperty('bucket')
     expect(calls).toEqual([])
   })
 
