@@ -433,19 +433,31 @@ describe('FileScannerService', () => {
         return { impl, seen }
       }
 
-      it('rejects STORAGE_TIMEOUT (503) naming the phase, the limit, the key and the bucket, and aborts the signal it handed over', async () => {
+      it('rejects STORAGE_TIMEOUT (503) naming the phase, the limit and what the caller gave, and aborts the signal it handed over', async () => {
         const { impl, seen } = neverSettling()
+        const service = await buildService(buildOptions({ impl, timeoutMs: 30 }), impl)
+
+        const err = await service.scan(SCAN_INPUT, { key: 'file.png', bucket: 'asked' }).catch((e: unknown) => e)
+
+        expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_TIMEOUT)
+        expect((err as StorageException).getStatus()).toBe(503)
+        expect((err as StorageException).getResponse()).toEqual({
+          error: expect.objectContaining({
+            details: { key: 'file.png', bucket: 'asked', phase: 'scan', timeoutMs: 30 },
+          }) as unknown,
+        })
+        expect(seen).toHaveLength(1)
+        expect(seen[0]?.aborted).toBe(true)
+      })
+
+      it('repeats nothing of the scan input in the deadline error: the key and bucket it holds are the scanner\'s, not the caller\'s', async () => {
+        const { impl } = neverSettling()
         const service = await buildService(buildOptions({ impl, timeoutMs: 30 }), impl)
 
         const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
 
-        expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_TIMEOUT)
-        expect((err as StorageException).getStatus()).toBe(503)
-        expect((err as StorageException).getResponse()).toMatchObject({
-          error: { details: { phase: 'scan', timeoutMs: 30, key: 'test/file.png', bucket: 'test-bucket' } },
-        })
-        expect(seen).toHaveLength(1)
-        expect(seen[0]?.aborted).toBe(true)
+        const details = ((err as StorageException).getResponse() as { error: { details: object } }).error.details
+        expect(details).toEqual({ phase: 'scan', timeoutMs: 30 })
       })
 
       it.each([

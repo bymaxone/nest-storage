@@ -234,14 +234,15 @@ describe('abortSignal', () => {
     expect(calls).toEqual([])
   })
 
-  it('names the key, the bucket and the operation of an upload refused before any request', async () => {
+  it('names the key and the operation of an upload refused before any request, and not the configured bucket', async () => {
     const service = await storage()
 
     const error: unknown = await service
       .upload({ key: 'k', body: Buffer.from('x'), contentType: 'x/y', abortSignal: AbortSignal.abort() })
       .catch((err: unknown) => err)
 
-    expect(detailsOf(error)).toMatchObject({ key: 'k', bucket: 'b', op: 'upload' })
+    expect(detailsOf(error)).toMatchObject({ key: 'k', op: 'upload' })
+    expect(detailsOf(error)).not.toHaveProperty('bucket')
     expect(calls).toEqual([])
   })
 
@@ -316,7 +317,6 @@ describe('abortSignal', () => {
       reason: 'AbortError',
       abort: 'completed',
       key: 'k',
-      bucket: 'b',
       op: 'upload-multipart',
     })
     expect(calls).toContain('DELETE ?uploadId=u1')
@@ -454,7 +454,7 @@ describe('abortSignal', () => {
     const error = await pending
 
     expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
-    expect(detailsOf(error)).toMatchObject({ key: 'k', bucket: 'b', op: 'upload' })
+    expect(detailsOf(error)).toMatchObject({ key: 'k', op: 'upload' })
     expect(body.destroyed).toBe(true)
     expect(calls).toEqual([])
   })
@@ -537,7 +537,7 @@ describe('abortSignal', () => {
       scanner.settle('clean')
 
       expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
-      expect(detailsOf(error)).toMatchObject({ key: 'k', bucket: 'b', op: 'upload', stored: true })
+      expect(detailsOf(error)).toMatchObject({ key: 'k', op: 'upload', stored: true })
     })
 
     it('still deletes the object when the scan then finds it infected', async () => {
@@ -616,7 +616,7 @@ describe('abortSignal', () => {
     const outcome = await reading
 
     expect(outcome).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
-    expect(detailsOf(outcome)).toMatchObject({ reason: 'AbortError', key: 'k', bucket: 'b' })
+    expect(detailsOf(outcome)).toMatchObject({ reason: 'AbortError', key: 'k' })
     await until(() => sockets.size === 0, 'the connection of the stalled body closed')
   })
 })

@@ -79,12 +79,12 @@ describe('ValidationService', () => {
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_MIME_NOT_ALLOWED)
-      // The exception must carry the offending content type and the configured whitelist.
+      // The exception carries the offending content type and not the configured whitelist.
       const details = ((err as StorageException).getResponse() as {
         error: { details: { contentType: string; whitelist: string[] } }
       }).error.details
       expect(details.contentType).toBe('text/plain')
-      expect(details.whitelist).toEqual(['image/png'])
+      expect(details).not.toHaveProperty('whitelist')
     })
 
     it('passes when the MIME matches via a wildcard (image/*)', async () => {

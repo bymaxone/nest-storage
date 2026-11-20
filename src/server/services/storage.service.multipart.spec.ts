@@ -181,7 +181,7 @@ describe('StorageService — multipart upload', () => {
       }
     ).error.details
     expect(details.key).toBe('big.bin')
-    expect(details.bucket).toBe('test-bucket')
+    expect(details).not.toHaveProperty('bucket')
     // The body carries a fixed reason; the provider's message is not in it.
     expect(details.reason).toBe('rejected')
     expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('part failed')

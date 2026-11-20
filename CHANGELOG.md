@@ -34,6 +34,23 @@ note on each entry is the compatibility contract — read it, not the number.
   instance that serves `validate` from its prototype is accepted. The README option table now has the
   `validation.customValidators` row.
 
+- **An error no longer repeats what the host configured.** `details` carried the module's `bucket` (when the call
+  named none), the `keyPrefix` (inside the `key` of an upload, head, download, delete, copy and signed-URL
+  failure, and the `prefix` of a list failure) and the whole `validation.mimeWhitelist` (in `STORAGE_MIME_NOT_ALLOWED`). The `key` is now the one the
+  caller passed, the `bucket` appears only when the caller passed one, and the whitelist is not repeated; a `key`,
+  `bucket`, `prefix`, `sourceKey` or `destKey` longer than 1024 characters is left out.
+
+  The same applies to a scan: a `STORAGE_TIMEOUT` for a scan that outlasts its deadline repeated the prefixed key and
+  the module bucket, and now carries the `key` the caller passed and a per-call `bucket`. `details.storedKey`,
+  which a rejected scan whose cleanup delete failed carried, is removed from the response: the operator gets the key as
+  stored in the `STORAGE_SCAN_CLEANUP_FAILED` log entry, in its `storedKey` field.
+
+  **Apply to a derived backend:** a client or a log rule that read `details.bucket` of a call that named no bucket,
+  `details.whitelist` of `STORAGE_MIME_NOT_ALLOWED`, `details.storedKey` of a rejected scan whose cleanup failed, or a
+  `keyPrefix` in `details.key` finds none, and reads the module configuration instead. A rule on the text of the
+  `STORAGE_SCAN_CLEANUP_FAILED` log message now reads the `event` and `storedKey` fields of the entry. A `key` and a
+  `bucket` that the caller passed are unchanged.
+
 ## [1.1.18] - 2026-11-18
 
 ### Fixed

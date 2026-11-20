@@ -155,7 +155,7 @@ describe('a download body that fails after its headers', () => {
 
       expect(error).toBeInstanceOf(StorageException)
       expect(error).toMatchObject({ code: 'STORAGE_PROVIDER_ERROR', status: 503 })
-      expect(detailsOf(error)).toMatchObject({ reason: 'unreachable', key: 'k', bucket: 'b', op })
+      expect(detailsOf(error)).toMatchObject({ reason: 'unreachable', key: 'k', op })
     })
 
     it('rejects downloadBuffer() with the typed abort when the caller cancels mid-body', async () => {
@@ -167,7 +167,7 @@ describe('a download body that fails after its headers', () => {
         .catch((err: unknown) => err)
 
       expect(error).toMatchObject({ code: 'STORAGE_REQUEST_ABORTED' })
-      expect(detailsOf(error)).toMatchObject({ reason: 'AbortError', key: 'k', bucket: 'b' })
+      expect(detailsOf(error)).toMatchObject({ reason: 'AbortError', key: 'k' })
     })
   })
 
@@ -180,7 +180,7 @@ describe('a download body that fails after its headers', () => {
 
       expect(outcome).toBeInstanceOf(StorageException)
       expect(outcome).toMatchObject({ code: 'STORAGE_PROVIDER_ERROR', status: 503 })
-      expect(detailsOf(outcome)).toMatchObject({ reason: 'unreachable', key: 'k', bucket: 'b' })
+      expect(detailsOf(outcome)).toMatchObject({ reason: 'unreachable', key: 'k' })
     })
 
     it('ends the download stream with the typed abort when the caller cancels mid-body', async () => {

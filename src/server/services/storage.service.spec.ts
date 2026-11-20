@@ -302,7 +302,7 @@ describe('StorageService — single-shot upload', () => {
     const details = detailsOf(err)
     expect(details.op).toBe('upload-single')
     expect(details.key).toBe('a.txt')
-    expect(details.bucket).toBe('test-bucket')
+    expect(details).not.toHaveProperty('bucket')
   })
 
   it('passes size and metadata to the validation pipeline only when the upload declares them', async () => {
@@ -407,7 +407,7 @@ describe('StorageService — head / exists', () => {
     const details = detailsOf(err)
     expect(details.op).toBe('head')
     expect(details.key).toBe('missing')
-    expect(details.bucket).toBe('test-bucket')
+    expect(details).not.toHaveProperty('bucket')
   })
 
   it('exists returns true for a present object', async () => {
@@ -477,7 +477,7 @@ describe('StorageService — delete', () => {
     const details = detailsOf(err)
     expect(details.op).toBe('delete')
     expect(details.key).toBe('a.txt')
-    expect(details.bucket).toBe('test-bucket')
+    expect(details).not.toHaveProperty('bucket')
   })
 })
 
@@ -606,7 +606,10 @@ describe('StorageService — scan integration', () => {
     await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain', size: 2 })
 
     expect(scanFn).toHaveBeenCalledTimes(1)
-    expect(scanFn).toHaveBeenCalledWith(expect.objectContaining({ mode: 'pre-upload', key: 'a.txt', size: 2 }))
+    expect(scanFn).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'pre-upload', key: 'a.txt', size: 2 }),
+      { key: 'a.txt' },
+    )
     expect(send).toHaveBeenCalled()
   })
 
@@ -700,7 +703,10 @@ describe('StorageService — scan integration', () => {
 
     await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain', size: 2 })
 
-    expect(scanFn).toHaveBeenCalledWith(expect.objectContaining({ mode: 'post-upload', key: 'a.txt', size: 2 }))
+    expect(scanFn).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'post-upload', key: 'a.txt', size: 2 }),
+      { key: 'a.txt' },
+    )
   })
 
   it('cleans up the infected object from the per-call bucket, not the module default', async () => {
@@ -785,10 +791,9 @@ describe('StorageService — scan integration', () => {
       key: 'infected2.bin',
       cleanup: 'failed',
     })
-    // The delete failure is logged at error level with a stable code, alongside the delete error's message.
+    // The delete failure is logged at error level as an entry with a stable event and the stored key.
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('STORAGE_SCAN_CLEANUP_FAILED'),
-      expect.anything(),
+      expect.objectContaining({ event: 'STORAGE_SCAN_CLEANUP_FAILED', storedKey: expect.stringContaining('infected2.bin') as string }),
     )
     errorSpy.mockRestore()
   })

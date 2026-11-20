@@ -66,20 +66,20 @@ export function boundStreamSize(
  * stream with no bound is refused, and so is one longer than the bound; both release the stream.
  *
  * @param body - The stream body.
- * @param finalKey - The resolved key, for the error details.
+ * @param context - The caller's own identifiers, for the error details (see `callDetails`).
  * @param maxSizeBytes - `validation.maxSizeBytes`, the bound on the buffer.
  * @returns The buffered body.
  * @throws StorageException `STORAGE_VALIDATION_FAILED` when there is no bound or the stream exceeds it.
  */
 export async function bufferStreamForScan(
   body: NodeJS.ReadableStream,
-  finalKey: string,
+  context: Record<string, unknown>,
   maxSizeBytes: number | undefined,
 ): Promise<Buffer> {
   if (maxSizeBytes === undefined) {
     destroyStream(body)
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
-      key: finalKey,
+      ...context,
       reason:
         'Pre-upload scanning of a stream needs validation.maxSizeBytes to bound the buffer; set it or use scanner mode post-upload',
     })
@@ -87,7 +87,7 @@ export async function bufferStreamForScan(
   const buffered = await readStreamUpTo(body, maxSizeBytes)
   if (buffered === undefined) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
-      key: finalKey,
+      ...context,
       maxSizeBytes,
       reason:
         'The stream is longer than validation.maxSizeBytes, so it cannot be scanned before upload',

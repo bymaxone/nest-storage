@@ -196,7 +196,7 @@ describe('StorageService.list', () => {
       error: { details: Record<string, unknown> }
     }).error.details
     expect(details.op).toBe('list')
-    expect(details.bucket).toBe('test-bucket')
+    expect(details).not.toHaveProperty('bucket')
     expect(details.prefix).toBe('x/')
   })
 })

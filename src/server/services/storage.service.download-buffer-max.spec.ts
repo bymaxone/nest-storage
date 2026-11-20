@@ -93,7 +93,6 @@ describe('downloadBuffer maxBytes', () => {
       maxSize: 4096,
       contentLength: 100 * 1024,
       key: 'big.bin',
-      bucket: 'b',
     })
     expect(pulled()).toBe(0)
     expect(body.destroyed).toBe(true)

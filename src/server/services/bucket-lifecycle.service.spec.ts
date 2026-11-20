@@ -339,9 +339,9 @@ describe('BucketLifecycleService.upsert', () => {
           $metadata: { httpStatusCode: 400, requestId: 'req-9' },
         }),
       )
-    const error = await rejection(service.upsert(rule))
+    const error = await rejection(service.upsert(rule, { bucket: 'asked-bucket' }))
     expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_REJECTED', status: 422 })
-    expect(detailsOf(error)).toMatchObject({ bucket: 'test-bucket', op: 'lifecycle.upsert', requestId: 'req-9' })
+    expect(detailsOf(error)).toMatchObject({ bucket: 'asked-bucket', op: 'lifecycle.upsert', requestId: 'req-9' })
   })
 
   it('maps a write to a provider without the API to STORAGE_LIFECYCLE_UNSUPPORTED', async () => {
@@ -633,9 +633,9 @@ describe('BucketLifecycleService.remove', () => {
     send
       .mockResolvedValueOnce({ Rules: [{ ID: 'only', Status: 'Enabled', Filter: { Prefix: 'o/' }, Expiration: { Days: 2 } }] })
       .mockRejectedValueOnce(Object.assign(new Error('nope'), { name: 'MethodNotAllowed', $metadata: { httpStatusCode: 405 } }))
-    const error = await rejection(service.remove('only'))
+    const error = await rejection(service.remove('only', { bucket: 'asked-bucket' }))
     expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_UNSUPPORTED' })
-    expect(detailsOf(error)).toMatchObject({ bucket: 'test-bucket', op: 'lifecycle.remove' })
+    expect(detailsOf(error)).toMatchObject({ bucket: 'asked-bucket', op: 'lifecycle.remove' })
   })
 
   it('honours a per-call bucket', async () => {

@@ -23,6 +23,7 @@ import type {
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { StorageException } from '../errors/storage-exception'
+import { callDetails } from '../utils/call-details'
 import { resolveBucket as resolveBucketInput } from '../utils/call-input'
 import { isNoLifecycleConfiguration, mapLifecycleError } from '../errors/lifecycle-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
@@ -95,7 +96,7 @@ export class BucketLifecycleService {
   async get(options?: LifecycleBucketOptions): Promise<BucketLifecycleRuleView[]> {
     this.assertConfigured()
     const bucket = this.resolveBucket(options?.bucket)
-    return (await this.read(bucket)).rules.map((rule) => this.toView(rule))
+    return (await this.read(bucket, options?.bucket)).rules.map((rule) => this.toView(rule))
   }
 
   /**
@@ -114,7 +115,7 @@ export class BucketLifecycleService {
     this.assertConfigured()
     const owned = this.toRule(rule)
     const bucket = this.resolveBucket(options?.bucket)
-    const snapshot = await this.read(bucket)
+    const snapshot = await this.read(bucket, options?.bucket)
     const index = snapshot.rules.findIndex((existing) => existing.ID === owned.ID)
     this.assertOwnable(snapshot.rules[index])
     const rules = [...snapshot.rules]
@@ -123,7 +124,7 @@ export class BucketLifecycleService {
     } else {
       rules[index] = owned
     }
-    await this.write(bucket, rules, snapshot, 'upsert')
+    await this.write(bucket, options?.bucket, rules, snapshot, 'upsert')
   }
 
   /**
@@ -140,14 +141,14 @@ export class BucketLifecycleService {
     this.assertConfigured()
     this.assertRuleId(id)
     const bucket = this.resolveBucket(options?.bucket)
-    const snapshot = await this.read(bucket)
+    const snapshot = await this.read(bucket, options?.bucket)
     const target = snapshot.rules.find((existing) => existing.ID === id)
     if (target === undefined) {
       return false
     }
     this.assertOwnable(target)
     const rules = snapshot.rules.filter((existing) => existing.ID !== id)
-    await this.write(bucket, rules, snapshot, 'remove')
+    await this.write(bucket, options?.bucket, rules, snapshot, 'remove')
     return true
   }
 
@@ -210,7 +211,7 @@ export class BucketLifecycleService {
   }
 
   /** Reads the configuration; "none yet" is an empty snapshot. */
-  private async read(bucket: string): Promise<LifecycleSnapshot> {
+  private async read(bucket: string, perCall: string | undefined): Promise<LifecycleSnapshot> {
     try {
       const response = await this.s3Provider
         .getClient()
@@ -223,7 +224,7 @@ export class BucketLifecycleService {
       if (isNoLifecycleConfiguration(err)) {
         return { rules: [], transitionDefaultMinimumObjectSize: undefined }
       }
-      throw mapLifecycleError(err, { bucket, op: 'lifecycle.get' })
+      throw mapLifecycleError(err, callDetails('lifecycle.get', { bucket: perCall }))
     }
   }
 
@@ -234,6 +235,7 @@ export class BucketLifecycleService {
    */
   private async write(
     bucket: string,
+    perCall: string | undefined,
     rules: BucketLifecycleRule[],
     snapshot: LifecycleSnapshot,
     op: 'upsert' | 'remove',
@@ -254,7 +256,7 @@ export class BucketLifecycleService {
         }),
       )
     } catch (err) {
-      throw mapLifecycleError(err, { bucket, op: `lifecycle.${op}` })
+      throw mapLifecycleError(err, callDetails(`lifecycle.${op}`, { bucket: perCall }))
     }
   }
 

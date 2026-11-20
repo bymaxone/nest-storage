@@ -37,13 +37,13 @@ describe('assertMimeAllowed', () => {
     }).not.toThrow()
   })
 
-  it('refuses a type outside the whitelist and shows it with the whitelist', () => {
+  it('refuses a type outside the whitelist and shows it, without the configured whitelist', () => {
     const { code, details } = refusal(() => {
       assertMimeAllowed(['image/png'], 'text/html')
     })
 
     expect(code).toBe('STORAGE_MIME_NOT_ALLOWED')
-    expect(details).toStrictEqual({ contentType: 'text/html', whitelist: ['image/png'] })
+    expect(details).toStrictEqual({ contentType: 'text/html' })
   })
 
   it.each(['text/plain\r\nX-Injected: 1', 'text/plain\u0000', 'text/plain; name=café'])(
@@ -54,7 +54,7 @@ describe('assertMimeAllowed', () => {
       })
 
       expect(code).toBe('STORAGE_MIME_NOT_ALLOWED')
-      expect(details).toStrictEqual({ whitelist: ['text/plain'] })
+      expect(details).toStrictEqual({})
     },
   )
 })

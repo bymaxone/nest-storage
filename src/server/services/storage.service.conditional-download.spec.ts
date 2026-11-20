@@ -101,7 +101,7 @@ describe('conditional and ranged download', () => {
     const details = (
       error as { getResponse(): { error: { details: Record<string, unknown> } } }
     ).getResponse().error.details
-    expect(details).toMatchObject({ httpStatus: 304, op: 'download', bucket: 'b', key: 'a.txt' })
+    expect(details).toMatchObject({ httpStatus: 304, op: 'download', key: 'a.txt' })
     // What a client reads must not carry the provider's text.
     expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).not.toContain(
       'UnknownError',

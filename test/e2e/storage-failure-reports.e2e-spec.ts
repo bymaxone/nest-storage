@@ -112,7 +112,7 @@ describe('Storage E2E — failure reports', () => {
     impl: { scan: () => Promise.resolve(infected) },
   }
 
-  it('reports the cause and the stored key when the rejected object could not be deleted', async () => {
+  it('reports the cause to the caller and the stored key to the log when the rejected object could not be deleted', async () => {
     const logged = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     const { storage } = await storageFor(noDelete, {
       keyPrefix: 'tenant',
@@ -125,17 +125,17 @@ describe('Storage E2E — failure reports', () => {
 
     expect(error).toMatchObject({ code: 'STORAGE_SCAN_INFECTED' })
     const { details } = bodyOf(error)
-    expect(details).toMatchObject({
-      cleanup: 'failed',
-      key: 'bad.bin',
-      storedKey: 'tenant/bad.bin',
-    })
+    expect(details).toMatchObject({ cleanup: 'failed', key: 'bad.bin' })
+    expect(details).not.toHaveProperty('storedKey')
+    expect(JSON.stringify(bodyOf(error))).not.toContain('tenant')
     // The body names the code of the delete failure; what the provider said is logged, not returned.
     expect(details.cleanupError).toBe('STORAGE_PROVIDER_ERROR')
     expect(JSON.stringify(bodyOf(error))).not.toMatch(/access denied/i)
     expect(logged).toHaveBeenCalledWith(
-      expect.stringMatching(/STORAGE_SCAN_CLEANUP_FAILED.*tenant\/bad\.bin/),
-      expect.anything(),
+      expect.objectContaining({
+        event: 'STORAGE_SCAN_CLEANUP_FAILED',
+        storedKey: expect.stringContaining('tenant/bad.bin') as string,
+      }),
     )
     // The provider's own state: the object the scanner rejected is still there.
     expect(await stored('tenant/bad.bin')).toBe(true)

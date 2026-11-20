@@ -201,7 +201,7 @@ describe('SignedUrlService', () => {
       const details = detailsOf(err)
       expect(details.op).toBe('getDownloadUrl')
       expect(details.key).toBe(KEY)
-      expect(details.bucket).toBe(BUCKET)
+      expect(details).not.toHaveProperty('bucket')
     })
 
     it('re-throws a StorageException from getSignedUrl without double-wrapping', async () => {
@@ -342,7 +342,7 @@ describe('SignedUrlService', () => {
       const details = detailsOf(err)
       expect(details.op).toBe('getUploadUrl')
       expect(details.key).toBe(KEY)
-      expect(details.bucket).toBe(BUCKET)
+      expect(details).not.toHaveProperty('bucket')
     })
 
     it('re-throws a StorageException from getSignedUrl without double-wrapping', async () => {
@@ -370,7 +370,7 @@ describe('SignedUrlService', () => {
 
       expect(err).toMatchObject({ code: 'STORAGE_MIME_NOT_ALLOWED' })
       expect((err as StorageException).getResponse()).toMatchObject({
-        error: { details: { contentType: 'text/html', whitelist: ['image/png', 'application/*'] } },
+        error: { details: { contentType: 'text/html' } },
       })
       expect(mockedGetSignedUrl).not.toHaveBeenCalled()
     })
@@ -574,7 +574,7 @@ describe('SignedUrlService', () => {
       const details = detailsOf(err)
       expect(details.reason).toBe('CreateMultipartUpload returned no UploadId')
       expect(details.key).toBe(KEY)
-      expect(details.bucket).toBe(BUCKET)
+      expect(details).not.toHaveProperty('bucket')
       expect('op' in details).toBe(false)
     })
 
@@ -586,12 +586,13 @@ describe('SignedUrlService', () => {
       const service = await buildService(buildOptions(), s3Provider, buildMockKeyResolver())
 
       const err = await service
-        .getMultipartUploadUrls({ key: KEY, contentType: 'image/png', parts: 2 })
+        .getMultipartUploadUrls({ key: KEY, contentType: 'image/png', parts: 2, bucket: 'asked-bucket' })
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR)
       // A genuine SDK error IS mapped, carrying the multipart operation context.
       expect(detailsOf(err).op).toBe('getMultipartUploadUrls')
+      expect(detailsOf(err)).toMatchObject({ key: KEY, bucket: 'asked-bucket' })
     })
   })
 })

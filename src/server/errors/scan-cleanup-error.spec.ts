@@ -13,7 +13,7 @@ function detailsOf(error: unknown): Record<string, unknown> | undefined {
   return body.error.details
 }
 
-const KEYS = { key: 'k', storedKey: 'tenant/k' }
+const KEYS = { key: 'k' }
 
 describe('withCleanupFailure', () => {
   it('keeps the verdict code and status and adds what could not be cleaned up', () => {
@@ -21,7 +21,7 @@ describe('withCleanupFailure', () => {
 
     const error = withCleanupFailure(
       verdict,
-      { key: 'a/b.bin', storedKey: 'tenant/a/b.bin' },
+      { key: 'a/b.bin' },
       new Error('delete refused'),
     ) as StorageException
 
@@ -30,7 +30,6 @@ describe('withCleanupFailure', () => {
     expect(detailsOf(error)).toEqual({
       threat: 'EICAR',
       key: 'a/b.bin',
-      storedKey: 'tenant/a/b.bin',
       cleanup: 'failed',
       // The body carries a fixed word for the delete failure, never its message.
       cleanupError: 'UNKNOWN',

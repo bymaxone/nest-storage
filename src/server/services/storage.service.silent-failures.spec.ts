@@ -209,6 +209,23 @@ describe('silent failures', () => {
       expect(objects.size).toBe(0)
     })
 
+    it('keeps the key the caller passed and not the prefix or the bucket when the scan outlasts its deadline', async () => {
+      const never = { scan: () => new Promise<never>(() => undefined) }
+      const storage = await storageWith({
+        keyPrefix: 'tenant-x',
+        scanner: { mode: 'post-upload', impl: never, timeoutMs: 20 },
+      })
+
+      const error = await rejection(
+        storage.upload({ key: 'slow.bin', body: Buffer.from('x'), contentType: 'x/y' }),
+      )
+
+      expect(error).toMatchObject({ code: 'STORAGE_TIMEOUT' })
+      expect(detailsOf(error)).toMatchObject({ phase: 'scan', key: 'slow.bin', timeoutMs: 20 })
+      expect(detailsOf(error)).not.toHaveProperty('bucket')
+      expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).not.toContain('tenant-x')
+    })
+
     it('removes the rejected object from under the key prefix', async () => {
       const storage = await storageWith({ keyPrefix: 'tenant-x', scanner: postUploadScan })
 
@@ -235,21 +252,23 @@ describe('silent failures', () => {
       expect(detailsOf(error)).toMatchObject({
         cleanup: 'failed',
         key: 'bad.bin',
-        storedKey: 'bad.bin',
         // The body names the code, and the provider's text is logged.
         cleanupError: 'STORAGE_PROVIDER_ERROR',
       })
+      expect(detailsOf(error)).not.toHaveProperty('storedKey')
       expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).not.toContain(
         'UnknownError',
       )
       expect(await storage.exists('bad.bin')).toBe(true)
       expect(logged).toHaveBeenCalledWith(
-        expect.stringContaining('STORAGE_SCAN_CLEANUP_FAILED'),
-        expect.stringContaining('STORAGE_PROVIDER_ERROR'),
+        expect.objectContaining({
+          event: 'STORAGE_SCAN_CLEANUP_FAILED',
+          cleanupFailure: expect.stringContaining('STORAGE_PROVIDER_ERROR') as string,
+        }),
       )
     })
 
-    it('names the stored key, with the prefix, in the details and the log when the delete failed', async () => {
+    it('names the stored key, with the prefix, in a field of the log and not in the details when the delete failed', async () => {
       mode = { deleteFails: true }
       const logged = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
       const storage = await storageWith({ keyPrefix: 'tenant-x', scanner: postUploadScan })
@@ -258,16 +277,15 @@ describe('silent failures', () => {
         storage.upload({ key: 'bad.bin', body: Buffer.from('x'), contentType: 'x/y' }),
       )
 
-      // An operator audits by listing the bucket, so the key as stored is the one to search for.
-      expect(detailsOf(error)).toMatchObject({
-        cleanup: 'failed',
-        key: 'bad.bin',
-        storedKey: 'tenant-x/bad.bin',
-      })
-      expect(logged).toHaveBeenCalledWith(
-        expect.stringContaining('tenant-x/bad.bin'),
-        expect.anything(),
-      )
+      // The client is told the key it passed; an operator audits by listing the bucket, so the log holds the
+      // key as stored, in a field of its own and never in the message.
+      expect(detailsOf(error)).toMatchObject({ cleanup: 'failed', key: 'bad.bin' })
+      expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).not.toContain('tenant-x')
+      expect(logged).toHaveBeenCalledTimes(1)
+      const entry = logged.mock.calls[0]?.[0] as { event: string; message: string; storedKey: string }
+      expect(entry.event).toBe('STORAGE_SCAN_CLEANUP_FAILED')
+      expect(entry.storedKey).toContain('tenant-x/bad.bin')
+      expect(entry.message).toBe('The rejected object is still stored')
     })
   })
 

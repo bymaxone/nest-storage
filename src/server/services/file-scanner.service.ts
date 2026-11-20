@@ -121,19 +121,21 @@ export class FileScannerService {
    * says, and a scan that outlasts `scanner.timeoutMs` throws `STORAGE_TIMEOUT`.
    *
    * @param input - The scan input.
+   * @param caller - What the deadline error repeats of the call (see `callerFields`): the caller's own key and
+   *   bucket, never the prefixed key or the configured bucket that `input` holds for the scanner.
    * @returns The scan result when `status` is `'clean'` or `'unknown'` (non-rejecting).
    * @throws Error when called without a configured scanner.
    * @throws StorageException `STORAGE_SCAN_INFECTED` on an infected result.
    * @throws StorageException `STORAGE_SCAN_INCONCLUSIVE` on an unknown result with `rejectOnUnknown`, or a result outside the contract.
    * @throws StorageException `STORAGE_TIMEOUT` when the scan outlasts `scanner.timeoutMs`.
    */
-  async scan(input: ScanInput): Promise<FileScanResult> {
+  async scan(input: ScanInput, caller: Record<string, unknown> = {}): Promise<FileScanResult> {
     if (!this.scanner) {
       throw new Error(
         'FileScannerService.scan() called without a configured scanner — guard with isEnabled() first.',
       )
     }
-    const result = await this.scanLogged(this.scanner, input)
+    const result = await this.scanLogged(this.scanner, input, caller)
     const status = result?.status
     const engine = scannerLabel(result?.engine)
     const threat = scannerLabel(result?.threat)
@@ -167,9 +169,13 @@ export class FileScannerService {
    * Runs the scan and logs a scanner that throws: the caller is answered 500 for that, and without the
    * line there would be no trace of why. A typed failure of ours (the deadline) says it itself.
    */
-  private async scanLogged(scanner: IFileScanner, input: ScanInput): Promise<ScannerOutcome> {
+  private async scanLogged(
+    scanner: IFileScanner,
+    input: ScanInput,
+    caller: Record<string, unknown>,
+  ): Promise<ScannerOutcome> {
     try {
-      return await this.scanWithinDeadline(scanner, input)
+      return await this.scanWithinDeadline(scanner, input, caller)
     } catch (err) {
       if (!(err instanceof StorageException)) {
         this.logger.warn(
@@ -185,7 +191,11 @@ export class FileScannerService {
    * the upload for good. The scanner is handed a signal that aborts then; one that ignores it keeps
    * running.
    */
-  private async scanWithinDeadline(scanner: IFileScanner, input: ScanInput): Promise<ScannerOutcome> {
+  private async scanWithinDeadline(
+    scanner: IFileScanner,
+    input: ScanInput,
+    caller: Record<string, unknown>,
+  ): Promise<ScannerOutcome> {
     const timeoutMs = this.options.scanner?.timeoutMs ?? DEFAULT_SCANNER_TIMEOUT_MS
     const controller = new AbortController()
     let timer: NodeJS.Timeout | undefined
@@ -196,8 +206,7 @@ export class FileScannerService {
         // ahead of anything queued after the abort, and would win the race over the deadline.
         reject(
           new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, {
-            key: input.key,
-            bucket: input.bucket,
+            ...caller,
             phase: 'scan',
             timeoutMs,
           }),

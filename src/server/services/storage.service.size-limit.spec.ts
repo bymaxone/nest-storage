@@ -322,7 +322,7 @@ describe('upload size bound', () => {
         .catch((err: unknown) => err)
 
       expect(error).toMatchObject({ code: 'STORAGE_SIZE_EXCEEDED', status: 413 })
-      expect(detailsOf(error)).toMatchObject({ declaredSize: 500, key: 'k', bucket: 'b' })
+      expect(detailsOf(error)).toMatchObject({ declaredSize: 500, key: 'k' })
       expect(putBodies).toEqual([])
       expect(stream.destroyed).toBe(true)
     })
@@ -385,7 +385,7 @@ describe('upload size bound', () => {
         .catch((err: unknown) => err)
 
       expect(error).toMatchObject({ code: 'STORAGE_SIZE_EXCEEDED', status: 413 })
-      expect(detailsOf(error)).toMatchObject({ declaredSize: 500, key: 'k', bucket: 'b' })
+      expect(detailsOf(error)).toMatchObject({ declaredSize: 500, key: 'k' })
       expect(calls).toEqual([])
     })
 
