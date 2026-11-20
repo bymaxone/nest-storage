@@ -35,8 +35,8 @@ note on each entry is the compatibility contract — read it, not the number.
   `validation.customValidators` row.
 
 - **An error no longer repeats what the host configured.** `details` carried the module's `bucket` (when the call
-  named none), the `keyPrefix` (inside the `key` of an upload, head, download, delete, copy, signed-URL and list
-  failure) and the whole `validation.mimeWhitelist` (in `STORAGE_MIME_NOT_ALLOWED`). The `key` is now the one the
+  named none), the `keyPrefix` (inside the `key` of an upload, head, download, delete, copy and signed-URL
+  failure, and the `prefix` of a list failure) and the whole `validation.mimeWhitelist` (in `STORAGE_MIME_NOT_ALLOWED`). The `key` is now the one the
   caller passed, the `bucket` appears only when the caller passed one, and the whitelist is not repeated; a `key`,
   `bucket`, `prefix`, `sourceKey` or `destKey` longer than 1024 characters is left out.
 
