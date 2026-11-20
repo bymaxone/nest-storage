@@ -285,7 +285,7 @@ describe('silent failures', () => {
       const entry = logged.mock.calls[0]?.[0] as { event: string; message: string; storedKey: string }
       expect(entry.event).toBe('STORAGE_SCAN_CLEANUP_FAILED')
       expect(entry.storedKey).toContain('tenant-x/bad.bin')
-      expect(entry.message).not.toContain('tenant-x')
+      expect(entry.message).toBe('The rejected object is still stored')
     })
   })
 
