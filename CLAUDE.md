@@ -17,7 +17,7 @@ This file gives AI coding assistants a concise orientation to the repository. `A
 | **Node** | ≥ 24 |
 | **Test runner** | Jest 30 (ts-jest) |
 | **Bundler** | tsup |
-| **Subpath exports** | `.` (server) · `./shared` |
+| **Subpath exports** | `.` (server) · `./observability` · `./shared` |
 
 ---
 
@@ -68,6 +68,7 @@ AWS SDK v3 is SigV4-only. There is no `signatureVersion` option. The retry knob 
 | Subpath | Entry | Contents |
 |---|---|---|
 | `.` | `dist/server/index.{mjs,cjs,d.ts}` | Module, services, provider recipes, DI tokens, interfaces, errors |
+| `./observability` | `dist/observability/index.{mjs,cjs,d.ts}` | Optional: `StorageMetrics` (Prometheus), `StorageHealthIndicator` (bucket readiness); needs `prom-client`, reads the tally the module exports |
 | `./shared` | `dist/shared/index.{mjs,cjs,d.ts}` | Framework-free types, `STORAGE_ERROR_CODES`, `StorageErrorCode` |
 
 ---
@@ -79,7 +80,7 @@ pnpm typecheck           # TypeScript strict check (server + shared)
 pnpm lint                # ESLint (0 warnings expected)
 pnpm test:cov            # Unit tests with 100% line/branch coverage gate
 pnpm build               # tsup — produces dist/ with ESM + CJS + .d.ts for both subpaths
-pnpm size                # Brotli bundle budget check (server < 30 KB, shared < 3.5 KB)
+pnpm size                # Brotli bundle budget check (server < 30 KB, observability < 2.5 KB, shared < 3.5 KB)
 pnpm test:e2e            # E2E against real MinIO (Testcontainers — needs Docker)
 pnpm mutation            # Stryker mutation gate (break 95 — run manually pre-release)
 pnpm prepublishOnly      # Full release gate: clean + typecheck + lint + test:cov:all + build

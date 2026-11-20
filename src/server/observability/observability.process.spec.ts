@@ -32,9 +32,28 @@ function closureOf(entry: string, seen = new Set<string>()): Set<string> {
   return seen
 }
 
+/** Writes the transpiled closure of the observer into `dir`, with `absorb` possibly altered. */
+function writeModules(dir: string, alter: (absorbSource: string) => string): void {
+  for (const file of closureOf(join(SRC, 'server/observability/storage-observer.ts'))) {
+    const out = join(dir, relative(SRC, file)).replace(/\.ts$/, '.js')
+    mkdirSync(dirname(out), { recursive: true })
+    const source = file.endsWith('utils/absorb.ts')
+      ? alter(readFileSync(file, 'utf8'))
+      : readFileSync(file, 'utf8')
+    const { outputText } = ts.transpileModule(source, {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+        experimentalDecorators: true,
+      },
+    })
+    writeFileSync(out, outputText)
+  }
+}
+
 /**
- * What the child counted, running `driver` against the transpiled modules of `entries` (with `absorb` possibly
- * altered). `@opentelemetry/api` is a stub whose spans return rejecting promises.
+ * What the child counted, running `driver` against the transpiled modules (with `absorb` possibly altered).
+ * `@opentelemetry/api` is a stub whose spans return rejecting promises.
  */
 function unhandledRejections(
   driver: string,
@@ -42,21 +61,7 @@ function unhandledRejections(
 ): number {
   const dir = mkdtempSync(join(tmpdir(), 'observability-'))
   try {
-    for (const file of closureOf(join(SRC, 'server/observability/storage-observer.ts'))) {
-      const out = join(dir, relative(SRC, file)).replace(/\.ts$/, '.js')
-      mkdirSync(dirname(out), { recursive: true })
-      const source = file.endsWith('utils/absorb.ts')
-        ? alter(readFileSync(file, 'utf8'))
-        : readFileSync(file, 'utf8')
-      const { outputText } = ts.transpileModule(source, {
-        compilerOptions: {
-          module: ts.ModuleKind.CommonJS,
-          target: ts.ScriptTarget.ES2022,
-          experimentalDecorators: true,
-        },
-      })
-      writeFileSync(out, outputText)
-    }
+    writeModules(dir, alter)
     mkdirSync(join(dir, 'node_modules/@opentelemetry/api'), { recursive: true })
     writeFileSync(
       join(dir, 'node_modules/@opentelemetry/api/index.js'),

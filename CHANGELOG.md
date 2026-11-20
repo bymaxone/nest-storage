@@ -13,6 +13,21 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Added
+
+- **An optional `./observability` subpath and a span seam.** `StorageMetrics` publishes
+  `bymax_storage_operations_total`, `bymax_storage_operation_duration_seconds`, `bymax_storage_bytes_uploaded_total`
+  and `bymax_storage_scans_total` with labels from closed sets, and `StorageHealthIndicator` reports the bucket as
+  `storage` from one `HeadBucket`. The main entry now exports `StorageMetricsTally` and the closed sets
+  (`STORAGE_OPERATIONS`, `STORAGE_OUTCOMES`, `SCAN_VERDICTS`), counts every public operation, and starts the
+  `storage.upload`, `storage.download_url` and `storage.scan` spans when `@opentelemetry/api` is installed. The new
+  peers `@bymax-one/nest-core >=1.6.15`, `prom-client ^15` and `@opentelemetry/api ^1.9` are optional and the main
+  entry imports none of them.
+
+  **Apply to a derived backend:** nothing changes unless you use it. To publish the metrics, add `StorageMetrics` and
+  `StorageHealthIndicator` to the providers of a module and install `prom-client`; the README "Observability"
+  section has the table of metrics, labels and spans.
+
 ### Changed
 
 - **The library's log lines are object events.** Every operational line is now an object with an `event` code
@@ -29,6 +44,8 @@ note on each entry is the compatibility contract — read it, not the number.
   warnings, the TTL clamp) now matches the `event` code and reads the fields; the library text is kept in `message`.
   A sink that stringifies the message sees an object: use a logger that writes object messages as fields. Anything
   that relied on the key, the endpoint or the region in these lines reads them from the call or the configuration.
+  A quote or a backslash in a logged value is no longer escaped by the library, since the logger escapes it when it
+  serialises the field; control, bidirectional and format characters still show as escapes.
 
 ### Fixed
 
