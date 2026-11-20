@@ -586,12 +586,13 @@ describe('SignedUrlService', () => {
       const service = await buildService(buildOptions(), s3Provider, buildMockKeyResolver())
 
       const err = await service
-        .getMultipartUploadUrls({ key: KEY, contentType: 'image/png', parts: 2 })
+        .getMultipartUploadUrls({ key: KEY, contentType: 'image/png', parts: 2, bucket: 'asked-bucket' })
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(StorageException)
       expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR)
       // A genuine SDK error IS mapped, carrying the multipart operation context.
       expect(detailsOf(err).op).toBe('getMultipartUploadUrls')
+      expect(detailsOf(err)).toMatchObject({ key: KEY, bucket: 'asked-bucket' })
     })
   })
 })

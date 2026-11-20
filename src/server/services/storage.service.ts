@@ -63,7 +63,7 @@ import {
   type UploadBody,
 } from '../utils/stream-utils'
 import { assertIntegerInput } from '../utils/numeric-input'
-import { callDetails } from '../utils/call-details'
+import { callDetails, callerFields } from '../utils/call-details'
 import { assertScannedSize, boundStreamSize, bufferStreamForScan, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { logValue } from '../utils/log-value'
@@ -471,7 +471,7 @@ export class StorageService {
       metadata,
       options.maxBytes,
       options.abortSignal,
-      callDetails('downloadBuffer', { key: options.key, bucket: options.bucket }),
+      callerFields({ key: options.key, bucket: options.bucket }),
     )
     return { buffer, metadata }
   }
