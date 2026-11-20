@@ -14,15 +14,35 @@ import { describeError } from './describe-error'
  */
 const LEFT_LITERAL_BY_JSON = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu
 
+/** The short escapes JSON uses for the C0 controls that have one. */
+const SHORT_ESCAPES: Readonly<Record<string, string>> = {
+  '\b': '\\b',
+  '\f': '\\f',
+  '\n': '\\n',
+  '\r': '\\r',
+  '\t': '\\t',
+}
+
+/** One control, format or separator character as an escape: JSON's short form where it has one, else `\uXXXX`. */
+function escapeChar(char: string): string {
+  const short = SHORT_ESCAPES[char]
+  if (short !== undefined) return short
+  const codePoint = Number(char.codePointAt(0))
+  const hex = codePoint.toString(16)
+  // Stryker disable next-line EqualityOperator: no character the pattern matches has the code point U+FFFF (a noncharacter, not a control, format or separator), so `>=` and `>` pick the same form (equivalent).
+  return codePoint > 0xffff ? `\\u{${hex}}` : `\\u${hex.padStart(4, '0')}`
+}
+
 /**
- * Text for a field of a log event: its control characters show as escapes, and no quote is added, since the
- * logger serialises the field itself.
+ * Text for a field of a log event: its control, format and separator characters show as escapes, and
+ * nothing else changes. A quote and a backslash stay as they are: the logger serialises the field and
+ * escapes them itself, so escaping them here would show them twice.
  *
  * @param text - A string that is not the library's own.
- * @returns The text with the characters of {@link logValue} escaped.
+ * @returns The text with its control, format and separator characters escaped.
  */
 export function escapeForLog(text: string): string {
-  return logValue(text).slice(1, -1)
+  return text.replace(LEFT_LITERAL_BY_JSON, escapeChar)
 }
 
 /**
@@ -38,13 +58,5 @@ export function escapeForLog(text: string): string {
 export function logValue(value: unknown): string {
   // Stryker disable next-line ConditionalExpression: `describeError` returns a string as it is (`String(value)`), so sending strings through it too gives the same text (equivalent).
   const text = typeof value === 'string' ? value : describeError(value)
-  return JSON.stringify(text).replace(
-    LEFT_LITERAL_BY_JSON,
-    (char) => {
-      const codePoint = Number(char.codePointAt(0))
-      const hex = codePoint.toString(16)
-      // Stryker disable next-line EqualityOperator: no character the pattern matches has the code point U+FFFF (a noncharacter, not a control, format or separator), so `>=` and `>` pick the same form (equivalent).
-      return codePoint > 0xffff ? `\\u{${hex}}` : `\\u${hex.padStart(4, '0')}`
-    },
-  )
+  return JSON.stringify(text).replace(LEFT_LITERAL_BY_JSON, escapeChar)
 }

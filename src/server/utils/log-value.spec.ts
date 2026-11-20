@@ -3,7 +3,7 @@
  * escapes, so text a caller controls cannot end the line or start another.
  * @layer server/utils
  */
-import { logValue } from './log-value'
+import { escapeForLog, logValue } from './log-value'
 
 describe('logValue', () => {
   it('quotes a plain string', () => {
@@ -87,5 +87,39 @@ describe('logValue', () => {
     // An error or undefined passed by mistake still yields one safe token.
     expect(logValue(undefined)).toBe('"undefined"')
     expect(logValue(new Error('x\ny'))).toBe('"x\\ny"')
+  })
+})
+
+describe('escapeForLog', () => {
+  it.each([
+    ['a"b', 'a"b'],
+    ['a\\b', 'a\\b'],
+    ['say "hi" \\ bye', 'say "hi" \\ bye'],
+  ])('leaves the quote and the backslash of %j as they are', (raw, expected) => {
+    // The logger escapes them when it serialises the field; escaping them here would show them twice.
+    expect(escapeForLog(raw)).toBe(expected)
+  })
+
+  it.each([
+    ['a\nb', 'a\\nb'],
+    ['a\rb', 'a\\rb'],
+    ['a\tb', 'a\\tb'],
+    ['a\bb', 'a\\bb'],
+    ['a\fb', 'a\\fb'],
+    ['a\u001b[31mb', 'a\\u001b[31mb'],
+    ['a\u0000b', 'a\\u0000b'],
+    ['a\u007fb', 'a\\u007fb'],
+    ['a\u009bb', 'a\\u009bb'],
+    ['a\u2028b', 'a\\u2028b'],
+    ['a\u202eb', 'a\\u202eb'],
+    ['a\u200bb', 'a\\u200bb'],
+    ['a\u{e0041}b', 'a\\u{e0041}b'],
+  ])('escapes the control, format or separator character of %j', (raw, expected) => {
+    // A newline or a right-to-left override in a key must read as text, not act on the log.
+    expect(escapeForLog(raw)).toBe(expected)
+  })
+
+  it('returns text with nothing to escape unchanged', () => {
+    expect(escapeForLog('tenant/a-b_c.txt é 日本')).toBe('tenant/a-b_c.txt é 日本')
   })
 })

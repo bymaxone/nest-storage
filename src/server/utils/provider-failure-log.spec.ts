@@ -53,7 +53,7 @@ describe('projectProviderFailure', () => {
     ['x-amz-credential=AKIA/2026/s3&y', 'x-amz-credential=[redacted]&y'],
     ['X-Amz-Security-Token=tok123', 'X-Amz-Security-Token=[redacted]'],
     ['AWSAccessKeyId=AKIAEXAMPLE ok', 'AWSAccessKeyId=[redacted] ok'],
-    ['Signature=zzz"', 'Signature=[redacted]\\"'],
+    ['Signature=zzz"', 'Signature=[redacted]"'],
   ])('masks a secret in the message (%s)', (message, masked) => {
     expect(projectProviderFailure({ message }).message).toBe(masked)
   })

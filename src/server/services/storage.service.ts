@@ -317,7 +317,7 @@ export class StorageService {
           event: STORAGE_LOG_EVENTS.scanCleanupFailed,
           message: 'The rejected object is still stored',
           storedKey: escapeForLog(finalKey),
-          cleanupFailure: escapeForLog(describeCleanupFailure(deleteErr)),
+          cleanupFailure: describeCleanupFailure(deleteErr),
         })
         throw withCleanupFailure(scanErr, { key }, deleteErr)
       }
