@@ -174,15 +174,15 @@ describe('StorageService.checkBucket', () => {
     expect(error.getStatus()).toBe(status)
   })
 
-  it('carries the bucket in details and never the credentials', async () => {
+  it('carries the bucket the caller asked for in details, and never the credentials', async () => {
     const { service, send } = makeService()
     send.mockRejectedValue({ name: 'NotFound', $metadata: { httpStatusCode: 404 } })
 
-    const error = await rejection(service.checkBucket())
+    const error = await rejection(service.checkBucket({ bucket: 'asked-bucket' }))
 
     const details = (error.getResponse() as { error: { details: Record<string, unknown> } }).error
       .details
-    expect(details).toMatchObject({ bucket: 'test-bucket', op: 'checkBucket' })
+    expect(details).toMatchObject({ bucket: 'asked-bucket', op: 'checkBucket' })
     expect(JSON.stringify(details)).not.toContain('secretAccessKey')
   })
 

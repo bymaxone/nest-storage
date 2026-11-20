@@ -131,7 +131,7 @@ describe('download body idle timeout', () => {
     const outcome = await drain(stream)
 
     expect(outcome).toMatchObject({ code: 'STORAGE_TIMEOUT', status: 503 })
-    expect(detailsOf(outcome)).toMatchObject({ phase: 'body-idle', idleMs: IDLE_MS, key: 'k', bucket: 'b' })
+    expect(detailsOf(outcome)).toMatchObject({ phase: 'body-idle', idleMs: IDLE_MS, key: 'k' })
     await until(() => sockets.size === 0, 'the connection of the stalled body closed')
   })
 

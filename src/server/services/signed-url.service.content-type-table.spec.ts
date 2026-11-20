@@ -132,8 +132,8 @@ describe('getUploadUrl content-type table', () => {
       // A type made of header characters is shown so the caller can see what was refused; any other is not.
       const printable = /^[\t \x21-\x7E]*$/.test(contentType)
       expect(details?.contentType).toBe(printable ? contentType : undefined)
-      expect(details?.whitelist).toStrictEqual(['text/plain', 'image/*'])
-      expect(JSON.stringify(details)).toContain(printable ? contentType.slice(0, 4) : 'whitelist')
+      expect(details).not.toHaveProperty('whitelist')
+      expect(JSON.stringify(details)).not.toContain('image/*')
     },
   )
 

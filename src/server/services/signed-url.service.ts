@@ -25,6 +25,7 @@ import { resolveBucket as resolveBucketInput } from '../utils/call-input'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { buildACL } from '../utils/header-utils'
+import { callDetails, callerFields } from '../utils/call-details'
 import { clampTtl } from '../utils/ttl-clamp'
 import { assertMimeAllowed } from '../utils/mime-allowed'
 import { assertHeaderValues, assertMetadata } from '../utils/header-value'
@@ -79,7 +80,7 @@ export class SignedUrlService {
       return { url, expiresAt: new Date(Date.now() + ttl * 1000), method: 'GET', requiredHeaders: {} }
     } catch (err) {
       if (err instanceof StorageException) throw err
-      throw mapAwsError(err, { key: finalKey, bucket, op: 'getDownloadUrl' })
+      throw mapAwsError(err, callDetails('getDownloadUrl', { key: options.key, bucket: options.bucket }))
     }
   }
 
@@ -145,7 +146,7 @@ export class SignedUrlService {
       }
     } catch (err) {
       if (err instanceof StorageException) throw err
-      throw mapAwsError(err, { key: finalKey, bucket, op: 'getUploadUrl' })
+      throw mapAwsError(err, callDetails('getUploadUrl', { key: options.key, bucket: options.bucket }))
     }
   }
 
@@ -215,14 +216,16 @@ export class SignedUrlService {
       if (!uploadId) {
         throw new StorageException(STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR, undefined, {
           reason: 'CreateMultipartUpload returned no UploadId',
-          key: finalKey,
-          bucket,
+          ...callerFields({ key: options.key, bucket: options.bucket }),
         })
       }
       return await this.presignMultipartParts({ finalKey, bucket, uploadId, parts: options.parts, ttl })
     } catch (err) {
       if (err instanceof StorageException) throw err
-      throw mapAwsError(err, { key: finalKey, bucket, op: 'getMultipartUploadUrls' })
+      throw mapAwsError(
+        err,
+        callDetails('getMultipartUploadUrls', { key: options.key, bucket: options.bucket }),
+      )
     }
   }
 

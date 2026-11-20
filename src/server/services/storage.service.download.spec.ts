@@ -132,7 +132,7 @@ describe('StorageService — download', () => {
     expect((err as StorageException).code).toBe('STORAGE_OBJECT_NOT_FOUND')
     const details = detailsOf(err)
     expect(details.key).toBe('missing')
-    expect(details.bucket).toBe('test-bucket')
+    expect(details).not.toHaveProperty('bucket')
   })
 
   it('maps a provider failure through mapAwsError with the download op context', async () => {
@@ -144,7 +144,7 @@ describe('StorageService — download', () => {
     const details = detailsOf(err)
     expect(details.op).toBe('download')
     expect(details.key).toBe('a.txt')
-    expect(details.bucket).toBe('test-bucket')
+    expect(details).not.toHaveProperty('bucket')
   })
 
   it('materializes the object into a Buffer via downloadBuffer', async () => {

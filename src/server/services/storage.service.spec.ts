@@ -302,7 +302,7 @@ describe('StorageService — single-shot upload', () => {
     const details = detailsOf(err)
     expect(details.op).toBe('upload-single')
     expect(details.key).toBe('a.txt')
-    expect(details.bucket).toBe('test-bucket')
+    expect(details).not.toHaveProperty('bucket')
   })
 
   it('passes size and metadata to the validation pipeline only when the upload declares them', async () => {
@@ -407,7 +407,7 @@ describe('StorageService — head / exists', () => {
     const details = detailsOf(err)
     expect(details.op).toBe('head')
     expect(details.key).toBe('missing')
-    expect(details.bucket).toBe('test-bucket')
+    expect(details).not.toHaveProperty('bucket')
   })
 
   it('exists returns true for a present object', async () => {
@@ -477,7 +477,7 @@ describe('StorageService — delete', () => {
     const details = detailsOf(err)
     expect(details.op).toBe('delete')
     expect(details.key).toBe('a.txt')
-    expect(details.bucket).toBe('test-bucket')
+    expect(details).not.toHaveProperty('bucket')
   })
 })
 

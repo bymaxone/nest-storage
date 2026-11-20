@@ -201,7 +201,7 @@ describe('SignedUrlService', () => {
       const details = detailsOf(err)
       expect(details.op).toBe('getDownloadUrl')
       expect(details.key).toBe(KEY)
-      expect(details.bucket).toBe(BUCKET)
+      expect(details).not.toHaveProperty('bucket')
     })
 
     it('re-throws a StorageException from getSignedUrl without double-wrapping', async () => {
@@ -342,7 +342,7 @@ describe('SignedUrlService', () => {
       const details = detailsOf(err)
       expect(details.op).toBe('getUploadUrl')
       expect(details.key).toBe(KEY)
-      expect(details.bucket).toBe(BUCKET)
+      expect(details).not.toHaveProperty('bucket')
     })
 
     it('re-throws a StorageException from getSignedUrl without double-wrapping', async () => {
@@ -370,7 +370,7 @@ describe('SignedUrlService', () => {
 
       expect(err).toMatchObject({ code: 'STORAGE_MIME_NOT_ALLOWED' })
       expect((err as StorageException).getResponse()).toMatchObject({
-        error: { details: { contentType: 'text/html', whitelist: ['image/png', 'application/*'] } },
+        error: { details: { contentType: 'text/html' } },
       })
       expect(mockedGetSignedUrl).not.toHaveBeenCalled()
     })
@@ -574,7 +574,7 @@ describe('SignedUrlService', () => {
       const details = detailsOf(err)
       expect(details.reason).toBe('CreateMultipartUpload returned no UploadId')
       expect(details.key).toBe(KEY)
-      expect(details.bucket).toBe(BUCKET)
+      expect(details).not.toHaveProperty('bucket')
       expect('op' in details).toBe(false)
     })
 

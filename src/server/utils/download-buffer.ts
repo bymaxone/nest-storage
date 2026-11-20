@@ -31,11 +31,11 @@ async function readBody(
   stream: NodeJS.ReadableStream,
   metadata: ObjectMetadata,
   maxBytes: number | undefined,
+  context: Record<string, unknown>,
 ): Promise<Buffer> {
   if (maxBytes === undefined) {
     return readStream(stream)
   }
-  const context = { key: metadata.key, bucket: metadata.bucket }
   if (metadata.size > maxBytes) {
     destroyStream(stream)
     throw sizeLimitException(maxBytes, 'max', { ...context, contentLength: metadata.size })
@@ -55,6 +55,7 @@ async function readBody(
  * @param metadata - The object's metadata, whose size is the `Content-Length` when there was one.
  * @param maxBytes - The most bytes to hold; `undefined` buffers the whole body.
  * @param signal - The caller's `abortSignal`, to tell a cancelled read from a failed one.
+ * @param caller - What the error repeats of the call (see `callDetails`): the caller's own key and bucket only.
  * @returns The body.
  * @throws StorageException `STORAGE_SIZE_EXCEEDED` when the object, by its header or by its bytes,
  *   is larger than `maxBytes`; `STORAGE_REQUEST_ABORTED` when the signal aborted; otherwise a failure of
@@ -64,15 +65,13 @@ export async function readDownloadBody(
   stream: NodeJS.ReadableStream,
   metadata: ObjectMetadata,
   maxBytes: number | undefined,
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  caller: Record<string, unknown>,
 ): Promise<Buffer> {
+  const context = { ...caller, op: 'downloadBuffer' }
   try {
-    return await readBody(stream, metadata, maxBytes)
+    return await readBody(stream, metadata, maxBytes, context)
   } catch (err) {
-    throw mapBodyReadFailure(err, signal, {
-      key: metadata.key,
-      bucket: metadata.bucket,
-      op: 'downloadBuffer',
-    })
+    throw mapBodyReadFailure(err, signal, context)
   }
 }
