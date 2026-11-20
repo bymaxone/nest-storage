@@ -15,7 +15,8 @@ import {
 import { S3Client, type S3ClientConfig } from '@aws-sdk/client-s3'
 import { BYMAX_STORAGE_OPTIONS } from '../bymax-storage.constants'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
-import { describeEndpoint } from '../utils/describe-endpoint'
+import { emit } from '../utils/log-event'
+import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 
 /**
  * When credentials are missing the module registers but never instantiates a
@@ -31,9 +32,11 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
 
   onModuleInit(): void {
     if (!this.options.hasCredentials) {
-      this.logger.warn(
-        'Storage credentials are missing — module is registered but operations will throw STORAGE_NOT_CONFIGURED.',
-      )
+      emit(this.logger, 'warn', {
+        event: STORAGE_LOG_EVENTS.credentialsMissing,
+        message:
+          'Storage credentials are missing — module is registered but operations will throw STORAGE_NOT_CONFIGURED.',
+      })
       return
     }
     this.resolveClient()
@@ -115,9 +118,11 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
       responseChecksumValidation: this.options.responseChecksumValidation,
     }
 
-    this.logger.log(
-      `S3Client initialized: endpoint=${describeEndpoint(this.options.endpoint)} region=${this.options.region}`,
-    )
+    // No endpoint and no region: both are the host's configuration and are not repeated.
+    emit(this.logger, 'log', {
+      event: STORAGE_LOG_EVENTS.clientReady,
+      message: 'S3Client initialized',
+    })
     return new S3Client(config)
   }
 }

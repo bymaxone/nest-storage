@@ -434,7 +434,15 @@ describe('StorageService — head / exists', () => {
     send.mockRejectedValue(SERVER_ERROR)
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     await expect(service.exists('a.txt')).resolves.toBe(false)
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('treating a non-404'))
+    // The failed call is logged as it is mapped, then exists() logs that it treats the error as "false".
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'STORAGE_EXISTS_FAILED',
+        message: expect.stringContaining('treating a non-404') as string,
+        err: expect.any(Error) as Error,
+      }),
+    )
     warnSpy.mockRestore()
   })
 
@@ -464,7 +472,14 @@ describe('StorageService — delete', () => {
     send.mockRejectedValue(NOT_FOUND)
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     await expect(service.delete('missing')).resolves.toBeUndefined()
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('key not found (idempotent no-op)'))
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'STORAGE_DELETE_NOT_FOUND',
+        message: expect.stringContaining('key not found (idempotent no-op)') as string,
+      }),
+    )
+    expect(JSON.stringify(warnSpy.mock.calls[0]?.[0])).not.toContain('missing')
     warnSpy.mockRestore()
   })
 

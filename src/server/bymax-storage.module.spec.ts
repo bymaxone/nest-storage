@@ -178,9 +178,13 @@ describe('BymaxStorageModule', () => {
       const resolved = await resolvedFor(604_801)
       expect(resolved.signedUrls.maxTtlSeconds).toBe(604_800)
       expect(warn).toHaveBeenCalledTimes(1)
-      const message = String(warn.mock.calls[0]?.[0])
-      expect(message).toContain('604801')
-      expect(message).toContain('604800')
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'STORAGE_TTL_CLAMPED',
+          configuredSeconds: 604_801,
+          appliedSeconds: 604_800,
+        }),
+      )
     })
 
     it('should warn once per init, not per resolved read', async () => {

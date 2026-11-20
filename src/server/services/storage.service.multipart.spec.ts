@@ -169,7 +169,7 @@ describe('StorageService — multipart upload', () => {
 
   it('maps a failed done() to STORAGE_MULTIPART_ABORTED with details', async () => {
     // A multipart failure surfaces the abort code and non-sensitive details (key and a fixed
-    // reason), never a blank details object; the underlying message is in the log, not the body.
+    // reason), never a blank details object; the underlying message is in the log entry, not the body.
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const { service } = makeService()
     installUploader(() => Promise.reject(new Error('part failed')))
@@ -186,7 +186,16 @@ describe('StorageService — multipart upload', () => {
     expect(details.reason).toBe('rejected')
     expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('part failed')
     expect((err as StorageException).cause).toBeUndefined()
-    // What the provider said is in the log.
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('part failed'))
+    // What the provider said is in the log entry, under `err` and nowhere else; no key, no bucket.
+    expect(warn).toHaveBeenCalledTimes(1)
+    const entry = warn.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(entry).toMatchObject({
+      event: 'STORAGE_PROVIDER_CALL_FAILED',
+      message: 'Multipart upload failed',
+      operation: 'upload-multipart',
+      reason: 'rejected',
+    })
+    expect((entry.err as Error).message).toBe('part failed')
+    expect(JSON.stringify({ ...entry, err: undefined })).not.toMatch(/part failed|big\.bin/)
   })
 })

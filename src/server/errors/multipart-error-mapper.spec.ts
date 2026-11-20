@@ -124,11 +124,15 @@ describe('mapMultipartError', () => {
       })
 
       expect(warn).toHaveBeenCalledTimes(1)
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringMatching(/^Multipart upload failed: op="upload-multipart" /),
-      )
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('source stream broke'))
-      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('Provider call failed'))
+      const entry = warn.mock.calls[0]?.[0] as Record<string, unknown>
+      expect(entry).toMatchObject({
+        event: 'STORAGE_PROVIDER_CALL_FAILED',
+        message: 'Multipart upload failed',
+        operation: 'upload-multipart',
+      })
+      expect((entry.err as Error).message).toBe('source stream broke')
+      expect(JSON.stringify({ ...entry, err: undefined })).not.toMatch(/source stream broke/)
+      expect(entry.message).not.toBe('Provider call failed')
     })
 
     it('logs nothing for a missing bucket, whose code says it all', () => {

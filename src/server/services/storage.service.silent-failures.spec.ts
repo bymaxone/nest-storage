@@ -319,7 +319,13 @@ describe('silent failures', () => {
       expect(detailsOf(error)).toMatchObject({ abort: 'failed' })
       // The abort failure's text is logged, not returned.
       expect(detailsOf(error)).not.toHaveProperty('abortError')
-      expect(warned).toHaveBeenCalledWith(expect.stringContaining('Multipart abort failed'))
+      expect(warned).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'STORAGE_MULTIPART_ABORT_FAILED',
+          message: expect.stringContaining('Multipart abort failed') as string,
+          err: expect.any(Error) as Error,
+        }),
+      )
       // The message must not claim an abort the provider never carried out.
       expect(messageOf(error)).toBe('Multipart upload failed and could not be aborted')
       // The original failure is the part upload, not the abort that came after it.
@@ -328,8 +334,14 @@ describe('silent failures', () => {
         'UnknownError',
       )
       expect((error as { cause?: unknown }).cause).toBeUndefined()
-      // The part's failure was logged when it was mapped, with the provider's text.
-      expect(warned).toHaveBeenCalledWith(expect.stringContaining('UnknownError'))
+      // The part's failure was logged when it was mapped, with the provider's error under `err`.
+      const failure = warned.mock.calls
+        .map((call) => call[0] as { event: string; message: string; err: Error })
+        .find((entry) => entry.event === 'STORAGE_PROVIDER_CALL_FAILED')
+      expect(failure).toEqual(
+        expect.objectContaining({ message: 'Multipart upload failed', operation: 'upload-multipart' }),
+      )
+      expect(failure?.err.message).toBe('UnknownError')
       expect(
         calls.filter((c) => c.startsWith('PUT') && c.endsWith('?uploadId')).length,
       ).toBeGreaterThan(0)

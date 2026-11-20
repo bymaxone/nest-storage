@@ -171,10 +171,15 @@ describe('StorageService.deleteMany', () => {
       { key: 'b.txt', error: 'unreachable' },
     ])
     expect(JSON.stringify(result)).not.toContain('10.1.2.3')
-    // What the driver said is in the log, once for the request and not once per key.
+    // What the driver said is in the log under `err`, once for the request and not once per key.
     expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('10.1.2.3'))
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('op="deleteMany"'))
+    const entry = warn.mock.calls[0]?.[0] as { event: string; operation: string; message: string; err: Error }
+    expect(entry).toEqual(
+      expect.objectContaining({ event: 'STORAGE_PROVIDER_CALL_FAILED', operation: 'deleteMany' }),
+    )
+    expect(entry.err.message).toContain('10.1.2.3')
+    const { err: _err, ...withoutErr } = entry
+    expect(JSON.stringify(withoutErr)).not.toContain('10.1.2.3')
     warn.mockRestore()
   })
 

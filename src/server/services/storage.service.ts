@@ -50,7 +50,9 @@ import {
 } from '../utils/multipart-abort'
 import { deleteObjectsChunk } from '../utils/delete-objects'
 import { mapBucketCheckError } from '../errors/bucket-check-error-mapper'
-import { describeError } from '../utils/describe-error'
+import { emit } from '../utils/log-event'
+import { STORAGE_LOG_EVENTS } from '../utils/log-events'
+import { failureError } from '../utils/provider-failure-log'
 import { toListResult } from '../utils/list-result'
 import { assertHeaderValues } from '../utils/header-value'
 import { guardIdleBody } from '../utils/idle-timeout'
@@ -67,7 +69,7 @@ import { callDetails, callerFields } from '../utils/call-details'
 import { toObjectMetadata } from '../utils/object-metadata'
 import { assertScannedSize, boundStreamSize, bufferStreamForScan, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
-import { logValue } from '../utils/log-value'
+import { escapeForLog } from '../utils/log-value'
 import {
   abortOnBodyFailure,
   abortable,
@@ -311,11 +313,11 @@ export class StorageService {
       } catch (deleteErr) {
         // The key as the provider holds it is for the operator who removes the object: it goes to the log, in a
         // field of its own, and never to the caller.
-        this.logger.error({
-          event: 'STORAGE_SCAN_CLEANUP_FAILED',
+        emit(this.logger, 'error', {
+          event: STORAGE_LOG_EVENTS.scanCleanupFailed,
           message: 'The rejected object is still stored',
-          storedKey: logValue(finalKey),
-          cleanupFailure: logValue(describeCleanupFailure(deleteErr)),
+          storedKey: escapeForLog(finalKey),
+          cleanupFailure: escapeForLog(describeCleanupFailure(deleteErr)),
         })
         throw withCleanupFailure(scanErr, { key }, deleteErr)
       }
@@ -375,9 +377,11 @@ export class StorageService {
       ) {
         throw err
       }
-      this.logger.warn(
-        `exists() — treating a non-404 error as "false": ${logValue(describeError(err))}`,
-      )
+      emit(this.logger, 'warn', {
+        event: STORAGE_LOG_EVENTS.existsFailed,
+        message: 'exists() — treating a non-404 error as "false"',
+        err: failureError(err),
+      })
       return false
     }
   }
@@ -499,7 +503,10 @@ export class StorageService {
       if (mapped.code !== STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND) {
         throw mapped
       }
-      this.logger.warn(`delete() — key not found (idempotent no-op): ${logValue(finalKey)}`)
+      emit(this.logger, 'warn', {
+        event: STORAGE_LOG_EVENTS.deleteNotFound,
+        message: 'delete() — key not found (idempotent no-op)',
+      })
     }
     // The object is gone, so an upload cached as having created it no longer holds.
     this.idempotencyCache.invalidate(bucket, this.keyResolver.stripPrefix(finalKey))
@@ -660,7 +667,7 @@ export class StorageService {
       uploadId = await within(lookup, CLEANUP_DEADLINE_MS)
       // The caller does not wait longer, but an id that arrives later is still aborted.
       if (uploadId === undefined) {
-        closeWhenCreated(client, bucket, finalKey, lookup, abortFailureLogger(this.logger, finalKey))
+        closeWhenCreated(client, bucket, finalKey, lookup, abortFailureLogger(this.logger))
       }
     }
     const abort = await closeMultipartUpload(
@@ -668,7 +675,7 @@ export class StorageService {
       bucket,
       finalKey,
       uploadId,
-      abortFailureLogger(this.logger, finalKey),
+      abortFailureLogger(this.logger),
     )
     const context = { ...caller, op: 'upload-multipart', ...abort }
     throw abortedBy ? requestAborted(abortedBy, context) : mapMultipartError(err, context)

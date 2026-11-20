@@ -37,6 +37,8 @@ import { SignedUrlService } from './services/signed-url.service'
 import { ValidationService } from './services/validation.service'
 import { FileScannerService } from './services/file-scanner.service'
 import { IdempotencyCache } from './utils/idempotency-cache'
+import { emit } from './utils/log-event'
+import { STORAGE_LOG_EVENTS } from './utils/log-events'
 
 /** Validates raw options and materializes the fully-resolved options shape. */
 function resolveAsyncOptions(raw: BymaxStorageModuleOptions): ResolvedBymaxStorageOptions {
@@ -47,10 +49,12 @@ function resolveAsyncOptions(raw: BymaxStorageModuleOptions): ResolvedBymaxStora
   const configured = options.signedUrls?.maxTtlSeconds
   if (configured !== undefined && configured > resolved.signedUrls.maxTtlSeconds) {
     // Once per module init: this runs when the options are resolved, never per request.
-    new Logger(BymaxStorageModule.name).warn(
-      `signedUrls.maxTtlSeconds=${String(configured)} exceeds the SigV4 presigned-URL limit; ` +
-        `using ${String(resolved.signedUrls.maxTtlSeconds)} seconds (7 days) instead.`,
-    )
+    emit(new Logger(BymaxStorageModule.name), 'warn', {
+      event: STORAGE_LOG_EVENTS.ttlClamped,
+      message: 'signedUrls.maxTtlSeconds exceeds the SigV4 presigned-URL limit; the limit is used instead',
+      configuredSeconds: configured,
+      appliedSeconds: resolved.signedUrls.maxTtlSeconds,
+    })
   }
   return resolved
 }

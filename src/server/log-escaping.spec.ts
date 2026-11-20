@@ -1,7 +1,8 @@
 /**
- * @fileoverview Every log line that repeats text a caller or a provider controls writes it as one
- * escaped token: a key or a message holding a newline or an escape sequence cannot forge a line.
- * Each case drives one log site of the library with such a value and reads what the logger got.
+ * @fileoverview Every log entry that repeats text a caller or a provider controls writes it with its
+ * control characters escaped: a key or a message holding a newline or an escape sequence cannot forge a
+ * line. A key is not repeated at all by the provider-failure and scan events. Each case drives one log
+ * site of the library with such a value and reads the entry the logger got.
  * @layer server
  */
 import { Logger } from '@nestjs/common'
@@ -17,18 +18,29 @@ import type { IFileScanner } from './interfaces/file-scanner.interface'
 
 /** A key a caller can legitimately send to S3 that holds a newline, a carriage return and an escape. */
 const FORGED_KEY = 'a.txt\n2026-01-01 ERROR forged line\r\u001b[31m'
-const ESCAPED_KEY = '"a.txt\\n2026-01-01 ERROR forged line\\r\\u001b[31m"'
+const ESCAPED_KEY = 'a.txt\\n2026-01-01 ERROR forged line\\r\\u001b[31m'
 
 /** Whether a log line holds a character that could end it or start an escape sequence. */
 function holdsControl(line: string): boolean {
   return line.includes('\n') || line.includes('\r') || line.includes(String.fromCharCode(27))
 }
 
-/** The one line the logger received, its arguments joined; fails when the logger was called any other number of times. */
-function onlyLine(spy: jest.SpyInstance): string {
-  const calls: string[] = spy.mock.calls.map((call: unknown[]) => call.map(String).join(' '))
-  expect(calls).toHaveLength(1)
-  return calls.join('')
+type Entry = Record<string, unknown> & { event: string; message: string; err?: Error }
+
+/** The one entry the logger received, as its only argument; fails when the logger was called any other way. */
+function onlyEntry(spy: jest.SpyInstance): Entry {
+  expect(spy).toHaveBeenCalledTimes(1)
+  const call = spy.mock.calls[0] as unknown[]
+  expect(call).toHaveLength(1)
+  return call[0] as Entry
+}
+
+/** Every text the library or the caller put in the entry, apart from the `err` object, as one string. */
+function textOf(entry: Entry): string {
+  return Object.entries(entry)
+    .filter(([name]) => name !== 'err')
+    .map(([, value]) => String(value))
+    .join(' ')
 }
 
 describe('log lines carry caller text as one escaped token', () => {
@@ -48,28 +60,36 @@ describe('log lines carry caller text as one escaped token', () => {
     return new FileScannerService(resolved, scanner)
   }
 
-  it('the infected-file warning shows the key and the threat as escaped tokens', async () => {
+  it('the infected-file warning shows the engine and the threat as escaped text and leaves the key out', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const service = scannerService({ status: 'infected', engine: 'e\nx', threat: 'T\u001b[0m' })
 
     await service.scan({ mode: 'post-upload', key: FORGED_KEY, bucket: 'b', contentType: 'text/plain' }).catch(() => undefined)
 
-    const line = onlyLine(warn)
-    expect(line).toContain(`key=${ESCAPED_KEY}`)
-    expect(line).toContain('threat="T\\u001b[0m"')
-    expect(line).toContain('engine="e\\nx"')
-    expect(holdsControl(line)).toBe(false)
+    const entry = onlyEntry(warn)
+    expect(entry).toEqual(
+      expect.objectContaining({
+        event: 'STORAGE_SCAN_INFECTED',
+        threat: 'T\\u001b[0m',
+        engine: 'e\\nx',
+      }),
+    )
+    expect(textOf(entry)).not.toContain('a.txt')
+    expect(entry).not.toHaveProperty('key')
+    expect(holdsControl(textOf(entry))).toBe(false)
   })
 
-  it('the inconclusive-result warning shows the key as an escaped token', async () => {
+  it('the inconclusive-result warning leaves the key out of its entry', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const service = scannerService({ status: 'unknown', engine: 'clamav' })
 
     await service.scan({ mode: 'post-upload', key: FORGED_KEY, bucket: 'b', contentType: 'text/plain' })
 
-    const line = onlyLine(warn)
-    expect(line).toContain(`key=${ESCAPED_KEY}`)
-    expect(holdsControl(line)).toBe(false)
+    const entry = onlyEntry(warn)
+    expect(entry).toEqual(expect.objectContaining({ event: 'STORAGE_SCAN_INCONCLUSIVE_ACCEPTED', engine: 'clamav' }))
+    expect(textOf(entry)).not.toContain('a.txt')
+    expect(entry).not.toHaveProperty('key')
+    expect(holdsControl(textOf(entry))).toBe(false)
   })
 
   function storage(): { service: StorageService; send: jest.SpyInstance } {
@@ -98,19 +118,21 @@ describe('log lines carry caller text as one escaped token', () => {
     return { service, send }
   }
 
-  it('the idempotent-delete warning shows the key as an escaped token', async () => {
+  it('the idempotent-delete warning leaves the key out of its entry', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const { service, send } = storage()
     send.mockRejectedValue(Object.assign(new Error('gone'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } }))
 
     await service.delete(FORGED_KEY)
 
-    const line = onlyLine(warn)
-    expect(line).toContain(ESCAPED_KEY)
-    expect(holdsControl(line)).toBe(false)
+    const entry = onlyEntry(warn)
+    expect(entry).toEqual(expect.objectContaining({ event: 'STORAGE_DELETE_NOT_FOUND' }))
+    expect(textOf(entry)).not.toContain('a.txt')
+    expect(entry).not.toHaveProperty('key')
+    expect(holdsControl(textOf(entry))).toBe(false)
   })
 
-  it('the exists warning shows the message of an unexpected failure as an escaped token', async () => {
+  it('the exists warning carries the message of an unexpected failure, escaped, under err', async () => {
     // A StorageException carries a fixed message; any other failure keeps its own text, which may hold control characters.
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const { service } = storage()
@@ -118,9 +140,12 @@ describe('log lines carry caller text as one escaped token', () => {
 
     await service.exists('a.txt')
 
-    const line = onlyLine(warn)
-    expect(line).toContain('"boom\\n2026 ERROR forged\\u001b[31m"')
-    expect(holdsControl(line)).toBe(false)
+    const entry = onlyEntry(warn)
+    expect(entry.event).toBe('STORAGE_EXISTS_FAILED')
+    expect(entry.err).toBeInstanceOf(Error)
+    expect(entry.err?.message).toBe('boom\\n2026 ERROR forged\\u001b[31m')
+    expect(holdsControl(entry.err?.message ?? '')).toBe(false)
+    expect(holdsControl(textOf(entry))).toBe(false)
   })
 
   it('the scan-cleanup error entry carries the stored key as one escaped token', async () => {

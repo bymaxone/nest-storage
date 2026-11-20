@@ -3,7 +3,7 @@
  * @layer server/utils
  */
 import { AbortMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
-import type { Logger } from '@nestjs/common'
+import type { LogSink } from './log-event'
 import { abortFailureLogger, closeMultipartUpload, closeWhenCreated } from './multipart-abort'
 
 function clientThatAnswers(send: jest.Mock): S3Client {
@@ -103,23 +103,46 @@ describe('closeMultipartUpload', () => {
 })
 
 describe('abortFailureLogger', () => {
-  it('warns with the key and what the abort threw, for the logs', () => {
-    const logger = { warn: jest.fn() } as unknown as Logger
-
-    abortFailureLogger(logger, 'tenant/a.bin')(new Error('provider down'))
-
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Multipart abort failed'))
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('tenant/a.bin'))
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('provider down'))
+  const sink = (): { [K in keyof LogSink]: jest.Mock<undefined, [unknown]> } => ({
+    debug: jest.fn<undefined, [unknown]>(),
+    log: jest.fn<undefined, [unknown]>(),
+    warn: jest.fn<undefined, [unknown]>(),
+    error: jest.fn<undefined, [unknown]>(),
   })
 
-  it('escapes control characters in the key and in the failure, so a log line cannot be forged', () => {
-    const warn = jest.fn<undefined, [string]>()
-    const logger = { warn } as unknown as Logger
+  it('warns with the event, library text and what the abort threw under err, and no key', () => {
+    const logger = sink()
 
-    abortFailureLogger(logger, 'a\nFORGED')(new Error('x\ny'))
+    abortFailureLogger(logger)(Object.assign(new Error('SENTINEL-PROVIDER-TEXT'), { name: 'ServiceUnavailable' }))
 
-    expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn.mock.calls[0]?.[0]).not.toContain('\n')
+    expect(logger.warn).toHaveBeenCalledTimes(1)
+    const entry = logger.warn.mock.calls[0]?.[0] as Record<string, unknown> & { err: Error }
+    expect(entry).toMatchObject({
+      event: 'STORAGE_MULTIPART_ABORT_FAILED',
+      message: 'Multipart abort failed, the upload stays open on the provider',
+    })
+    expect(entry.err.message).toBe('SENTINEL-PROVIDER-TEXT')
+    expect(entry.err.name).toBe('ServiceUnavailable')
+    expect(JSON.stringify({ ...entry, err: undefined })).not.toContain('SENTINEL-PROVIDER-TEXT')
+    expect(entry).not.toHaveProperty('key')
+  })
+
+  it('escapes control characters in what the abort threw, so a log line cannot be forged', () => {
+    const logger = sink()
+
+    abortFailureLogger(logger)(new Error('x\ny'))
+
+    expect((logger.warn.mock.calls[0]?.[0] as { err: Error }).err.message).toBe('x\\ny')
+  })
+
+  it('is not broken by a logger that throws', () => {
+    const logger = sink()
+    logger.warn.mockImplementation(() => {
+      throw new Error('host logger')
+    })
+
+    expect(() => {
+      abortFailureLogger(logger)(new Error('x'))
+    }).not.toThrow()
   })
 })

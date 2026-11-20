@@ -62,6 +62,16 @@ function makeMockScanner(result: FileScanResult): IFileScanner {
   return { scan: jest.fn().mockResolvedValue(result) }
 }
 
+/** What a log spy was called with, as the one entry object the library writes. */
+function entryAt(spy: { mock: { calls: unknown[][] } }, index = 0): Record<string, unknown> {
+  return spy.mock.calls[index]?.[0] as Record<string, unknown>
+}
+
+/** The entry as text, without the `err` object: the library's own text and fields, which the host's logger writes as they are. */
+function textWithoutErr(entry: Record<string, unknown>): string {
+  return JSON.stringify(Object.fromEntries(Object.entries(entry).filter(([field]) => field !== 'err')))
+}
+
 describe('FileScannerService', () => {
   describe('isEnabled', () => {
     it('returns false when scanner is null', async () => {
@@ -161,7 +171,12 @@ describe('FileScannerService', () => {
         expect(bodyOf(err)).not.toContain('SECRETEXAMPLE')
         expect((err as StorageException).getResponse()).toMatchObject({ error: { details: { engine: 'clamav' } } })
         expect(warnSpy).toHaveBeenCalledTimes(1)
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('SECRETEXAMPLE'))
+        expect(entryAt(warnSpy)).toEqual(
+          expect.objectContaining({
+            event: expect.stringMatching(/^STORAGE_SCAN_(INFECTED|INCONCLUSIVE_REJECTED)$/) as unknown,
+            details: expect.stringContaining('SECRETEXAMPLE') as unknown,
+          }),
+        )
         warnSpy.mockRestore()
       })
 
@@ -174,19 +189,21 @@ describe('FileScannerService', () => {
         expect((err as StorageException).getResponse()).toMatchObject({ error: { details: { threat: 'Trojan.X' } } })
       })
 
-      it('writes it in a log line as one escaped token, cut at 300 characters', async () => {
+      it('writes it in a log entry as one escaped token, cut at 300 characters', async () => {
         const impl = makeMockScanner({ status: 'infected', engine: 'clamav', details: { note: `a\nb${'x'.repeat(400)}` } })
         const service = await buildService(buildOptions({ impl }), impl)
         const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
         await service.scan(SCAN_INPUT).catch(() => null)
 
-        const line = String(warnSpy.mock.calls[0]?.[0])
-        expect(line).not.toContain('\n')
-        expect(line).toContain('details="{\\"note\\":\\"a\\\\nb')
+        const entry = entryAt(warnSpy)
+        expect(entry.event).toBe('STORAGE_SCAN_INFECTED')
+        const details = entry.details as string
+        expect(details).not.toContain('\n')
+        expect(details.startsWith('{\\"note\\":\\"a\\\\nb')).toBe(true)
         // The first 300 characters of the JSON text are kept: 13 of them are the key, the quote and `a\\nb`.
-        expect(line).toContain('x'.repeat(287))
-        expect(line).not.toContain('x'.repeat(288))
+        expect(details).toContain('x'.repeat(287))
+        expect(details).not.toContain('x'.repeat(288))
         warnSpy.mockRestore()
       })
 
@@ -200,7 +217,9 @@ describe('FileScannerService', () => {
         const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
 
         expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED)
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[unserialisable]'))
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ event: 'STORAGE_SCAN_INFECTED', details: '[unserialisable]' }),
+        )
         warnSpy.mockRestore()
       })
 
@@ -213,18 +232,26 @@ describe('FileScannerService', () => {
         const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
 
         expect((err as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED)
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[unserialisable]'))
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ event: 'STORAGE_SCAN_INFECTED', details: '[unserialisable]' }),
+        )
         warnSpy.mockRestore()
       })
 
-      it('adds nothing to the log line when the scanner sent none', async () => {
+      it('adds no details field to the log entry when the scanner sent none', async () => {
         const impl = makeMockScanner({ status: 'infected', engine: 'clamav', threat: 'Trojan.X' })
         const service = await buildService(buildOptions({ impl }), impl)
         const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
         await service.scan(SCAN_INPUT).catch(() => null)
 
-        expect(warnSpy.mock.calls[0]?.[0]).toBe('Infected file detected: key="test/file.png" engine="clamav" threat="Trojan.X"')
+        expect(entryAt(warnSpy)).toEqual({
+          event: 'STORAGE_SCAN_INFECTED',
+          message: 'Infected file detected',
+          engine: 'clamav',
+          threat: 'Trojan.X',
+        })
+        expect(textWithoutErr(entryAt(warnSpy))).not.toContain('test/file.png')
         warnSpy.mockRestore()
       })
     })
@@ -232,7 +259,7 @@ describe('FileScannerService', () => {
     describe('the engine and threat names', () => {
       const LONG = 'x'.repeat(500)
 
-      it('are cut to 200 characters in the body and in the log', async () => {
+      it('are cut to 200 characters in the body and in the log entry', async () => {
         const impl = makeMockScanner({ status: 'infected', engine: LONG, threat: LONG })
         const service = await buildService(buildOptions({ impl }), impl)
         const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
@@ -242,9 +269,9 @@ describe('FileScannerService', () => {
         const { engine, threat } = ((err as StorageException).getResponse() as { error: { details: Record<string, string> } }).error.details
         expect(engine).toBe('x'.repeat(200))
         expect(threat).toBe('x'.repeat(200))
-        const line = String(warnSpy.mock.calls[0]?.[0])
-        expect(line).toContain(`"${'x'.repeat(200)}"`)
-        expect(line).not.toContain('x'.repeat(201))
+        expect(entryAt(warnSpy)).toEqual(
+          expect.objectContaining({ event: 'STORAGE_SCAN_INFECTED', engine: 'x'.repeat(200), threat: 'x'.repeat(200) }),
+        )
         warnSpy.mockRestore()
       })
 
@@ -280,9 +307,13 @@ describe('FileScannerService', () => {
 
         expect(err).toBe(failure)
         expect(warnSpy).toHaveBeenCalledTimes(1)
-        const line = String(warnSpy.mock.calls[0]?.[0])
-        expect(line).toMatch(/^Scanner failed: key="test\/file\.png" error="engine down z+"$/)
-        expect(line).not.toContain('z'.repeat(300))
+        const entry = entryAt(warnSpy)
+        expect(entry).toEqual(expect.objectContaining({ event: 'STORAGE_SCAN_FAILED', message: 'Scanner failed' }))
+        const message = (entry.err as Error).message
+        expect(message).toMatch(/^engine down z+$/)
+        expect(message).not.toContain('z'.repeat(300))
+        expect(entry.err).not.toBe(failure)
+        expect(textWithoutErr(entry)).not.toContain('test/file.png')
         warnSpy.mockRestore()
       })
 
@@ -293,7 +324,10 @@ describe('FileScannerService', () => {
 
         await service.scan(SCAN_INPUT).catch(() => null)
 
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('non-printable rejection value'))
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+        const entry = entryAt(warnSpy)
+        expect(entry.event).toBe('STORAGE_SCAN_FAILED')
+        expect((entry.err as Error).message).toContain('non-printable rejection value')
         warnSpy.mockRestore()
       })
 
@@ -306,7 +340,8 @@ describe('FileScannerService', () => {
 
         // The deadline is logged as a timeout (see 'a scan that outlasts its deadline'), never as `Scanner failed`.
         expect(warnSpy).toHaveBeenCalledTimes(1)
-        expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('Scanner failed')
+        expect(entryAt(warnSpy)).toEqual(expect.objectContaining({ event: 'STORAGE_SCAN_TIMEOUT' }))
+        expect(textWithoutErr(entryAt(warnSpy))).not.toContain('Scanner failed')
         warnSpy.mockRestore()
       })
     })
@@ -340,19 +375,26 @@ describe('FileScannerService', () => {
             error: { details: { reason: 'unrecognised scanner status' } },
           })
           expect(warnSpy).toHaveBeenCalledTimes(1)
-          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Inconclusive scan result rejected'))
+          expect(warnSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              event: 'STORAGE_SCAN_INCONCLUSIVE_REJECTED',
+              message: 'Inconclusive scan result rejected',
+            }),
+          )
           warnSpy.mockRestore()
         }
       })
 
-      it('names the unrecognised status, escaped, in its log line and gives the reason in the body', async () => {
+      it('names the unrecognised status, escaped, in its log entry and gives the reason in the body', async () => {
         const impl: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'CLEAN\n', engine: 'clamav' }) }
         const service = await buildService(buildOptions({ impl }), impl)
         const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
         const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
 
-        expect(String(warnSpy.mock.calls[0]?.[0])).toContain(' status="CLEAN\\n"')
+        expect(entryAt(warnSpy)).toEqual(
+          expect.objectContaining({ event: 'STORAGE_SCAN_INCONCLUSIVE_REJECTED', status: 'CLEAN\\n' }),
+        )
         expect(JSON.stringify((err as StorageException).getResponse())).toContain('unrecognised scanner status')
         warnSpy.mockRestore()
       })
@@ -365,22 +407,28 @@ describe('FileScannerService', () => {
 
         await service.scan(SCAN_INPUT).catch(() => null)
 
-        expect(String(warnSpy.mock.calls[0]?.[0])).toBe('Inconclusive scan result rejected: key="test/file.png" engine="clamav" status=<object>')
+        expect(entryAt(warnSpy)).toEqual({
+          event: 'STORAGE_SCAN_INCONCLUSIVE_REJECTED',
+          message: 'Inconclusive scan result rejected',
+          engine: 'clamav',
+          status: '<object>',
+        })
+        expect(textWithoutErr(entryAt(warnSpy))).not.toContain('HOSTILE')
         expect(hostile.toString).not.toHaveBeenCalled()
         expect(hostile.valueOf).not.toHaveBeenCalled()
         warnSpy.mockRestore()
       })
 
-      it('cuts a long unrecognised status to 40 characters in the log', async () => {
+      it('cuts a long unrecognised status to 40 characters in the log entry', async () => {
         const impl: IFileScanner = { scan: jest.fn().mockResolvedValue({ status: 'x'.repeat(100), engine: 'clamav' }) }
         const service = await buildService(buildOptions({ impl }), impl)
         const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
         await service.scan(SCAN_INPUT).catch(() => null)
 
-        const line = String(warnSpy.mock.calls[0]?.[0])
-        expect(line).toContain(` status="${'x'.repeat(40)}"`)
-        expect(line).not.toContain('x'.repeat(41))
+        expect(entryAt(warnSpy)).toEqual(
+          expect.objectContaining({ event: 'STORAGE_SCAN_INCONCLUSIVE_REJECTED', status: 'x'.repeat(40) }),
+        )
         warnSpy.mockRestore()
       })
 
@@ -391,7 +439,13 @@ describe('FileScannerService', () => {
 
         const err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
 
-        expect(String(warnSpy.mock.calls[0]?.[0])).toBe('Inconclusive scan result rejected: key="test/file.png" engine="clamav"')
+        const entry = entryAt(warnSpy)
+        expect(entry).toEqual({
+          event: 'STORAGE_SCAN_INCONCLUSIVE_REJECTED',
+          message: 'Inconclusive scan result rejected',
+          engine: 'clamav',
+        })
+        expect(entry).not.toHaveProperty('status')
         expect(JSON.stringify((err as StorageException).getResponse())).not.toContain('reason')
         warnSpy.mockRestore()
       })
@@ -543,14 +597,16 @@ describe('FileScannerService', () => {
     })
 
     it('uses "unknown" as the threat label when the result carries no threat name', async () => {
-      // threat may be absent; the warn log must substitute the fallback label "unknown"
+      // threat may be absent; the warn entry must substitute the fallback label "unknown"
       const impl = makeMockScanner({ status: 'infected', engine: 'clamav' })
       const service = await buildService(buildOptions({ impl }), impl)
       const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
       await service.scan(SCAN_INPUT).catch(() => null)
 
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('unknown'))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'STORAGE_SCAN_INFECTED', engine: 'clamav', threat: 'unknown' }),
+      )
       warnSpy.mockRestore()
     })
 
@@ -562,7 +618,9 @@ describe('FileScannerService', () => {
 
       await service.scan(SCAN_INPUT).catch(() => null)
 
-      expect(warnSpy).toHaveBeenCalled()
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'STORAGE_SCAN_INFECTED', engine: 'clamav', threat: 'Virus.Y' }),
+      )
       warnSpy.mockRestore()
     })
 
@@ -588,7 +646,12 @@ describe('FileScannerService', () => {
       const result = await service.scan(SCAN_INPUT)
 
       expect(result.status).toBe('unknown')
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Inconclusive scan result accepted'))
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(entryAt(warnSpy)).toEqual({
+        event: 'STORAGE_SCAN_INCONCLUSIVE_ACCEPTED',
+        message: 'Inconclusive scan result accepted',
+        engine: 'clamav',
+      })
       warnSpy.mockRestore()
     })
 
@@ -618,18 +681,18 @@ describe('FileScannerService', () => {
       })
 
       it.each([
-        ['an unrecognised status, at 40', { status: `${'a'.repeat(39)}${EMOJI}b`, engine: 'clamav' }, 'a'.repeat(39)],
-        ['the details of a scanner, at 300', { status: 'infected', engine: 'clamav', details: { n: `${'a'.repeat(293)}${EMOJI}b` } }, 'a'.repeat(293)],
-      ])('in the log: %s', async (_what, result, kept) => {
+        ['an unrecognised status, at 40', { status: `${'a'.repeat(39)}${EMOJI}b`, engine: 'clamav' }, 'status', 'a'.repeat(39)],
+        ['the details of a scanner, at 300', { status: 'infected', engine: 'clamav', details: { n: `${'a'.repeat(293)}${EMOJI}b` } }, 'details', 'a'.repeat(293)],
+      ])('in the log entry: %s', async (_what, result, field, kept) => {
         const impl: IFileScanner = { scan: jest.fn().mockResolvedValue(result) }
         const service = await buildService(buildOptions({ impl }), impl)
         const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
         await service.scan(SCAN_INPUT).catch(() => null)
 
-        const line = String(warnSpy.mock.calls[0]?.[0])
-        expect(line).toContain(kept)
-        expect(line).not.toMatch(LONE_SURROGATE)
+        const entry = entryAt(warnSpy)
+        expect(entry[field]).toEqual(expect.stringContaining(kept))
+        expect(textWithoutErr(entry)).not.toMatch(LONE_SURROGATE)
         warnSpy.mockRestore()
       })
 
@@ -640,15 +703,17 @@ describe('FileScannerService', () => {
 
         await service.scan(SCAN_INPUT).catch(() => null)
 
-        const line = String(warnSpy.mock.calls[0]?.[0])
-        expect(line).toContain('a'.repeat(299))
-        expect(line).not.toMatch(LONE_SURROGATE)
+        const entry = entryAt(warnSpy)
+        expect(entry.event).toBe('STORAGE_SCAN_FAILED')
+        const message = (entry.err as Error).message
+        expect(message).toContain('a'.repeat(299))
+        expect(message).not.toMatch(LONE_SURROGATE)
         warnSpy.mockRestore()
       })
     })
 
     describe('a scan that outlasts its deadline', () => {
-      it('is logged once, naming the key and the limit and nothing the scanner holds', async () => {
+      it('is logged once, naming the limit and nothing the scanner holds, and no key', async () => {
         const impl: IFileScanner = { scan: jest.fn(() => new Promise<FileScanResult>(() => undefined)) }
         const service = await buildService(buildOptions({ impl, timeoutMs: 20 }), impl)
         const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
@@ -656,10 +721,11 @@ describe('FileScannerService', () => {
         await service.scan(SCAN_INPUT).catch(() => null)
 
         expect(warnSpy).toHaveBeenCalledTimes(1)
-        const line = String(warnSpy.mock.calls[0]?.[0])
-        expect(line).toContain('Scan timed out')
-        expect(line).toContain('key="test/file.png"')
-        expect(line).toContain('timeoutMs=20')
+        expect(entryAt(warnSpy)).toEqual({
+          event: 'STORAGE_SCAN_TIMEOUT',
+          message: 'Scan timed out',
+          timeoutMs: 20,
+        })
         warnSpy.mockRestore()
       })
     })

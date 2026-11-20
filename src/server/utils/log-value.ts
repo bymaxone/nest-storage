@@ -15,6 +15,17 @@ import { describeError } from './describe-error'
 const LEFT_LITERAL_BY_JSON = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu
 
 /**
+ * Text for a field of a log event: its control characters show as escapes, and no quote is added, since the
+ * logger serialises the field itself.
+ *
+ * @param text - A string that is not the library's own.
+ * @returns The text with the characters of {@link logValue} escaped.
+ */
+export function escapeForLog(text: string): string {
+  return logValue(text).slice(1, -1)
+}
+
+/**
  * Renders a value for a log line. A string becomes one quoted token, so a key or a message holding
  * a newline, a carriage return or an escape sequence cannot end the line or start another: those
  * show as `\n`, `\r` and `\u001b`. JSON already escapes the C0 controls, the quote and the
