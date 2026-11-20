@@ -623,9 +623,10 @@ In `post-upload` mode your scanner is given the key and reads the object itself,
 **A rejected object that could not be removed.** In `post-upload` mode the object is already stored
 when the scanner rejects it, so the library deletes it and rejects `upload()` with the verdict
 (`STORAGE_SCAN_INFECTED` or `STORAGE_SCAN_INCONCLUSIVE`). If that delete fails the verdict is still the
-error, and `details` carries `cleanup: 'failed'`, the `key` you passed, the `storedKey` (with any
-`keyPrefix`, as a bucket listing shows it) and the code of the delete failure in `cleanupError`; the
-failure, with what the provider said, is logged at error level as `STORAGE_SCAN_CLEANUP_FAILED`. With no `details.cleanup` the object was
+error, and `details` carries `cleanup: 'failed'`, the `key` you passed and the code of the delete
+failure in `cleanupError`. The log gets an error entry with `event: 'STORAGE_SCAN_CLEANUP_FAILED'` and the fields `message`, `storedKey`
+(the key as the provider holds it, with any `keyPrefix`, as a bucket listing shows it, so an operator can find and remove the
+object) and `cleanupFailure` (what the provider said); the `storedKey` is never in the response. With no `details.cleanup` the object was
 removed; with `cleanup: 'failed'` it is **still stored** and has to be removed by other means.
 
 ---

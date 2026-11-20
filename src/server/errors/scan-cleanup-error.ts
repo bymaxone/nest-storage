@@ -39,17 +39,16 @@ export function describeCleanupFailure(error: unknown): string {
 
 /**
  * @param scanError - What the scan rejected with (a `StorageException` carrying the verdict).
- * @param keys - The object that should have been removed: `key` is the caller's relative key and
- *   `storedKey` the key as the provider holds it (with any `keyPrefix`), which is what a bucket
- *   listing shows.
+ * @param keys - The object that should have been removed: `key` is the key the caller passed. The key
+ *   as the provider holds it (with any `keyPrefix`) is the host's configuration and is not carried here.
  * @param cleanupError - Why the delete failed.
- * @returns The same verdict (code, and status when it is an `HttpStatus` value) with `cleanup: 'failed'`, both keys and the delete
+ * @returns The same verdict (code, and status when it is an `HttpStatus` value) with `cleanup: 'failed'`, the key and the delete
  *   failure added to its details, so a caller can tell "rejected and removed" from "rejected but
  *   still stored". Anything that is not a `StorageException` is returned unchanged.
  */
 export function withCleanupFailure(
   scanError: unknown,
-  keys: { key: string; storedKey: string },
+  keys: { key: string },
   cleanupError: unknown,
 ): unknown {
   if (!(scanError instanceof StorageException)) {
@@ -62,7 +61,6 @@ export function withCleanupFailure(
     {
       ...(body.error?.details ?? {}),
       key: keys.key,
-      storedKey: keys.storedKey,
       cleanup: 'failed',
       cleanupError: cleanupErrorCode(cleanupError),
     },

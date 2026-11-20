@@ -257,14 +257,17 @@ export class StorageService {
     if (!this.scanner.isEnabled() || this.scanner.getMode() !== 'pre-upload') {
       return
     }
-    await this.scanner.scan({
-      mode: 'pre-upload',
-      body: normalizeScanBody(body),
-      key: finalKey,
-      bucket,
-      contentType: options.contentType,
-      ...(options.size !== undefined ? { size: options.size } : {}),
-    })
+    await this.scanner.scan(
+      {
+        mode: 'pre-upload',
+        body: normalizeScanBody(body),
+        key: finalKey,
+        bucket,
+        contentType: options.contentType,
+        ...(options.size !== undefined ? { size: options.size } : {}),
+      },
+      callerFields({ key: options.key, bucket: options.bucket }),
+    )
   }
 
   /** Remembers the result of an upload under its idempotency key, when it has one. */
@@ -289,13 +292,16 @@ export class StorageService {
       return
     }
     try {
-      await this.scanner.scan({
-        mode: 'post-upload',
-        key: finalKey,
-        bucket,
-        contentType: options.contentType,
-        ...(options.size !== undefined ? { size: options.size } : {}),
-      })
+      await this.scanner.scan(
+        {
+          mode: 'post-upload',
+          key: finalKey,
+          bucket,
+          contentType: options.contentType,
+          ...(options.size !== undefined ? { size: options.size } : {}),
+        },
+        callerFields({ key: options.key, bucket: options.bucket }),
+      )
     } catch (scanErr) {
       // `delete()` takes the caller's key and prefixes it, so it is given the relative key.
       const key = this.keyResolver.stripPrefix(finalKey)
@@ -303,11 +309,15 @@ export class StorageService {
         // Its own deadline, never the caller's signal: that one may be what ended the upload.
         await this.delete(key, { bucket, abortSignal: AbortSignal.timeout(CLEANUP_DEADLINE_MS) })
       } catch (deleteErr) {
-        this.logger.error(
-          `STORAGE_SCAN_CLEANUP_FAILED: the rejected object is still stored: ${logValue(finalKey)}`,
-          logValue(describeCleanupFailure(deleteErr)),
-        )
-        throw withCleanupFailure(scanErr, { key, storedKey: finalKey }, deleteErr)
+        // The key as the provider holds it is for the operator who removes the object: it goes to the log, in a
+        // field of its own, and never to the caller.
+        this.logger.error({
+          event: 'STORAGE_SCAN_CLEANUP_FAILED',
+          message: 'The rejected object is still stored',
+          storedKey: logValue(finalKey),
+          cleanupFailure: logValue(describeCleanupFailure(deleteErr)),
+        })
+        throw withCleanupFailure(scanErr, { key }, deleteErr)
       }
       throw scanErr
     }

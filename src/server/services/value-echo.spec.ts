@@ -109,6 +109,24 @@ describe('the strings an error carries', () => {
     expect(details.contentType).toBe('text/plain')
   })
 
+  describe('a pre-upload scan that outlasts its deadline', () => {
+    it('keeps the key the caller passed and leaves out the configured prefix and bucket', async () => {
+      const never = { scan: () => new Promise<never>(() => undefined) }
+      const module = await Test.createTestingModule({
+        imports: [BymaxStorageModule.forRoot({ ...base, scanner: { impl: never, mode: 'pre-upload', timeoutMs: 20 } })],
+      }).compile()
+      const { text, details } = await failure(() =>
+        module.get(StorageService).upload({ key: CALLER_KEY, body: Buffer.from('x'), contentType: 'text/plain' }),
+      )
+      await module.close()
+
+      expect(details).toMatchObject({ phase: 'scan', timeoutMs: 20, key: CALLER_KEY })
+      expect(details).not.toHaveProperty('bucket')
+      expect(text).not.toContain(CONFIG_BUCKET)
+      expect(text).not.toContain(CONFIG_PREFIX)
+    })
+  })
+
   it('leaves the configured bucket and prefix out of a list failure and keeps the prefix the caller gave', async () => {
     const { text, details } = await failure(() => storage.list({ prefix: 'mine/' }))
 

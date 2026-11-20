@@ -606,7 +606,10 @@ describe('StorageService — scan integration', () => {
     await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain', size: 2 })
 
     expect(scanFn).toHaveBeenCalledTimes(1)
-    expect(scanFn).toHaveBeenCalledWith(expect.objectContaining({ mode: 'pre-upload', key: 'a.txt', size: 2 }))
+    expect(scanFn).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'pre-upload', key: 'a.txt', size: 2 }),
+      { key: 'a.txt' },
+    )
     expect(send).toHaveBeenCalled()
   })
 
@@ -700,7 +703,10 @@ describe('StorageService — scan integration', () => {
 
     await service.upload({ key: 'a.txt', body: Buffer.from('hi'), contentType: 'text/plain', size: 2 })
 
-    expect(scanFn).toHaveBeenCalledWith(expect.objectContaining({ mode: 'post-upload', key: 'a.txt', size: 2 }))
+    expect(scanFn).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'post-upload', key: 'a.txt', size: 2 }),
+      { key: 'a.txt' },
+    )
   })
 
   it('cleans up the infected object from the per-call bucket, not the module default', async () => {
@@ -787,8 +793,7 @@ describe('StorageService — scan integration', () => {
     })
     // The delete failure is logged at error level with a stable code, alongside the delete error's message.
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('STORAGE_SCAN_CLEANUP_FAILED'),
-      expect.anything(),
+      expect.objectContaining({ event: 'STORAGE_SCAN_CLEANUP_FAILED' }),
     )
     errorSpy.mockRestore()
   })

@@ -158,9 +158,10 @@ describe('log lines carry caller text as one escaped token', () => {
       .upload({ key: FORGED_KEY, body: Buffer.from('x'), contentType: 'text/plain' })
       .catch(() => undefined)
 
-    const line = onlyLine(error)
-    expect(line).toContain('STORAGE_SCAN_CLEANUP_FAILED')
-    expect(line).toContain(ESCAPED_KEY)
-    expect(holdsControl(line)).toBe(false)
+    expect(error).toHaveBeenCalledTimes(1)
+    const entry = error.mock.calls[0]?.[0] as { event: string; storedKey: string; cleanupFailure: string }
+    expect(entry.event).toBe('STORAGE_SCAN_CLEANUP_FAILED')
+    expect(entry.storedKey).toBe(ESCAPED_KEY)
+    expect(holdsControl(`${entry.storedKey}${entry.cleanupFailure}`)).toBe(false)
   })
 })
