@@ -16,7 +16,7 @@ describe('the README log events table', () => {
   })
 
   it('names the level of each code the library writes it at', () => {
-    for (const row of section.split('\n').filter((line) => /^\| `STORAGE_/.test(line))) {
+    for (const row of section.split('\n').filter((line) => line.startsWith('| `STORAGE_'))) {
       expect(row).toMatch(/\| (debug|log|warn|error) \|/)
     }
   })
