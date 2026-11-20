@@ -21,7 +21,7 @@ note on each entry is the compatibility contract — read it, not the number.
   provider code, masked and cut message), never into the text, and never the SDK's own error. The key you passed is
   no longer logged by the provider-failure and scan events, the client-ready line no longer carries the endpoint or
   the region, and a host logger that throws can no longer fail the call being logged. A host `LoggerService` method that is
-  async and rejects is still an unhandled rejection, which ends the Node process (exit code 1) unless the application
+  async and rejects is still an unhandled rejection, which ends the Node process unless the application
   handles `unhandledRejection`: Nest's `Logger` drops the value the method returns before the library can see it.
 
   **Apply to a derived backend:** a log rule or an alert that matched the text of these lines (`Provider call failed`,
