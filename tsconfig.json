@@ -10,6 +10,10 @@
     "sourceMap": false,
     "outDir": "dist",
     "rootDir": "src",
+    "paths": {
+      "@bymax-one/nest-storage": ["./src/server/index.ts"],
+      "@bymax-one/nest-storage/shared": ["./src/shared/index.ts"]
+    },
     "removeComments": false,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": false,

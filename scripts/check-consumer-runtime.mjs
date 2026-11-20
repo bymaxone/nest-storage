@@ -44,7 +44,18 @@ const SUBPATHS = {
     "providerRecipes",
     "STORAGE_ERROR_CODES",
     "BYMAX_STORAGE_OPTIONS",
-    "BYMAX_STORAGE_S3_CLIENT"
+    "BYMAX_STORAGE_S3_CLIENT",
+    "StorageMetricsTally",
+    "STORAGE_OPERATIONS",
+    "STORAGE_OUTCOMES",
+    "SCAN_VERDICTS"
+  ],
+  "./observability": [
+    "StorageMetrics",
+    "StorageHealthIndicator",
+    "METRICS_CONTRIBUTOR_METADATA",
+    "HEALTH_INDICATOR_METADATA",
+    "STORAGE_HEALTH_INDICATOR_NAME"
   ],
   "./shared": [
     "STORAGE_ERROR_CODES",

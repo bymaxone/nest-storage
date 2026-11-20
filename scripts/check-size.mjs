@@ -11,6 +11,7 @@ import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
  */
 const BUDGETS = [
   { name: 'server (NestJS module + AWS SDK externals)', path: 'dist/server/index.mjs', brotli: 30_000 },
+  { name: 'observability (metrics contributor + readiness indicator)', path: 'dist/observability/index.mjs', brotli: 2_500 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 3_500 },
 ]
 
