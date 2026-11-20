@@ -181,6 +181,7 @@ describe('BymaxStorageModule', () => {
       expect(warn).toHaveBeenCalledWith(
         expect.objectContaining({
           event: 'STORAGE_TTL_CLAMPED',
+          message: 'signedUrls.maxTtlSeconds exceeds the SigV4 presigned-URL limit; the limit is used instead',
           configuredSeconds: 604_801,
           appliedSeconds: 604_800,
         }),

@@ -129,6 +129,15 @@ describe('failureError', () => {
     expect(inspect(error, { depth: 6 })).not.toMatch(/SECRET|\$response|\$metadata/)
   })
 
+  it('carries the provider code as an enumerable own field, and none when the failure has no code', () => {
+    const withCode = failureError({ Code: 'SlowDown', message: 'm' })
+    const without = failureError({ message: 'm' })
+
+    expect(Object.keys(withCode)).toContain('awsCode')
+    expect(withCode).toHaveProperty('awsCode', 'SlowDown')
+    expect(Object.getOwnPropertyNames(without)).not.toContain('awsCode')
+  })
+
   it('falls back to a plain Error name when the failure has none', () => {
     expect(failureError({ message: 'm' }).name).toBe('Error')
     expect(failureError('boom').message).toBe('boom')
@@ -163,6 +172,17 @@ describe('logProviderFailure', () => {
     expect(Object.keys(entry).sort()).toEqual(
       ['awsCode', 'err', 'event', 'httpStatus', 'message', 'operation', 'reason', 'requestId'].sort(),
     )
+  })
+
+  it('leaves out the code, the status and the request id when the failure has none', () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    logProviderFailure({ message: 'm' }, { op: 'head' })
+
+    const entry = warn.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(entry).not.toHaveProperty('awsCode')
+    expect(entry).not.toHaveProperty('httpStatus')
+    expect(entry).not.toHaveProperty('requestId')
   })
 
   it('carries no key and no bucket, and nothing the provider wrote in the message', () => {
