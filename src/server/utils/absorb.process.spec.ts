@@ -47,6 +47,26 @@ const ASYNC_LOGGER = `const rejecting = () => Promise.reject(new Error('host log
 const logger = { debug: rejecting, log: rejecting, warn: rejecting, error: rejecting }
 for (const level of ['debug', 'log', 'warn', 'error']) emit(logger, level, { event: 'E', message: 'm' })`
 
+const NEST_LOGGER = (nest: string): string => `const { Logger } = require(${JSON.stringify(nest)})
+Logger.overrideLogger({ warn() { throw new Error('host logger') }, log() {}, error() {}, debug() {} })
+try { emit(new Logger('X'), 'warn', { event: 'E', message: 'm' }) } catch { count += 1000 }`
+
+describe('a host LoggerService behind a real Nest Logger', () => {
+  const nest = require.resolve('@nestjs/common')
+
+  it('does not let a synchronous throw reach the caller', () => {
+    expect(unhandledRejections(NEST_LOGGER(nest))).toBe(0)
+  })
+
+  it('does let it through on a copy of absorb without the try, so the check can fail', () => {
+    const withoutTry = (text: string): string => {
+      expect(text).toContain('catch {')
+      return text.replace('catch {', 'finally {')
+    }
+    expect(unhandledRejections(NEST_LOGGER(nest), withoutTry)).toBe(1000)
+  })
+})
+
 describe('an async host function', () => {
   it('leaves no unhandled rejection when it is a logger method that rejects', () => {
     expect(unhandledRejections(ASYNC_LOGGER)).toBe(0)

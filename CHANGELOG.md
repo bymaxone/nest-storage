@@ -20,8 +20,9 @@ note on each entry is the compatibility contract — read it, not the number.
   a "Log events" table. What the provider, the scanner or the host raised goes under `err` as a fresh error (name,
   provider code, masked and cut message), never into the text, and never the SDK's own error. The key you passed is
   no longer logged by the provider-failure and scan events, the client-ready line no longer carries the endpoint or
-  the region, and a host logger that throws or rejects (an async method typed `void`) can no longer fail the call
-  being logged or end the process with an unhandled rejection.
+  the region, and a host logger that throws can no longer fail the call being logged. A host `LoggerService` method that is
+  async and rejects is still the host's own unhandled rejection: Nest's `Logger` drops the value the method returns
+  before the library can see it.
 
   **Apply to a derived backend:** a log rule or an alert that matched the text of these lines (`Provider call failed`,
   `Scan timed out`, `Scanner failed`, `Infected file detected`, `S3Client initialized`, the exists and delete

@@ -29,8 +29,10 @@ export interface LogEntry {
 }
 
 /**
- * Writes one event. A logger method that throws, or that is async and rejects although it is typed
- * `void`, changes nothing about the call being logged.
+ * Writes one event. A logger method that throws changes nothing about the call being logged, and neither
+ * does a sink handed here directly whose method is async and rejects. A Nest `Logger` instance as the sink
+ * drops the value its host method returns, so an async host `LoggerService` that rejects is the host's own
+ * unhandled rejection and not absorbed here.
  *
  * @param sink - The logger.
  * @param level - The level to write at.
