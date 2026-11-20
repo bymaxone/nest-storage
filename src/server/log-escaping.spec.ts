@@ -123,7 +123,7 @@ describe('log lines carry caller text as one escaped token', () => {
     expect(holdsControl(line)).toBe(false)
   })
 
-  it('the scan-cleanup error shows the stored key and the provider message as escaped tokens', async () => {
+  it('the scan-cleanup error entry carries the stored key as one escaped token', async () => {
     const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     const resolved = applyDefaults({
       endpoint: 'https://s3.example.com',

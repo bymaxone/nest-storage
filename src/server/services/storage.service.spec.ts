@@ -791,9 +791,9 @@ describe('StorageService — scan integration', () => {
       key: 'infected2.bin',
       cleanup: 'failed',
     })
-    // The delete failure is logged at error level with a stable code, alongside the delete error's message.
+    // The delete failure is logged at error level as an entry with a stable event and the stored key.
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'STORAGE_SCAN_CLEANUP_FAILED' }),
+      expect.objectContaining({ event: 'STORAGE_SCAN_CLEANUP_FAILED', storedKey: expect.stringContaining('infected2.bin') as string }),
     )
     errorSpy.mockRestore()
   })
