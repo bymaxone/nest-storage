@@ -48,6 +48,15 @@ export interface ProviderFailureView {
 /** The longest name, code or request id a log line carries. */
 const MAX_FIELD_LENGTH = 128
 
+/** What `read` returns, or `undefined` when reading it throws: a getter of the host's or the driver's must not break a log line. */
+function readOrUndefined<T>(read: () => T): T | undefined {
+  try {
+    return read()
+  } catch {
+    return undefined
+  }
+}
+
 /** A string field of the error, cut and escaped; `undefined` when it is not a string. */
 function textField(value: unknown): string | undefined {
   return typeof value === 'string' ? escapeForLog(cutText(value, MAX_FIELD_LENGTH)) : undefined
@@ -66,10 +75,10 @@ export function projectProviderFailure(err: unknown): ProviderFailureView {
   const message = describeError(err)
     .replace(SECRET_IN_MESSAGE, '$1=[redacted]')
     .replace(BARE_ACCESS_KEY_ID, '[redacted-key-id]')
-  const status = failure.$metadata?.httpStatusCode
-  const name = textField(failure.name)
-  const awsCode = textField(failure.Code)
-  const requestId = textField(failure.$metadata?.requestId)
+  const status = readOrUndefined(() => failure.$metadata?.httpStatusCode)
+  const name = textField(readOrUndefined(() => failure.name))
+  const awsCode = textField(readOrUndefined(() => failure.Code))
+  const requestId = textField(readOrUndefined(() => failure.$metadata?.requestId))
   return {
     ...(name !== undefined ? { name } : {}),
     ...(awsCode !== undefined ? { awsCode } : {}),
@@ -91,7 +100,8 @@ export function failureError(err: unknown): Error {
   const view = projectProviderFailure(err)
   const error = new Error(view.message)
   if (view.name !== undefined) error.name = view.name
-  if (view.awsCode !== undefined) Object.defineProperty(error, 'awsCode', { value: view.awsCode, enumerable: true })
+  if (view.awsCode !== undefined)
+    Object.defineProperty(error, 'awsCode', { value: view.awsCode, enumerable: true })
   return error
 }
 
@@ -109,7 +119,7 @@ export function logProviderFailure(
   context?: Record<string, unknown>,
   label = 'Provider call failed',
 ): void {
-  if ((err as { name?: unknown } | null)?.name === 'AbortError') {
+  if (readOrUndefined(() => (err as { name?: unknown } | null)?.name) === 'AbortError') {
     return
   }
   const view = projectProviderFailure(err)
@@ -120,7 +130,7 @@ export function logProviderFailure(
     ...(view.awsCode !== undefined ? { awsCode: view.awsCode } : {}),
     ...(view.httpStatus !== undefined ? { httpStatus: view.httpStatus } : {}),
     ...(view.requestId !== undefined ? { requestId: view.requestId } : {}),
-    reason: providerFailureReason(err),
+    reason: readOrUndefined(() => providerFailureReason(err)) ?? 'rejected',
     err: failureError(err),
   })
 }

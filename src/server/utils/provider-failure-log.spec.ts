@@ -16,13 +16,21 @@ describe('projectProviderFailure', () => {
         message: 'denied',
         $metadata: { httpStatusCode: 403, requestId: 'req-1' },
       }),
-    ).toEqual({ name: 'AccessDenied', awsCode: 'AccessDenied', httpStatus: 403, requestId: 'req-1', message: 'denied' })
+    ).toEqual({
+      name: 'AccessDenied',
+      awsCode: 'AccessDenied',
+      httpStatus: 403,
+      requestId: 'req-1',
+      message: 'denied',
+    })
   })
 
   it('leaves out a field the error does not have or holds as another kind, and takes a null or a string as the message', () => {
     expect(projectProviderFailure(null)).toEqual({ message: 'null' })
     expect(projectProviderFailure('boom')).toEqual({ message: 'boom' })
-    expect(projectProviderFailure({ name: 7, Code: {}, $metadata: { httpStatusCode: 'x' } })).toEqual({
+    expect(
+      projectProviderFailure({ name: 7, Code: {}, $metadata: { httpStatusCode: 'x' } }),
+    ).toEqual({
       message: '[object Object]',
     })
   })
@@ -81,18 +89,22 @@ describe('projectProviderFailure', () => {
   })
 
   it('leaves a word that only looks like a key id', () => {
-    expect(projectProviderFailure({ message: 'AKIA is a prefix, and AKIAshort stays' }).message).toBe(
-      'AKIA is a prefix, and AKIAshort stays',
-    )
+    expect(
+      projectProviderFailure({ message: 'AKIA is a prefix, and AKIAshort stays' }).message,
+    ).toBe('AKIA is a prefix, and AKIAshort stays')
   })
 
   it.each([
-    ['a credential scope', 'Credential=AKIAIOSFODNN7EXAMPLE/20261117/us-east-1/s3/aws4_request', 280],
+    [
+      'a credential scope',
+      'Credential=AKIAIOSFODNN7EXAMPLE/20261117/us-east-1/s3/aws4_request',
+      280,
+    ],
     ['a bare key id', ' AKIAIOSFODNN7EXAMPLE', 289],
   ])('leaves no part of %s when the cut falls inside it', (_label, secret, padding) => {
-    expect(projectProviderFailure({ message: `${'a'.repeat(padding)}${secret}&tail` }).message).not.toMatch(
-      /AKIA|IOSFOD|20261117/,
-    )
+    expect(
+      projectProviderFailure({ message: `${'a'.repeat(padding)}${secret}&tail` }).message,
+    ).not.toMatch(/AKIA|IOSFOD|20261117/)
   })
 
   it('bounds the message, so a provider that answers with a page cannot flood the log', () => {
@@ -105,6 +117,39 @@ describe('projectProviderFailure', () => {
     const text = projectProviderFailure({ message: 'x\nFORGED\u001b[31m\u009b' }).message
 
     expect(text).toBe('x\\nFORGED\\u001b[31m\\u009b')
+  })
+})
+
+/** An error whose `field` getter throws, as a host-injected scanner or a faulty driver can reject with. */
+function throwingGetter(field: string): object {
+  return Object.defineProperty({ message: 'm' }, field, {
+    get: () => {
+      throw new Error('getter')
+    },
+    enumerable: true,
+  })
+}
+
+describe('a failure whose fields cannot be read', () => {
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it.each(['name', 'Code', '$metadata'])('is projected without the %s it cannot read', (field) => {
+    expect(projectProviderFailure(throwingGetter(field)).message).toBe('m')
+    expect(failureError(throwingGetter(field)).message).toBe('m')
+  })
+
+  it('is logged, and the call being logged is not replaced by the getter', () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    for (const field of ['name', '$metadata', 'code']) {
+      logProviderFailure(throwingGetter(field))
+    }
+
+    expect(warn).toHaveBeenCalledTimes(3)
+    expect(warn.mock.calls[0]?.[0]).toMatchObject({ reason: 'rejected' })
+    expect(warn.mock.calls[2]?.[0]).toMatchObject({ reason: 'rejected' })
   })
 })
 
@@ -124,7 +169,9 @@ describe('failureError', () => {
     expect(error).not.toBe(sdk)
     expect(error.name).toBe('AccessDenied')
     expect(error.message).toBe('denied X-Amz-Signature=[redacted]')
-    expect(Object.getOwnPropertyNames(error).sort()).toEqual(['awsCode', 'message', 'name', 'stack'].sort())
+    expect(Object.getOwnPropertyNames(error).sort()).toEqual(
+      ['awsCode', 'message', 'name', 'stack'].sort(),
+    )
     expect(error).not.toHaveProperty('cause')
     expect(inspect(error, { depth: 6 })).not.toMatch(/SECRET|\$response|\$metadata/)
   })
@@ -153,7 +200,12 @@ describe('logProviderFailure', () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
     logProviderFailure(
-      { name: 'E', Code: 'SlowDown', message: 'm', $metadata: { httpStatusCode: 503, requestId: 'req-1' } },
+      {
+        name: 'E',
+        Code: 'SlowDown',
+        message: 'm',
+        $metadata: { httpStatusCode: 503, requestId: 'req-1' },
+      },
       { op: 'head', key: 'a/b.bin', bucket: 'SECRET-BUCKET' },
     )
 
@@ -170,7 +222,16 @@ describe('logProviderFailure', () => {
     })
     expect((entry.err as Error).message).toBe('m')
     expect(Object.keys(entry).sort()).toEqual(
-      ['awsCode', 'err', 'event', 'httpStatus', 'message', 'operation', 'reason', 'requestId'].sort(),
+      [
+        'awsCode',
+        'err',
+        'event',
+        'httpStatus',
+        'message',
+        'operation',
+        'reason',
+        'requestId',
+      ].sort(),
     )
   })
 
@@ -188,7 +249,10 @@ describe('logProviderFailure', () => {
   it('carries no key and no bucket, and nothing the provider wrote in the message', () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
-    logProviderFailure({ message: 'SENTINEL-PROVIDER-TEXT us-east-1 s3.example.com' }, { op: 'head', key: 'k', bucket: 'b' })
+    logProviderFailure(
+      { message: 'SENTINEL-PROVIDER-TEXT us-east-1 s3.example.com' },
+      { op: 'head', key: 'k', bucket: 'b' },
+    )
 
     const entry = warn.mock.calls[0]?.[0] as { message: string; err: Error }
     expect(entry).not.toHaveProperty('key')
@@ -200,7 +264,10 @@ describe('logProviderFailure', () => {
   it('says nothing for a request the caller cancelled', () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 
-    logProviderFailure({ name: 'AbortError', message: 'The operation was aborted' }, { op: 'download' })
+    logProviderFailure(
+      { name: 'AbortError', message: 'The operation was aborted' },
+      { op: 'download' },
+    )
 
     expect(warn).not.toHaveBeenCalled()
   })
@@ -210,7 +277,9 @@ describe('logProviderFailure', () => {
 
     logProviderFailure({ message: 'm' }, { op: 'upload-multipart' }, 'Multipart upload failed')
 
-    expect(warn).toHaveBeenCalledWith(expect.objectContaining({ message: 'Multipart upload failed' }))
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Multipart upload failed' }),
+    )
   })
 
   it('leaves out the operation when the context has none or holds another kind', () => {
@@ -228,7 +297,10 @@ describe('logProviderFailure', () => {
 
     logProviderFailure({ message: 'm' })
 
-    expect(warn).toHaveBeenCalledWith(expect.objectContaining({ event: 'STORAGE_PROVIDER_CALL_FAILED' }), 'StorageProvider')
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'STORAGE_PROVIDER_CALL_FAILED' }),
+      'StorageProvider',
+    )
   })
 
   it('is not broken by a host logger that throws or rejects', async () => {
