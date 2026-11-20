@@ -13,6 +13,11 @@ export { StorageService } from './services/storage.service'
 export { SignedUrlService } from './services/signed-url.service'
 export { BucketLifecycleService } from './services/bucket-lifecycle.service'
 
+// Observability: the counts the optional `observability` subpath publishes, and the closed sets they are keyed by
+export { StorageMetricsTally } from './observability/storage-metrics-tally'
+export { STORAGE_OPERATIONS, STORAGE_OUTCOMES, SCAN_VERDICTS } from './observability/storage-operations'
+export type { StorageOperation, StorageOutcome, ScanVerdict } from './observability/storage-operations'
+
 // No-op helpers (default implementations for validation and scanning)
 export { NoOpUploadValidator } from './providers/no-op-validator'
 export { NoOpFileScanner } from './providers/no-op-scanner'

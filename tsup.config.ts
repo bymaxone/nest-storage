@@ -14,7 +14,8 @@ const server: Options = {
   tsconfig: 'tsconfig.build.json',
   outDir: 'dist',
   outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
-  external: [/^@nestjs\//, /^@aws-sdk\//, 'reflect-metadata'],
+  // `@opentelemetry/api` is loaded with a dynamic import at start-up and is optional: the bundle must never inline it.
+  external: [/^@nestjs\//, /^@aws-sdk\//, 'reflect-metadata', '@opentelemetry/api'],
   target: 'node24',
   clean: false,
   splitting: false,

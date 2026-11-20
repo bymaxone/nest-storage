@@ -6,7 +6,7 @@
  * URL building.
  * @layer server/services
  */
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -87,6 +87,7 @@ import {
 } from '../utils/upload-support'
 import { assertMaxBytes, readDownloadBody } from '../utils/download-buffer'
 import { pickUploadStrategy } from '../utils/upload-strategy'
+import { Observed, StorageObserver } from '../observability/storage-observer'
 import { uploadSingleShot, type UploadContext } from '../utils/upload-single-shot'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
 
@@ -117,6 +118,7 @@ export class StorageService {
     @Inject(BYMAX_STORAGE_IDEMPOTENCY_CACHE) private readonly idempotencyCache: IdempotencyCache,
     @Inject(ValidationService) private readonly validation: ValidationService,
     @Inject(FileScannerService) private readonly scanner: FileScannerService,
+    @Optional() @Inject(StorageObserver) protected readonly observer?: StorageObserver,
   ) {}
 
   /**
@@ -134,6 +136,11 @@ export class StorageService {
    * @returns The upload result.
    * @throws StorageException for missing configuration, body, or content type.
    */
+  @Observed<UploadResult>('upload', {
+    span: 'storage.upload',
+    describe: (result) => ({ 'bymax.storage.multipart': String(result.multipart) }),
+    bytes: (result) => (result.fromIdempotencyCache ? undefined : result.size),
+  })
   async upload(options: UploadOptions): Promise<UploadResult> {
     try {
       return await this.uploadOwningBody(options)
@@ -328,6 +335,7 @@ export class StorageService {
    * @returns The object metadata.
    * @throws StorageException `STORAGE_OBJECT_NOT_FOUND` when the key is absent.
    */
+  @Observed('head')
   async head(key: string, options?: BucketScopedOptions): Promise<ObjectMetadata> {
     this.assertConfigured()
     const finalKey = this.keyResolver.normalize(key)
@@ -404,6 +412,7 @@ export class StorageService {
    * @returns The object stream and its metadata.
    * @throws StorageException `STORAGE_OBJECT_NOT_FOUND` when the body is absent.
    */
+  @Observed('download')
   async download(
     options: DownloadOptions,
   ): Promise<{ stream: NodeJS.ReadableStream; metadata: ObjectMetadata }> {
@@ -480,6 +489,7 @@ export class StorageService {
    * @param key - The raw object key.
    * @param options - Optional per-call bucket override.
    */
+  @Observed('delete')
   async delete(key: string, options?: BucketScopedOptions): Promise<void> {
     this.assertConfigured()
     const finalKey = this.keyResolver.normalize(key)
@@ -518,6 +528,7 @@ export class StorageService {
    *   (301), `STORAGE_TIMEOUT`, or `STORAGE_PROVIDER_ERROR`; `STORAGE_NOT_CONFIGURED` and
    *   `STORAGE_BUCKET_UNDEFINED` before any request.
    */
+  @Observed('check_bucket')
   async checkBucket(options?: BucketScopedOptions): Promise<void> {
     this.assertConfigured()
     const bucket = this.resolveBucket(options?.bucket)
@@ -653,6 +664,7 @@ export class StorageService {
    * @returns One page of objects plus `commonPrefixes`, truncation, and the next token.
    * @throws StorageException mapped from any AWS failure.
    */
+  @Observed('list')
   async list(options: ListOptions): Promise<ListResult> {
     this.assertConfigured()
     const bucket = this.resolveBucket(options.bucket)
@@ -688,6 +700,7 @@ export class StorageService {
    * @returns The new object's ETag.
    * @throws StorageException mapped from any AWS failure.
    */
+  @Observed('copy')
   async copy(options: CopyOptions): Promise<{ etag: string }> {
     this.assertConfigured()
     assertHeaderValues({ cacheControl: options.cacheControl })
@@ -728,6 +741,7 @@ export class StorageService {
    * @param options - Optional per-call bucket override.
    * @returns The deleted keys and the per-key failures.
    */
+  @Observed('delete_many')
   async deleteMany(keys: string[], options?: DeleteManyOptions): Promise<DeleteManyResult> {
     this.assertConfigured()
     if (keys.length === 0) {
