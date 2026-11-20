@@ -4,12 +4,12 @@
  */
 import { emit, type LogSink } from './log-event'
 
-function sink(): { [K in keyof LogSink]: jest.Mock<undefined, [unknown]> } {
+function sink(): { [K in keyof LogSink]: jest.Mock<unknown, [unknown]> } {
   return {
-    debug: jest.fn<undefined, [unknown]>(),
-    log: jest.fn<undefined, [unknown]>(),
-    warn: jest.fn<undefined, [unknown]>(),
-    error: jest.fn<undefined, [unknown]>(),
+    debug: jest.fn<unknown, [unknown]>(),
+    log: jest.fn<unknown, [unknown]>(),
+    warn: jest.fn<unknown, [unknown]>(),
+    error: jest.fn<unknown, [unknown]>(),
   }
 }
 
