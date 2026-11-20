@@ -23,12 +23,17 @@ describe('callerFields', () => {
 })
 
 describe('callDetails', () => {
-  it('puts the operation after the caller fields and the extra details after both', () => {
+  it('carries the operation and the extra details beside the caller fields', () => {
     expect(callDetails('head', { key: 'k', bucket: undefined }, { stored: true })).toEqual({
       key: 'k',
       op: 'head',
       stored: true,
     })
+  })
+
+  it('lets the operation win over a caller field of the same name, and the extra details win over both', () => {
+    expect(callDetails('head', { op: 'caller' })).toEqual({ op: 'head' })
+    expect(callDetails('head', { op: 'caller', k: 'k' }, { op: 'extra' })).toEqual({ k: 'k', op: 'extra' })
   })
 
   it('carries the operation alone when the caller gave nothing', () => {

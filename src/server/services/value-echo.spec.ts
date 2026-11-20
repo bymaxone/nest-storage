@@ -68,7 +68,7 @@ describe('the strings an error carries', () => {
   })
 
   describe.each(calls)('%s', (name, run) => {
-    it('keeps the key and the bucket the caller gave, and nothing of the configuration', async () => {
+    it('keeps the key the caller gave, and its bucket where the call reports one, and nothing of the configuration', async () => {
       const { text, details } = await failure(() => run(storage, CALLER_KEY, CALLER_BUCKET))
 
       expect(text).not.toContain(CONFIG_BUCKET)
