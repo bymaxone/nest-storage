@@ -64,6 +64,7 @@ import {
 } from '../utils/stream-utils'
 import { assertIntegerInput } from '../utils/numeric-input'
 import { callDetails, callerFields } from '../utils/call-details'
+import { toObjectMetadata } from '../utils/object-metadata'
 import { assertScannedSize, boundStreamSize, bufferStreamForScan, withBytesBody } from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { logValue } from '../utils/log-value'
@@ -91,19 +92,6 @@ import {
 import { assertMaxBytes, readDownloadBody } from '../utils/download-buffer'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
-
-/** Common metadata fields shared by `HeadObject` and `GetObject` responses. */
-interface S3ObjectResponse {
-  ContentLength?: number | undefined
-  ContentType?: string | undefined
-  ETag?: string | undefined
-  LastModified?: Date | undefined
-  CacheControl?: string | undefined
-  ContentDisposition?: string | undefined
-  Metadata?: Record<string, string> | undefined
-  StorageClass?: string | undefined
-  VersionId?: string | undefined
-}
 
 /** Per-call options that only need to override the target bucket. */
 interface BucketScopedOptions {
@@ -346,7 +334,7 @@ export class StorageService {
           new HeadObjectCommand({ Bucket: bucket, Key: finalKey }),
           sendOptions(options?.abortSignal),
         )
-      return this.toObjectMetadata(response, finalKey, bucket)
+      return toObjectMetadata(response, this.keyResolver.stripPrefix(finalKey), bucket)
     } catch (err) {
       throw failureOrAbort(options?.abortSignal, context, mapAwsError(err, context))
     }
@@ -443,7 +431,7 @@ export class StorageService {
         context,
         options.abortSignal,
       )
-      return { stream, metadata: this.toObjectMetadata(response, finalKey, bucket) }
+      return { stream, metadata: toObjectMetadata(response, this.keyResolver.stripPrefix(finalKey), bucket) }
     } catch (err) {
       if (err instanceof StorageException) {
         throw err
@@ -542,29 +530,6 @@ export class StorageService {
   /** Resolves the target bucket from a per-call override or the module default. */
   private resolveBucket(perCall?: string): string {
     return resolveBucketInput(perCall, this.options.bucket)
-  }
-
-  /** Maps an S3 metadata response onto the public `ObjectMetadata` shape. */
-  private toObjectMetadata(
-    response: S3ObjectResponse,
-    finalKey: string,
-    bucket: string,
-  ): ObjectMetadata {
-    return {
-      key: this.keyResolver.stripPrefix(finalKey),
-      bucket,
-      size: response.ContentLength ?? 0,
-      contentType: response.ContentType ?? 'application/octet-stream',
-      etag: response.ETag ?? '',
-      lastModified: response.LastModified ?? new Date(0),
-      metadata: response.Metadata ?? {},
-      ...(response.CacheControl !== undefined ? { cacheControl: response.CacheControl } : {}),
-      ...(response.ContentDisposition !== undefined
-        ? { contentDisposition: response.ContentDisposition }
-        : {}),
-      ...(response.StorageClass !== undefined ? { storageClass: response.StorageClass } : {}),
-      ...(response.VersionId !== undefined ? { versionId: response.VersionId } : {}),
-    }
   }
 
   /** Single `PutObject` upload for bodies below the multipart threshold. */
