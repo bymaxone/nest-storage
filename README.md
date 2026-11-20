@@ -626,7 +626,7 @@ when the scanner rejects it, so the library deletes it and rejects `upload()` wi
 error, and `details` carries `cleanup: 'failed'`, the `key` without any `keyPrefix` and the code of the delete
 failure in `cleanupError`. The log gets an error entry with `event: 'STORAGE_SCAN_CLEANUP_FAILED'` and the fields `message`, `storedKey`
 (the key as the provider holds it, with any `keyPrefix`, as a bucket listing shows it, so an operator can find and remove the
-object) and `cleanupFailure` (the code of the delete failure); the `storedKey` is never in the response. With no `details.cleanup` the object was
+object) and `cleanupFailure` (why the delete failed); the `storedKey` is never in the response. With no `details.cleanup` the object was
 removed; with `cleanup: 'failed'` it is **still stored** and has to be removed by other means.
 
 ---
