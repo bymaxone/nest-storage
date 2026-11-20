@@ -15,7 +15,7 @@ describe('the README log events table', () => {
     expect([...listed].sort()).toEqual(Object.values(STORAGE_LOG_EVENTS).sort())
   })
 
-  it('names the level of each code the library writes it at', () => {
+  it('gives every row one of the four levels', () => {
     for (const row of section.split('\n').filter((line) => line.startsWith('| `STORAGE_'))) {
       expect(row).toMatch(/\| (debug|log|warn|error) \|/)
     }
