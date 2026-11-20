@@ -41,7 +41,7 @@ note on each entry is the compatibility contract — read it, not the number.
   `bucket`, `prefix`, `sourceKey` or `destKey` longer than 1024 characters is left out.
 
   The same applies to a scan: a `STORAGE_TIMEOUT` for a scan that outlasts its deadline repeated the prefixed key and
-  the module bucket, and now carries the `key` the caller passed (and a per-call `bucket`) only. `details.storedKey`,
+  the module bucket, and now carries the `key` the caller passed and a per-call `bucket`. `details.storedKey`,
   which a rejected scan whose cleanup delete failed carried, is removed from the response: the operator gets the key as
   stored in the `STORAGE_SCAN_CLEANUP_FAILED` log entry, in its `storedKey` field.
 
