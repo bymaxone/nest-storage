@@ -63,3 +63,18 @@ export function copyRequest<T extends object>(request: T): T {
     )
   }
 }
+
+/**
+ * The `body` of a caller's request, or `undefined` when reading it throws: it is read to release a stream the
+ * caller handed over, and a field that throws is the very case that makes the request unreadable.
+ *
+ * @param request - The caller's request.
+ * @returns Whatever `request.body` holds, or `undefined`.
+ */
+export function bodyOfRequest(request: { body?: unknown }): unknown {
+  try {
+    return request.body
+  } catch {
+    return undefined
+  }
+}

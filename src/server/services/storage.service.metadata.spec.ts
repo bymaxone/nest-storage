@@ -5,6 +5,7 @@
  * @layer server/services
  */
 import type { PutObjectCommand } from '@aws-sdk/client-s3'
+import { Readable } from 'node:stream'
 import { Test } from '@nestjs/testing'
 import { BymaxStorageModule } from '../bymax-storage.module'
 import { S3ClientProvider } from '../providers/s3-client.provider'
@@ -138,5 +139,41 @@ describe('StorageService — upload metadata', () => {
       cause: failure,
     })
     expect(send).not.toHaveBeenCalled()
+  })
+
+  it('destroys a stream body the caller handed over when a later field of the request throws when read', async () => {
+    // The copy of the request fails after it has read the body, and the stream is the library's to release.
+    const send = jest.fn<Promise<unknown>, [unknown]>()
+    const service = await serviceWith(send)
+    const stream = new Readable({ read() {} })
+    const request = { key: 'a', body: stream, contentType: 'text/plain' }
+    Object.defineProperty(request, 'metadata', {
+      enumerable: true,
+      get: () => {
+        throw new Error('SENTINEL metadata getter ran')
+      },
+    })
+
+    const thrown = await service.upload(request as never).catch((error: unknown) => error)
+
+    expect(thrown).toMatchObject({ response: { error: { code: 'STORAGE_VALIDATION_FAILED' } } })
+    expect(stream.destroyed).toBe(true)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('releases nothing and still refuses when the body field itself throws when read', async () => {
+    const send = jest.fn<Promise<unknown>, [unknown]>()
+    const service = await serviceWith(send)
+    const request = { key: 'a', contentType: 'text/plain' }
+    Object.defineProperty(request, 'body', {
+      enumerable: true,
+      get: () => {
+        throw new Error('SENTINEL body getter ran')
+      },
+    })
+
+    await expect(service.upload(request as never)).rejects.toMatchObject({
+      response: { error: { code: 'STORAGE_VALIDATION_FAILED' } },
+    })
   })
 })
