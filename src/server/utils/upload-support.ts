@@ -10,9 +10,13 @@ import type { UploadOptions } from '../interfaces/upload-options.interface'
 import type { KeyResolverService } from '../services/key-resolver.service'
 import type { UploadResult } from '../../shared/types/storage-types'
 import type { ValidationService } from '../services/validation.service'
+import { absorb } from './absorb'
 import { buildACL, buildCacheControl, buildContentDisposition, buildSSE } from './header-utils'
 import { buildPublicUrl } from './public-url'
 import { isBufferLike, type UploadBody } from './stream-utils'
+
+/** What a progress hook is given. */
+type ProgressEvent = Parameters<NonNullable<UploadOptions['onProgress']>>[0]
 
 /**
  * Narrows the scan body to the `Buffer` the scanner is declared to receive. In pre-upload mode a stream
@@ -84,18 +88,25 @@ export function buildUploadResult(
   }
 }
 
-/** Emits a progress event, omitting `total`/`part` when they are unknown. */
+/**
+ * Emits a progress event, omitting `total`/`part` when they are unknown. The hook is the caller's: one that
+ * throws, or that is async and rejects although it is typed `void`, changes nothing about the upload.
+ */
 export function emitProgress(
   onProgress: NonNullable<UploadOptions['onProgress']>,
   loaded: number | undefined,
   total: number | undefined,
   part?: number,
 ): void {
-  onProgress({
-    loaded: loaded ?? 0,
-    ...(total !== undefined ? { total } : {}),
-    ...(part !== undefined ? { part } : {}),
-  })
+  // Typed to return a value: the hook is typed `void`, but may still hand back a promise for `absorb` to settle.
+  const hook: (event: ProgressEvent) => unknown = onProgress
+  absorb(() =>
+    hook({
+      loaded: loaded ?? 0,
+      ...(total !== undefined ? { total } : {}),
+      ...(part !== undefined ? { part } : {}),
+    }),
+  )
 }
 
 /** What a single-shot and a multipart upload send alike: the target, the headers, the ACL and the encryption. */

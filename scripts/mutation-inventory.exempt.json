@@ -58,5 +58,9 @@
   {
     "file": "src/server/observability/observability.process.spec.ts",
     "reason": "Transpiles the tally, the observer and the tracing seam to a temporary directory and runs them in a child node process that counts unhandled rejections; the code it exercises runs outside the instrumented process, so it can kill no mutant."
+  },
+  {
+    "file": "src/server/utils/progress-hook.process.spec.ts",
+    "reason": "Transpiles the progress helpers to a temporary directory and runs them in a child node process that counts unhandled rejections; the code it exercises runs outside the instrumented process, so it can kill no mutant."
   }
 ]
