@@ -134,7 +134,7 @@ describe('snapshotOptions', () => {
     expect(Object.keys(snapshotOptions(base) as object).sort()).toEqual(Object.keys(base).sort())
   })
 
-  it('does not catch an array whose iterator throws: forRoot refuses it with the host error as the cause', () => {
+  it('lets the error of an array whose iterator throws propagate', () => {
     const hostile = ['image/png']
     Object.defineProperty(hostile, Symbol.iterator, {
       value: () => {
