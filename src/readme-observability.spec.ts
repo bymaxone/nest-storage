@@ -13,6 +13,7 @@ import {
   StorageMetricsTally,
 } from '@bymax-one/nest-storage'
 import { StorageMetrics } from './observability/storage-metrics'
+import { STORAGE_HEALTH_CACHE_MS, STORAGE_HEALTH_TIMEOUT_MS } from './observability/storage-health'
 
 const README = readFileSync(join(__dirname, '..', 'README.md'), 'utf8')
 const section = README.slice(
@@ -60,5 +61,38 @@ describe('the README observability section', () => {
 
     expect(started).toHaveLength(3)
     expect(rows).toEqual(started)
+  })
+
+  it('states the readiness lag from the constants of the indicator', () => {
+    const lag = (STORAGE_HEALTH_CACHE_MS + STORAGE_HEALTH_TIMEOUT_MS) / 1000
+
+    expect(section).toContain(
+      `up to the ${String(STORAGE_HEALTH_CACHE_MS / 1000)} seconds it is kept`,
+    )
+    expect(section).toContain(
+      `the ${String(STORAGE_HEALTH_TIMEOUT_MS / 1000)} seconds the probe may take`,
+    )
+    expect(section).toContain(`read \`up\` for up to ${String(lag)} seconds`)
+  })
+
+  it('names every method of the tally', () => {
+    for (const method of ['operation', 'scan', 'bytesUploaded', 'onDuration', 'snapshot']) {
+      expect(Object.getOwnPropertyNames(StorageMetricsTally.prototype)).toContain(method)
+      expect(section).toContain(`\`${method}(`)
+    }
+  })
+
+  it('names every peer dependency of the package in the peer matrix', () => {
+    const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as {
+      peerDependencies: Record<string, string>
+    }
+    const matrix = README.slice(
+      README.indexOf('### Peer dependency matrix'),
+      README.indexOf('## 🚀 Quick Start'),
+    )
+
+    for (const peer of Object.keys(manifest.peerDependencies)) {
+      expect(matrix).toContain(peer)
+    }
   })
 })

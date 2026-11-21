@@ -189,6 +189,19 @@ describe('StorageService — single-shot upload', () => {
     expect(firstInput(send).ACL).toBe('public-read')
   })
 
+  it.each([['false'], [0], [null], [{}]])(
+    'refuses a publicRead of %p, which is not a boolean, and sends nothing',
+    async (value) => {
+      // `'false'` is truthy: it would store the object public-read.
+      const { service, send } = makeService()
+
+      await expect(service.upload(uploadOf({ publicRead: value as never }))).rejects.toMatchObject({
+        response: { error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'publicRead' } } },
+      })
+      expect(send).not.toHaveBeenCalled()
+    },
+  )
+
   it('converts a Uint8Array body to a Buffer', async () => {
     // The Uint8Array branch of body normalization.
     const { service, send } = makeService()

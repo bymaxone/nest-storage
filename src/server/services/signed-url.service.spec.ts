@@ -272,6 +272,18 @@ describe('SignedUrlService', () => {
       expect(input.ACL).toBe('public-read')
     })
 
+    it('refuses a publicRead that is not a boolean, and signs nothing', async () => {
+      // `'false'` is truthy: it would sign a public-read upload.
+      const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+
+      await expect(
+        service.getUploadUrl({ key: KEY, contentType: 'image/png', publicRead: 'false' as never }),
+      ).rejects.toMatchObject({
+        response: { error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'publicRead' } } },
+      })
+      expect(mockedGetSignedUrl).not.toHaveBeenCalled()
+    })
+
     it('forwards Metadata when provided', async () => {
       // metadata must be forwarded to the PutObject command
       const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())

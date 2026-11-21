@@ -44,19 +44,22 @@ export async function uploadSingleShot(
   bucket: string,
   caller: Record<string, unknown>,
 ): Promise<UploadResult> {
+  // Read once, before the send: the object is stored when `send` resolves, and a getter that throws on a
+  // later read must not turn a stored object into a reported failure.
+  const { onProgress, contentType, abortSignal } = options
   const total = options.size ?? getBodySize(options.body)
   const input: PutObjectCommandInput = {
     ...putObjectHeaders(options, context.options, finalKey, bucket),
     Body: normalizeSingleShotBody(options.body),
     ContentLength: total,
   }
-  const watch = abortOnBodyFailure(input.Body, options.abortSignal)
+  const watch = abortOnBodyFailure(input.Body, abortSignal)
   try {
     const response = await context.s3Provider
       .getClient()
       .send(new PutObjectCommand(input), sendOptions(watch.signal))
-    if (options.onProgress) {
-      emitProgress(options.onProgress, total, total)
+    if (onProgress) {
+      emitProgress(onProgress, total, total)
     }
     return buildUploadResult(context.keyResolver, context.options, {
       finalKey,
@@ -64,12 +67,12 @@ export async function uploadSingleShot(
       etag: response.ETag,
       versionId: response.VersionId,
       size: total,
-      contentType: options.contentType,
+      contentType,
       multipart: false,
     })
   } catch (err) {
     const context = { ...caller, op: 'upload-single' }
     const mapped = mapSizeLimitError(watch.failure(), context) ?? mapAwsError(err, context)
-    throw failureOrAbort(options.abortSignal, context, mapped)
+    throw failureOrAbort(abortSignal, context, mapped)
   }
 }

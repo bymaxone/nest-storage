@@ -10,6 +10,7 @@ import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { MAX_TIMER_MS } from '../constants/timer.constants'
 import { isHeaderValue } from '../utils/header-value'
+import { isBoundedLength, MAX_OPTION_ARRAY_LENGTH } from './option-array-bound'
 
 const MIN_PART_SIZE_BYTES = 5 * 1024 * 1024
 /** S3's largest part. */
@@ -20,10 +21,30 @@ const MAX_QUEUE_SIZE = 1000
 /** What a region is called by AWS and by every S3-compatible provider this library documents (`auto`, `nyc3`, `eu-central-003`). */
 const REGION_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/
 
+/** The refusals this module made, told apart from a `StorageException` that host code throws. */
+const OWN_REFUSALS = new WeakSet()
+
+/**
+ * Whether `error` is a refusal that {@link validateOptions} itself made. A `WeakSet` lookup runs no trap, so a
+ * Proxy of the host's is simply not one, and a `StorageException` the host threw is not one either.
+ *
+ * @param error - Whatever was thrown.
+ * @returns `true` for a refusal made here.
+ */
+export function isOwnRefusal(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && OWN_REFUSALS.has(error)
+}
+
 function invalid(reason: string): StorageException {
-  return new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG, HttpStatus.INTERNAL_SERVER_ERROR, {
-    reason,
-  })
+  const refusal = new StorageException(
+    STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG,
+    HttpStatus.INTERNAL_SERVER_ERROR,
+    {
+      reason,
+    },
+  )
+  OWN_REFUSALS.add(refusal)
+  return refusal
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -120,7 +141,12 @@ function assertBoundedInteger(
   if (!isObject(section)) return
   const value = section[key]
   if (value === undefined || value === null) return
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < range.min || value > range.max) {
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < range.min ||
+    value > range.max
+  ) {
     throw invalid(
       `${group}.${key} must be an integer ${range.words ?? `from ${String(range.min)} to ${String(range.max)}`}`,
     )
@@ -148,7 +174,11 @@ function assertScanner(scanner: unknown): void {
   if (mode !== undefined && mode !== null && mode !== 'pre-upload' && mode !== 'post-upload') {
     throw invalid("scanner.mode must be 'pre-upload' or 'post-upload'")
   }
-  if (rejectOnUnknown !== undefined && rejectOnUnknown !== null && typeof rejectOnUnknown !== 'boolean') {
+  if (
+    rejectOnUnknown !== undefined &&
+    rejectOnUnknown !== null &&
+    typeof rejectOnUnknown !== 'boolean'
+  ) {
     throw invalid('scanner.rejectOnUnknown must be a boolean')
   }
 }
@@ -170,36 +200,44 @@ function assertValidationKinds(validation: unknown): void {
   if (mimeWhitelist === null) {
     throw invalid('validation.mimeWhitelist must not be null; omit it to allow every type')
   }
+  assertBoundedArray('mimeWhitelist', mimeWhitelist)
   if (mimeWhitelist !== undefined && !isStringArray(mimeWhitelist)) {
     throw invalid('validation.mimeWhitelist must be an array of strings')
   }
   if (customValidators === null) {
-    throw invalid('validation.customValidators must not be null; omit it to run no custom validator')
+    throw invalid(
+      'validation.customValidators must not be null; omit it to run no custom validator',
+    )
   }
   if (customValidators !== undefined && !Array.isArray(customValidators)) {
     throw invalid('validation.customValidators must be an array')
   }
+  assertBoundedArray('customValidators', customValidators)
   if (customValidators !== undefined && !isValidatorList(customValidators as unknown[])) {
     throw invalid('validation.customValidators must hold objects with a validate function')
   }
 }
 
-/** Whether `value` is an array whose every entry, holes included, is a string; a value that throws when read is not. */
-function isStringArray(value: unknown): boolean {
-  try {
-    return Array.isArray(value) && Array.from(value as unknown[]).every((entry) => typeof entry === 'string')
-  } catch {
-    return false
+/** Refuses an array option with more entries than {@link MAX_OPTION_ARRAY_LENGTH}, or whose length is not a count, before any entry is read. */
+function assertBoundedArray(name: string, value: unknown): void {
+  if (Array.isArray(value) && !isBoundedLength(value.length)) {
+    throw invalid(`validation.${name} must hold at most ${String(MAX_OPTION_ARRAY_LENGTH)} entries`)
   }
+}
+
+/** Whether `value` is an array whose every entry, holes included, is a string. A value that throws when read is the host's, and `forRoot` refuses it. */
+function isStringArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    Array.from(value as unknown[]).every((entry) => typeof entry === 'string')
+  )
 }
 
 /** Whether every entry is an object with a `validate` function, which is what the upload path calls; reads each entry once. */
 function isValidatorList(entries: unknown[]): boolean {
-  try {
-    return Array.from(entries).every((entry) => isObject(entry) && typeof entry.validate === 'function')
-  } catch {
-    return false
-  }
+  return Array.from(entries).every(
+    (entry) => isObject(entry) && typeof entry.validate === 'function',
+  )
 }
 
 /**
@@ -263,6 +301,11 @@ function assertLimitsAndEncryption(options: Record<string, unknown>): void {
   if (options.serverSideEncryption === 'aws:kms' && !options.kmsKeyId) {
     throw invalid('kmsKeyId is required when serverSideEncryption === "aws:kms"')
   }
+  for (const name of ['defaultPublicRead', 'forcePathStyle'] as const) {
+    if (options[name] !== undefined && typeof options[name] !== 'boolean') {
+      throw invalid(`options.${name} must be a boolean`)
+    }
+  }
   for (const name of ['defaultCacheControl', 'kmsKeyId'] as const) {
     if (options[name] !== undefined && !isHeaderValue(options[name])) {
       throw invalid(`options.${name} must be a string of tab, space and printable ASCII characters`)
@@ -305,7 +348,11 @@ export function validateOptions(options: unknown): void {
   if (!isNonEmptyString(options.bucket)) {
     throw invalid('options.bucket must be a non-empty string')
   }
-  if (options.keyPrefix !== undefined && options.keyPrefix !== null && typeof options.keyPrefix !== 'string') {
+  if (
+    options.keyPrefix !== undefined &&
+    options.keyPrefix !== null &&
+    typeof options.keyPrefix !== 'string'
+  ) {
     throw invalid('options.keyPrefix must be a string')
   }
   if (!isObject(options.credentials)) {

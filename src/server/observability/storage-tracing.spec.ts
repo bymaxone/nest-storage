@@ -5,7 +5,8 @@
  */
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
-import { StorageTracing } from './storage-tracing'
+import type { StorageOutcome } from './storage-operations'
+import { StorageTracing, type StorageSpanAttributes } from './storage-tracing'
 
 interface FakeSpan {
   setStatus: jest.Mock
@@ -49,6 +50,33 @@ async function loaded(): Promise<StorageTracing> {
   return tracing
 }
 
+/** `true` only when each of `A` and `B` is assignable to the other, so a widened or a narrowed type fails to compile. */
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+
+describe('StorageSpanAttributes', () => {
+  it('names the three keys the library states, each with its own values, so a host value cannot become an attribute', () => {
+    // A key or a value outside these types, or a widening to `Record<string, string>`, makes a line below fail to compile.
+    const keys: Same<
+      keyof StorageSpanAttributes,
+      'bymax.storage.outcome' | 'bymax.storage.multipart' | 'bymax.storage.scan_mode'
+    > = true
+    const outcomes: Same<
+      StorageSpanAttributes['bymax.storage.outcome'],
+      StorageOutcome | undefined
+    > = true
+    const multipart: Same<
+      StorageSpanAttributes['bymax.storage.multipart'],
+      'true' | 'false' | undefined
+    > = true
+    const modes: Same<
+      StorageSpanAttributes['bymax.storage.scan_mode'],
+      'pre-upload' | 'post-upload' | undefined
+    > = true
+
+    expect([keys, outcomes, multipart, modes]).toEqual([true, true, true, true])
+  })
+})
+
 describe('StorageTracing', () => {
   beforeEach(() => {
     const live = span()
@@ -75,13 +103,13 @@ describe('StorageTracing', () => {
       await loaded()
     ).span(
       'storage.upload',
-      { 'bymax.storage.operation': 'upload' },
+      { 'bymax.storage.scan_mode': 'pre-upload' },
       () => Promise.resolve({ multipart: true }),
-      (value) => ({ 'bymax.storage.multipart': String(value.multipart) }),
+      (value) => ({ 'bymax.storage.multipart': value.multipart ? 'true' : 'false' }),
     )
 
     expect(result).toEqual({ multipart: true })
-    expect(seen).toEqual([['storage.upload', { 'bymax.storage.operation': 'upload' }]])
+    expect(seen).toEqual([['storage.upload', { 'bymax.storage.scan_mode': 'pre-upload' }]])
     expect(mockTracerNames).toContain('@bymax-one/nest-storage')
     expect(live.setAttributes).toHaveBeenCalledWith({
       'bymax.storage.outcome': 'success',

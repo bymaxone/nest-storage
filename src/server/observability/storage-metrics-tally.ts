@@ -43,11 +43,15 @@ export class StorageMetricsTally {
     for (const listener of this.#listeners) absorb(() => listener(operation, seconds))
   }
 
-  /** `bytes` of an object reached the provider; anything that is not a positive finite number is ignored. */
+  /**
+   * `bytes` of an object reached the provider; anything that is not a positive finite number is ignored. The
+   * count stops at the largest finite number: a sum of two finite sizes can overflow to `Infinity`, which no
+   * counter accepts, and a scrape that read it would fail whole.
+   */
   bytesUploaded(bytes: number | undefined): void {
     // Stryker disable next-line EqualityOperator: `bytes >= 0` adds a zero to the count, which changes nothing (equivalent).
     if (typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0)
-      this.#bytesUploaded += bytes
+      this.#bytesUploaded = Math.min(this.#bytesUploaded + bytes, Number.MAX_VALUE)
   }
 
   /** A scan ended as `verdict`. */
