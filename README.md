@@ -894,7 +894,7 @@ export class AppModule {}
 | --- | --- | --- | --- |
 | `bymax_storage_operations_total` | counter | `operation`, `outcome` | Operations that ended |
 | `bymax_storage_operation_duration_seconds` | histogram | `operation` | How long they took |
-| `bymax_storage_bytes_uploaded_total` | counter | none | Bytes that uploads that succeeded sent |
+| `bymax_storage_bytes_uploaded_total` | counter | none | Bytes sent by uploads that succeeded |
 | `bymax_storage_scans_total` | counter | `verdict` | File scans |
 
 The labels come from closed sets, so the number of series never grows with traffic and no key, bucket, prefix or
