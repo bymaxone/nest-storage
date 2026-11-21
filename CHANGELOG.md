@@ -13,6 +13,32 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An empty or unreadable iterator no longer turns a whitelist into an empty one.** The option arrays
+  (`validation.mimeWhitelist`, `validation.customValidators`) were copied by their iterator, so an array of a subclass
+  whose iterator yielded nothing copied to `[]`, and an empty whitelist allows every type. They are now copied by
+  index, the length read once and each index read once, and a custom validator is copied too: its `name` and `validate`
+  are read once, and `validate` is called on the validator.
+
+  **Apply to a derived backend:** the validators the module exposes under `BYMAX_STORAGE_UPLOAD_VALIDATORS` are copies
+  that keep the `name` and call the validator's own `validate`; code that compared them by identity with the objects it
+  configured compares them by `name` instead.
+
+- **The pairs of `metadata` are read once on upload.** An upload checked the pairs of the caller's `metadata` object and
+  sent that same object, reading each pair again for the request, so a value that answered differently on a later read
+  was sent as something that had not been checked. The pairs are copied once, as a signed PUT URL already did, and a
+  request field or a pair that throws when read fails with `STORAGE_VALIDATION_FAILED` with the error as the `cause`.
+
+  **Apply to a derived backend:** nothing to change.
+
+- **A signed PUT URL no longer lists the metadata pairs as required headers.** The presigner puts each
+  `x-amz-meta-<key>` in the signed query string, and a client that also sent the pair as a header was refused by the
+  provider (HTTP 400). `requiredHeaders` now holds `Content-Type`, and `x-amz-acl` when an ACL is signed.
+
+  **Apply to a derived backend:** a client that copies `requiredHeaders` onto its PUT needs no change; one that read
+  `x-amz-meta-*` entries from it reads the pairs from what it passed as `metadata`.
+
 ### Changed
 
 - **An upload source that is not a `Readable` is adapted when the idle guard is off.** With `uploadIdleTimeoutMs: 0` a
@@ -23,6 +49,19 @@ note on each entry is the compatibility contract — read it, not the number.
 
   **Apply to a derived backend:** nothing to change; an old-style stream body now reaches the uploader as a
   `Readable`, the type its body option names.
+
+- **`metadata` that is a `Map` or any other value that is not an object of pairs is refused.** A `Map` has no own
+  entries, so its pairs were dropped without a word; it now fails with `STORAGE_VALIDATION_FAILED`
+  (`details.field: 'metadata'`) before any request, like a string, an array or `null`.
+
+  **Apply to a derived backend:** pass an object of header-safe strings.
+
+- **`STORAGE_MIME_NOT_ALLOWED` shows the media type alone.** `details.contentType` held the whole value the caller sent,
+  parameters included; it now holds the `type/subtype` without them, and nothing when the value is not a single
+  well-formed type.
+
+  **Apply to a derived backend:** a client that read parameters out of `details.contentType` reads them from the
+  request it sent.
 
 ## [1.1.21] - 2026-11-21
 

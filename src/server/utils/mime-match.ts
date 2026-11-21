@@ -17,6 +17,16 @@ const SINGLE_MEDIA_TYPE =
   /^[ \t]*[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+[ \t]*(?:;[\t \x21-\x2B\x2D-\x7E]*)?$/
 
 /**
+ * Whether `mime` is one well-formed `type/subtype`, with or without parameters, as a header can carry it.
+ *
+ * @param mime - The content type to test.
+ * @returns `true` for a single media type; `false` for a list, a missing part or a character outside the set.
+ */
+export function isSingleMediaType(mime: string): boolean {
+  return typeof mime === 'string' && SINGLE_MEDIA_TYPE.test(mime)
+}
+
+/**
  * Returns `true` when `mime` matches at least one pattern in `whitelist`.
  *
  * Three match modes are supported:
@@ -37,7 +47,7 @@ const SINGLE_MEDIA_TYPE =
  * @returns `true` when any pattern in the whitelist matches.
  */
 export function mimeMatches(mime: string, whitelist: readonly string[]): boolean {
-  if (typeof mime !== 'string' || !SINGLE_MEDIA_TYPE.test(mime)) {
+  if (!isSingleMediaType(mime)) {
     return false
   }
   // Strip RFC 2045 parameters (text after the first semicolon) without optional chaining

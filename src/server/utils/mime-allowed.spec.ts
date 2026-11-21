@@ -46,6 +46,15 @@ describe('assertMimeAllowed', () => {
     expect(details).toStrictEqual({ contentType: 'text/html' })
   })
 
+  it('shows the media type alone, without its parameters', () => {
+    // The parameters after `;` are the caller's text, and the type is what the whitelist was compared with.
+    const { details } = refusal(() => {
+      assertMimeAllowed(['image/png'], 'text/html; charset=utf-8; token=abc123')
+    })
+
+    expect(details).toStrictEqual({ contentType: 'text/html' })
+  })
+
   it.each(['text/plain\r\nX-Injected: 1', 'text/plain\u0000', 'text/plain; name=café'])(
     'refuses %j without repeating it',
     (contentType) => {

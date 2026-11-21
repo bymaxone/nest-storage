@@ -129,9 +129,13 @@ describe('getUploadUrl content-type table', () => {
 
       const details = await detailsOf(service, contentType)
 
-      // A type made of header characters is shown so the caller can see what was refused; any other is not.
-      const printable = /^[\t \x21-\x7E]*$/.test(contentType)
-      expect(details?.contentType).toBe(printable ? contentType : undefined)
+      // Only a bare `type/subtype` is ever shown, the front of what was sent; a value made of anything else is not.
+      const shown = details?.contentType
+      if (!/^[\t \x21-\x7E]*$/.test(contentType)) expect(shown).toBeUndefined()
+      if (shown !== undefined) {
+        expect(shown).toMatch(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/)
+        expect(contentType.startsWith(shown as string)).toBe(true)
+      }
       expect(details).not.toHaveProperty('whitelist')
       expect(JSON.stringify(details)).not.toContain('image/*')
     },
