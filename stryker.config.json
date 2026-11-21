@@ -23,6 +23,7 @@
   "timeoutMS": 15000,
   "mutate": [
     "src/server/**/*.ts",
+    "src/observability/**/*.ts",
     "!src/**/*.spec.ts",
     "!src/**/index.ts",
     "!src/server/interfaces/**",

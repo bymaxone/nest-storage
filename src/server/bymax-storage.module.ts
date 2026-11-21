@@ -36,6 +36,9 @@ import { StorageService } from './services/storage.service'
 import { SignedUrlService } from './services/signed-url.service'
 import { ValidationService } from './services/validation.service'
 import { FileScannerService } from './services/file-scanner.service'
+import { StorageMetricsTally } from './observability/storage-metrics-tally'
+import { StorageObserver } from './observability/storage-observer'
+import { StorageTracing } from './observability/storage-tracing'
 import { IdempotencyCache } from './utils/idempotency-cache'
 import { emit } from './utils/log-event'
 import { STORAGE_LOG_EVENTS } from './utils/log-events'
@@ -159,6 +162,10 @@ export class BymaxStorageModule {
             DEFAULT_IDEMPOTENCY_CACHE_TTL_MS,
           ),
       },
+      // The counts and the span seam the services report to; the optional `observability` subpath reads the tally.
+      StorageMetricsTally,
+      StorageTracing,
+      StorageObserver,
       StorageService,
       SignedUrlService,
       BucketLifecycleService,
@@ -186,6 +193,7 @@ export class BymaxStorageModule {
       StorageService,
       SignedUrlService,
       BucketLifecycleService,
+      StorageMetricsTally,
       BYMAX_STORAGE_OPTIONS,
       BYMAX_STORAGE_S3_CLIENT,
       BYMAX_STORAGE_UPLOAD_VALIDATORS,

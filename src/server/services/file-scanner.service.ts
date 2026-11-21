@@ -4,7 +4,7 @@
  * is a valid state — guard callers with `isEnabled()` before calling `scan()`.
  * @layer server/services
  */
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { BYMAX_STORAGE_OPTIONS, BYMAX_STORAGE_FILE_SCANNER } from '../bymax-storage.constants'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { IFileScanner, FileScanResult } from '../interfaces/file-scanner.interface'
@@ -16,6 +16,7 @@ import { cutText } from '../utils/cut-text'
 import { emit } from '../utils/log-event'
 import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 import { failureError } from '../utils/provider-failure-log'
+import { StorageObserver } from '../observability/storage-observer'
 
 /** What the log line holds when the details cannot be turned into text. */
 const UNSERIALISABLE = '[unserialisable]'
@@ -92,6 +93,7 @@ export class FileScannerService {
   constructor(
     @Inject(BYMAX_STORAGE_OPTIONS) private readonly options: ResolvedBymaxStorageOptions,
     @Inject(BYMAX_STORAGE_FILE_SCANNER) private readonly scanner: IFileScanner | null,
+    @Optional() @Inject(StorageObserver) private readonly observer?: StorageObserver,
   ) {}
 
   /**
@@ -142,7 +144,18 @@ export class FileScannerService {
         'FileScannerService.scan() called without a configured scanner — guard with isEnabled() first.',
       )
     }
-    const result = await this.scanLogged(this.scanner, input, caller)
+    const scanner = this.scanner
+    const run = (): Promise<FileScanResult> => this.evaluate(scanner, input, caller)
+    return this.observer === undefined ? run() : this.observer.scan(input.mode, run)
+  }
+
+  /** Runs the scanner and applies the library's policy to what it answered. */
+  private async evaluate(
+    scanner: IFileScanner,
+    input: ScanInput,
+    caller: Record<string, unknown>,
+  ): Promise<FileScanResult> {
+    const result = await this.scanLogged(scanner, input, caller)
     const status = result?.status
     const engine = scannerLabel(result?.engine)
     const threat = scannerLabel(result?.threat)

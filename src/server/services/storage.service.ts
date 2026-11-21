@@ -6,7 +6,7 @@
  * URL building.
  * @layer server/services
  */
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -14,7 +14,6 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
-  PutObjectCommand,
   type PutObjectCommandInput,
 } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
@@ -41,7 +40,6 @@ import { StorageException } from '../errors/storage-exception'
 import { resolveBucket as resolveBucketInput } from '../utils/call-input'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
-import { mapSizeLimitError } from '../errors/size-limit-exception'
 import { describeCleanupFailure, withCleanupFailure } from '../errors/scan-cleanup-error'
 import {
   abortFailureLogger,
@@ -60,7 +58,6 @@ import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constant
 import { buildACL } from '../utils/header-utils'
 import {
   destroyStream,
-  getBodySize,
   isBufferLike,
   type UploadBody,
 } from '../utils/stream-utils'
@@ -71,7 +68,6 @@ import { assertScannedSize, boundStreamSize, bufferStreamForScan, withBytesBody 
 import { guardDownloadBody } from '../utils/download-body'
 import { escapeForLog } from '../utils/log-value'
 import {
-  abortOnBodyFailure,
   abortable,
   bindToSignal,
   CLEANUP_DEADLINE_MS,
@@ -86,13 +82,13 @@ import {
   buildUploadResult,
   putObjectHeaders,
   validationInput,
-  emitProgress,
   forwardProgress,
   normalizeScanBody,
-  normalizeSingleShotBody,
 } from '../utils/upload-support'
 import { assertMaxBytes, readDownloadBody } from '../utils/download-buffer'
 import { pickUploadStrategy } from '../utils/upload-strategy'
+import { Observed, StorageObserver } from '../observability/storage-observer'
+import { uploadSingleShot, type UploadContext } from '../utils/upload-single-shot'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
 
 /** Per-call options that only need to override the target bucket. */
@@ -122,6 +118,7 @@ export class StorageService {
     @Inject(BYMAX_STORAGE_IDEMPOTENCY_CACHE) private readonly idempotencyCache: IdempotencyCache,
     @Inject(ValidationService) private readonly validation: ValidationService,
     @Inject(FileScannerService) private readonly scanner: FileScannerService,
+    @Optional() @Inject(StorageObserver) protected readonly observer?: StorageObserver,
   ) {}
 
   /**
@@ -139,6 +136,11 @@ export class StorageService {
    * @returns The upload result.
    * @throws StorageException for missing configuration, body, or content type.
    */
+  @Observed<UploadResult>('upload', {
+    span: 'storage.upload',
+    describe: (result) => ({ 'bymax.storage.multipart': String(result.multipart) }),
+    bytes: (result) => (result.fromIdempotencyCache ? undefined : result.size),
+  })
   async upload(options: UploadOptions): Promise<UploadResult> {
     try {
       return await this.uploadOwningBody(options)
@@ -187,7 +189,7 @@ export class StorageService {
     const result =
       strategy === 'multipart'
         ? await this.uploadMultipart(validatedOptions, finalKey, bucket, context)
-        : await this.uploadSingleShot(validatedOptions, finalKey, bucket, context)
+        : await uploadSingleShot(this.uploadContext, validatedOptions, finalKey, bucket, context)
 
     // Post-upload scan: an abort ends the wait, not the scan; an infected stored object is still deleted.
     const stored = { ...context, stored: true }
@@ -317,7 +319,7 @@ export class StorageService {
           event: STORAGE_LOG_EVENTS.scanCleanupFailed,
           message: 'The rejected object is still stored',
           storedKey: escapeForLog(finalKey),
-          cleanupFailure: escapeForLog(describeCleanupFailure(deleteErr)),
+          cleanupFailure: describeCleanupFailure(deleteErr),
         })
         throw withCleanupFailure(scanErr, { key }, deleteErr)
       }
@@ -333,6 +335,7 @@ export class StorageService {
    * @returns The object metadata.
    * @throws StorageException `STORAGE_OBJECT_NOT_FOUND` when the key is absent.
    */
+  @Observed('head')
   async head(key: string, options?: BucketScopedOptions): Promise<ObjectMetadata> {
     this.assertConfigured()
     const finalKey = this.keyResolver.normalize(key)
@@ -409,6 +412,7 @@ export class StorageService {
    * @returns The object stream and its metadata.
    * @throws StorageException `STORAGE_OBJECT_NOT_FOUND` when the body is absent.
    */
+  @Observed('download')
   async download(
     options: DownloadOptions,
   ): Promise<{ stream: NodeJS.ReadableStream; metadata: ObjectMetadata }> {
@@ -485,6 +489,7 @@ export class StorageService {
    * @param key - The raw object key.
    * @param options - Optional per-call bucket override.
    */
+  @Observed('delete')
   async delete(key: string, options?: BucketScopedOptions): Promise<void> {
     this.assertConfigured()
     const finalKey = this.keyResolver.normalize(key)
@@ -523,6 +528,7 @@ export class StorageService {
    *   (301), `STORAGE_TIMEOUT`, or `STORAGE_PROVIDER_ERROR`; `STORAGE_NOT_CONFIGURED` and
    *   `STORAGE_BUCKET_UNDEFINED` before any request.
    */
+  @Observed('check_bucket')
   async checkBucket(options?: BucketScopedOptions): Promise<void> {
     this.assertConfigured()
     const bucket = this.resolveBucket(options?.bucket)
@@ -537,6 +543,11 @@ export class StorageService {
     }
   }
 
+  /** What the single-shot upload needs of this service. */
+  private get uploadContext(): UploadContext {
+    return { s3Provider: this.s3Provider, keyResolver: this.keyResolver, options: this.options }
+  }
+
   /** Throws when the S3 client was never built (missing credentials). */
   private assertConfigured(): void {
     if (!this.s3Provider.isConfigured()) {
@@ -547,43 +558,6 @@ export class StorageService {
   /** Resolves the target bucket from a per-call override or the module default. */
   private resolveBucket(perCall?: string): string {
     return resolveBucketInput(perCall, this.options.bucket)
-  }
-
-  /** Single `PutObject` upload for bodies below the multipart threshold. */
-  private async uploadSingleShot(
-    options: UploadOptions,
-    finalKey: string,
-    bucket: string,
-    caller: Record<string, unknown>,
-  ): Promise<UploadResult> {
-    const total = options.size ?? getBodySize(options.body)
-    const input: PutObjectCommandInput = {
-      ...putObjectHeaders(options, this.options, finalKey, bucket),
-      Body: normalizeSingleShotBody(options.body),
-      ContentLength: total,
-    }
-    const watch = abortOnBodyFailure(input.Body, options.abortSignal)
-    try {
-      const response = await this.s3Provider
-        .getClient()
-        .send(new PutObjectCommand(input), sendOptions(watch.signal))
-      if (options.onProgress) {
-        emitProgress(options.onProgress, total, total)
-      }
-      return buildUploadResult(this.keyResolver, this.options, {
-        finalKey,
-        bucket,
-        etag: response.ETag,
-        versionId: response.VersionId,
-        size: total,
-        contentType: options.contentType,
-        multipart: false,
-      })
-    } catch (err) {
-      const context = { ...caller, op: 'upload-single' }
-      const mapped = mapSizeLimitError(watch.failure(), context) ?? mapAwsError(err, context)
-      throw failureOrAbort(options.abortSignal, context, mapped)
-    }
   }
 
   /**
@@ -690,6 +664,7 @@ export class StorageService {
    * @returns One page of objects plus `commonPrefixes`, truncation, and the next token.
    * @throws StorageException mapped from any AWS failure.
    */
+  @Observed('list')
   async list(options: ListOptions): Promise<ListResult> {
     this.assertConfigured()
     const bucket = this.resolveBucket(options.bucket)
@@ -725,6 +700,7 @@ export class StorageService {
    * @returns The new object's ETag.
    * @throws StorageException mapped from any AWS failure.
    */
+  @Observed('copy')
   async copy(options: CopyOptions): Promise<{ etag: string }> {
     this.assertConfigured()
     assertHeaderValues({ cacheControl: options.cacheControl })
@@ -765,6 +741,7 @@ export class StorageService {
    * @param options - Optional per-call bucket override.
    * @returns The deleted keys and the per-key failures.
    */
+  @Observed('delete_many')
   async deleteMany(keys: string[], options?: DeleteManyOptions): Promise<DeleteManyResult> {
     this.assertConfigured()
     if (keys.length === 0) {

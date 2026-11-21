@@ -5,7 +5,7 @@
  * credentials — they are NEVER logged.
  * @layer server/services
  */
-import { Inject, Injectable } from '@nestjs/common'
+import { Inject, Injectable, Optional } from '@nestjs/common'
 import {
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
@@ -20,6 +20,7 @@ import type { SignedGetUrlOptions, SignedPutUrlOptions, MultipartUploadUrlsOptio
 import type { SignedUrlResult } from '../../shared/types/signed-url-types'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
+import { Observed, StorageObserver } from '../observability/storage-observer'
 import { StorageException } from '../errors/storage-exception'
 import { resolveBucket as resolveBucketInput } from '../utils/call-input'
 import { mapAwsError } from '../errors/aws-error-mapper'
@@ -39,6 +40,7 @@ export class SignedUrlService {
     @Inject(BYMAX_STORAGE_OPTIONS) private readonly options: ResolvedBymaxStorageOptions,
     @Inject(S3ClientProvider) private readonly s3Provider: S3ClientProvider,
     @Inject(KeyResolverService) private readonly keyResolver: KeyResolverService,
+    @Optional() @Inject(StorageObserver) protected readonly observer?: StorageObserver,
   ) {}
 
   /**
@@ -52,6 +54,7 @@ export class SignedUrlService {
    * @throws StorageException `STORAGE_NOT_CONFIGURED` when the client is absent.
    * @throws StorageException `STORAGE_SIGNED_URL_TTL_INVALID` for non-positive TTL.
    */
+  @Observed('get_download_url', { span: 'storage.download_url' })
   async getDownloadUrl(options: SignedGetUrlOptions): Promise<SignedUrlResult> {
     this.assertConfigured()
     assertHeaderValues({
@@ -111,6 +114,7 @@ export class SignedUrlService {
    * @throws StorageException `STORAGE_SIGNED_URL_TTL_INVALID` for non-positive TTL.
    * @throws StorageException `STORAGE_MIME_NOT_ALLOWED` when `validation.mimeWhitelist` is set and excludes `contentType`.
    */
+  @Observed('get_upload_url')
   async getUploadUrl(options: SignedPutUrlOptions): Promise<SignedUrlResult> {
     this.assertConfigured()
     assertMimeAllowed(this.options.validation?.mimeWhitelist, options.contentType)
@@ -187,6 +191,7 @@ export class SignedUrlService {
    * @throws StorageException `STORAGE_PROVIDER_ERROR` when no `UploadId` is returned.
    * @throws StorageException `STORAGE_MIME_NOT_ALLOWED` when `validation.mimeWhitelist` is set and excludes `contentType`.
    */
+  @Observed('get_multipart_upload_urls')
   async getMultipartUploadUrls(options: MultipartUploadUrlsOptions): Promise<MultipartUploadUrlsResult> {
     this.assertConfigured()
     assertMimeAllowed(this.options.validation?.mimeWhitelist, options.contentType)

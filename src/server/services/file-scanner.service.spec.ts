@@ -200,7 +200,7 @@ describe('FileScannerService', () => {
         expect(entry.event).toBe('STORAGE_SCAN_INFECTED')
         const details = entry.details as string
         expect(details).not.toContain('\n')
-        expect(details.startsWith('{\\"note\\":\\"a\\\\nb')).toBe(true)
+        expect(details.startsWith('{"note":"a\\nb')).toBe(true)
         // The first 300 characters of the JSON text are kept: 13 of them are the key, the quote and `a\\nb`.
         expect(details).toContain('x'.repeat(287))
         expect(details).not.toContain('x'.repeat(288))

@@ -5,7 +5,7 @@
  */
 import { HttpStatus } from '@nestjs/common'
 import { StorageException } from './storage-exception'
-import { describeError } from '../utils/describe-error'
+import { projectProviderFailure } from '../utils/provider-failure-log'
 
 /** The status of `error` when it is one of the `HttpStatus` values, else `undefined` (the code's own). */
 function knownStatus(error: StorageException): HttpStatus | undefined {
@@ -26,13 +26,15 @@ function cleanupErrorCode(error: unknown): string {
 /**
  * Describes why a delete failed, for a log line: a `StorageException`'s own `message` is the generic
  * 'Storage Exception', so its code is used; what the provider said was logged when the call was mapped.
+ * Anything else is described as the provider's own errors are in the log: secrets masked, the length
+ * bounded and control characters escaped.
  *
  * @param error - What the delete threw.
  * @returns The text for the log.
  */
 export function describeCleanupFailure(error: unknown): string {
   if (!(error instanceof StorageException)) {
-    return describeError(error)
+    return projectProviderFailure(error).message
   }
   return error.code
 }

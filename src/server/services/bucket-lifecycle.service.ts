@@ -5,7 +5,7 @@
  * change is a read-modify-write.
  * @layer server/services
  */
-import { Inject, Injectable } from '@nestjs/common'
+import { Inject, Injectable, Optional } from '@nestjs/common'
 import {
   DeleteBucketLifecycleCommand,
   GetBucketLifecycleConfigurationCommand,
@@ -22,6 +22,7 @@ import type {
 } from '../interfaces/lifecycle-options.interface'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
+import { Observed, StorageObserver } from '../observability/storage-observer'
 import { StorageException } from '../errors/storage-exception'
 import { callDetails } from '../utils/call-details'
 import { resolveBucket as resolveBucketInput } from '../utils/call-input'
@@ -79,6 +80,7 @@ export class BucketLifecycleService {
     // Explicit token injection: the published bundle carries no decorator metadata.
     @Inject(S3ClientProvider) private readonly s3Provider: S3ClientProvider,
     @Inject(KeyResolverService) private readonly keyResolver: KeyResolverService,
+    @Optional() @Inject(StorageObserver) protected readonly observer?: StorageObserver,
   ) {}
 
   /**
@@ -93,6 +95,7 @@ export class BucketLifecycleService {
    * @returns Every rule in the bucket.
    * @throws StorageException for missing configuration, an unsupported provider, or a provider error.
    */
+  @Observed('lifecycle_get')
   async get(options?: LifecycleBucketOptions): Promise<BucketLifecycleRuleView[]> {
     this.assertConfigured()
     const bucket = this.resolveBucket(options?.bucket)
@@ -111,6 +114,7 @@ export class BucketLifecycleService {
    * @example
    *   await lifecycle.upsert({ id: 'expire-tmp', prefix: 'expiring/', expirationDays: 7 })
    */
+  @Observed('lifecycle_upsert')
   async upsert(rule: LifecycleRuleInput, options?: LifecycleBucketOptions): Promise<void> {
     this.assertConfigured()
     const owned = this.toRule(rule)
@@ -137,6 +141,7 @@ export class BucketLifecycleService {
    * @throws StorageException `STORAGE_LIFECYCLE_RULE_INVALID` for a bad id or an id that names a rule
    *   outside `keyPrefix`; a provider failure otherwise.
    */
+  @Observed('lifecycle_remove')
   async remove(id: string, options?: LifecycleBucketOptions): Promise<boolean> {
     this.assertConfigured()
     this.assertRuleId(id)

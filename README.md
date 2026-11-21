@@ -81,6 +81,9 @@ minimal.
   provider-specific operations this surface does not wrap
 - ✅ **Key prefix and server-side encryption** — `keyPrefix` is prepended after normalization and the
   keys the library returns are relative to it; AES256 or `aws:kms`, globally or per upload
+- ✅ **Metrics, readiness and spans** — an optional `./observability` subpath publishes Prometheus
+  metrics and a bucket readiness check; spans start when `@opentelemetry/api` is installed. Labels are
+  closed sets: no key, bucket or prefix is ever a label
 - ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and
   `noUncheckedIndexedAccess`; zero `any`
 
@@ -91,11 +94,12 @@ minimal.
 | Subpath    | Contents                                                                                                                                                                           |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `.`        | Server runtime: `BymaxStorageModule`, `StorageService`, `SignedUrlService`, `BucketLifecycleService`, `providerRecipes`, DI tokens, interfaces, `StorageException`, `NoOpUploadValidator`, `NoOpFileScanner` |
+| `./observability` | Optional: `StorageMetrics` (Prometheus metrics), `StorageHealthIndicator` (readiness of the bucket) |
 | `./shared` | Framework-free types (`UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`, `StorageErrorResponse`) + `STORAGE_ERROR_CODES` + `StorageErrorCode` + the default MIME whitelists and the TTL and multipart default constants                                            |
 
 The root re-exports some `./shared` names for convenience; import the rest from the subpath.
 
-Both subpaths ship ESM **and** CommonJS with declarations for each format, so a
+All subpaths ship ESM **and** CommonJS with declarations for each format, so a
 `require()` consumer receives CommonJS declarations rather than ESM ones. The
 `pnpm check:exports` gate verifies this against the packed tarball.
 
@@ -104,6 +108,7 @@ Both subpaths ship ESM **and** CommonJS with declarations for each format, so a
 | Subpath      | Required peers                                                                                                                                                                  |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `.` (server) | `@nestjs/common ^11.0.16`, `@nestjs/core ^11.1.18`, `@aws-sdk/client-s3 ^3.700`, `@aws-sdk/lib-storage ^3.700`, `@aws-sdk/s3-request-presigner ^3.700`, `reflect-metadata ^0.2` |
+| `./observability` | `@bymax-one/nest-core >=1.6.15` (to be discovered), `prom-client ^15`; all optional |
 | `./shared`   | None                                                                                                                                                                            |
 
 ---
@@ -819,6 +824,85 @@ try {
   }
 }
 ```
+
+---
+
+## 📊 Observability
+
+The main entry counts and times every operation and starts spans. The packages below are
+optional peers: install what you use.
+
+```bash
+pnpm add prom-client @bymax-one/nest-core @opentelemetry/api
+```
+
+### Metrics
+
+```ts
+import { Module } from '@nestjs/common'
+import { BymaxCoreModule } from '@bymax-one/nest-core'
+import { BymaxStorageModule } from '@bymax-one/nest-storage'
+import { StorageHealthIndicator, StorageMetrics } from '@bymax-one/nest-storage/observability'
+
+@Module({
+  imports: [
+    BymaxCoreModule.forRoot({ metrics: { enabled: true }, health: { autoDiscover: true } }),
+    BymaxStorageModule.forRoot({
+      endpoint: process.env.S3_ENDPOINT ?? '',
+      region: 'us-east-1',
+      bucket: 'uploads',
+      credentials: { accessKeyId: process.env.S3_KEY ?? '', secretAccessKey: process.env.S3_SECRET ?? '' },
+    }),
+  ],
+  providers: [StorageMetrics, StorageHealthIndicator],
+})
+export class AppModule {}
+```
+
+`@bymax-one/nest-core` finds both classes by their markers and calls `registerMetrics` on `StorageMetrics` once at bootstrap.
+
+| Metric | Type | Labels | What it counts |
+| --- | --- | --- | --- |
+| `bymax_storage_operations_total` | counter | `operation`, `outcome` | Operations that ended |
+| `bymax_storage_operation_duration_seconds` | histogram | `operation` | How long they took |
+| `bymax_storage_bytes_uploaded_total` | counter | none | Bytes of uploads that succeeded |
+| `bymax_storage_scans_total` | counter | `verdict` | File scans |
+
+The labels come from closed sets, so the number of series never grows with traffic and no key, bucket, prefix or
+message is ever a label:
+
+- `operation`: `upload`, `download`, `head`, `delete`, `delete_many`, `list`, `copy`, `get_download_url`,
+  `get_upload_url`, `get_multipart_upload_urls`, `check_bucket`, `lifecycle_get`, `lifecycle_upsert`,
+  `lifecycle_remove`.
+- `outcome`: `success`, `not_found` (the object was absent), `aborted` (your `abortSignal`, or an aborted multipart
+  upload), `error`.
+- `verdict`: `clean`, `infected`, `unknown`, `timeout`, `error`.
+
+`exists()` is counted as `head`, and `downloadBuffer()` as `download`. A download is timed to the response, not to the
+last byte. A result returned from the idempotency cache counts as an upload but adds no bytes. The counters start
+with the module; the histogram starts when `StorageMetrics` registers.
+
+### Readiness
+
+`StorageHealthIndicator` reports under the name `storage`. It asks `StorageService.checkBucket()` for one
+`HeadBucket` and answers `up` or `down` with no detail, so nothing about the bucket, the region or the endpoint
+leaves with it. The probe has its own deadline, the answer is kept, and checks that arrive
+while one is running share it. The probe is counted as `check_bucket`.
+
+### Spans
+
+Spans start through `@opentelemetry/api` when it is installed and a tracer is registered; without it the operation
+runs as it is.
+
+| Span | Around |
+| --- | --- |
+| `storage.upload` | `upload()` |
+| `storage.download_url` | `getDownloadUrl()` |
+| `storage.scan` | a file scan |
+
+Attributes are `bymax.storage.outcome` (the outcome above), `bymax.storage.multipart` (`upload` only: `true` or
+`false`) and `bymax.storage.scan_mode` (`scan` only: `pre-upload` or `post-upload`). A failed operation sets the
+span status to error with the library error code, never its message.
 
 ---
 

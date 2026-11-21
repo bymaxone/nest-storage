@@ -97,6 +97,19 @@ describe('withCleanupFailure', () => {
       expect(describeCleanupFailure(refused)).toBe('STORAGE_PROVIDER_ERROR')
     })
 
+    it('masks a secret, cuts the text and escapes control characters of anything else', () => {
+      const failure = new Error(`denied X-Amz-Signature=abc123 a\nb ${'x'.repeat(400)}`)
+
+      const text = describeCleanupFailure(failure)
+
+      expect(text).toContain('X-Amz-Signature=[redacted]')
+      expect(text).not.toContain('abc123')
+      expect(text).not.toContain('\n')
+      expect(text).toContain('a\\nb')
+      expect(text.length).toBeLessThanOrEqual(300 + 20)
+      expect(text).not.toContain('x'.repeat(300))
+    })
+
     it('describes anything else by its message, without throwing', () => {
       expect(describeCleanupFailure(new Error('delete refused'))).toBe('delete refused')
       expect(describeCleanupFailure(Object.create(null))).toBe('non-printable rejection value')
