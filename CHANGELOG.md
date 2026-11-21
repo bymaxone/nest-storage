@@ -57,14 +57,13 @@ note on each entry is the compatibility contract — read it, not the number.
 ### Changed
 
 - **The span attributes are named, and the scan span takes the two scan modes.** `StorageSpanAttributes` was
-  `Readonly<Record<string, string>>`; it is now an interface with the three attributes the library sets
-  (`bymax.storage.outcome`, `bymax.storage.multipart`, `bymax.storage.scan_mode`), so a call site cannot add a key
+  `Readonly<Record<string, string>>`; it is now an interface naming the attributes the library sets, so a call site cannot add a key
   that carries a bucket or a payload, and the scan span's `mode` parameter is `'pre-upload' | 'post-upload'` instead of
   `string`.
 
-  **Apply to a derived backend:** code that calls the scan span with a mode other than the two, that builds
-  attributes with another key, or that reads an attribute by a key other than the three does not compile against the
-  interface; use the two modes and the three names. Nothing changes at run time.
+  **Apply to a derived backend:** code that calls the scan span with a mode the interface does not declare, that builds
+  attributes with another key, or that reads an attribute by a key it does not declare does not compile against the
+  interface; use the declared modes and names. Nothing changes at run time.
 
 - **`defaultPublicRead` and `forcePathStyle` must be booleans, and so must a per-call `publicRead`.** A string from an
   environment variable, `'false'`, is truthy: it passed the `??` default and made every upload `public-read`. A value
