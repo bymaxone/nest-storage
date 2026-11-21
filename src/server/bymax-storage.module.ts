@@ -21,7 +21,7 @@ import type {
   BymaxStorageModuleOptions,
   BymaxStorageModuleOptionsFactory,
 } from './interfaces/storage-module-options.interface'
-import { validateOptions } from './config/validate-options'
+import { isOwnRefusal, validateOptions } from './config/validate-options'
 import { applyDefaults } from './config/apply-defaults'
 import { snapshotOptions } from './config/snapshot-options'
 import type { ResolvedBymaxStorageOptions } from './config/resolved-options'
@@ -45,19 +45,10 @@ import { IdempotencyCache } from './utils/idempotency-cache'
 import { emit } from './utils/log-event'
 import { STORAGE_LOG_EVENTS } from './utils/log-events'
 
-/** Whether `error` is one of the library's own refusals; a value whose prototype cannot be read is not. */
-function isLibraryError(error: unknown): boolean {
-  try {
-    return error instanceof StorageException
-  } catch {
-    return false
-  }
-}
-
 /** Refuses what made the options unreadable with the library's own code, keeping the host's error as the cause. */
 function refuseUnreadable(error: unknown): never {
   // The host's error text never reaches the response.
-  if (isLibraryError(error)) throw error
+  if (isOwnRefusal(error)) throw error
   throw new StorageException(
     STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG,
     undefined,
