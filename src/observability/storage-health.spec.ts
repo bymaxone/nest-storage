@@ -25,7 +25,7 @@ describe('StorageHealthIndicator', () => {
 
   it('is named storage and discovered by the documented metadata key', () => {
     expect(STORAGE_HEALTH_INDICATOR_NAME).toBe('storage')
-    expect(new StorageHealthIndicator({} as StorageService).name).toBe('storage')
+    expect(new StorageHealthIndicator(Object.create(null) as StorageService).name).toBe('storage')
     expect(HEALTH_INDICATOR_METADATA).toBe('bymax-one:health-indicator')
     expect(Reflect.getMetadata(HEALTH_INDICATOR_METADATA, StorageHealthIndicator)).toBe(true)
   })

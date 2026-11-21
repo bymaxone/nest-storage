@@ -112,5 +112,8 @@ export function guardIdleBody(body: UploadBody, idleMs: number): Buffer | Uint8A
   if (isBufferLike(body)) {
     return body
   }
-  return idleMs === 0 ? (body as Readable) : withIdleTimeout(body, idleMs)
+  if (idleMs !== 0) return withIdleTimeout(body, idleMs)
+  // A stream that is not a `Readable` (an old-style stream that only has `pipe`) is adapted, since the
+  // uploader needs a `Readable`; a `Readable` goes through as it is.
+  return body instanceof Readable ? body : new Readable().wrap(body)
 }
