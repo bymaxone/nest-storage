@@ -50,10 +50,12 @@ const MAX_FIELD_LENGTH = 128
 
 /** What `read` returns, or `undefined` when reading it throws: a getter of the host's or the driver's must not break a log line. */
 function readOrUndefined<T>(read: () => T): T | undefined {
+  // prettier-ignore
   try {
     return read()
-    // Stryker disable next-line BlockStatement: an empty block ends the function with `undefined`, which is what `return undefined` returns (equivalent).
-  } catch {
+  }
+  // Stryker disable next-line BlockStatement: an empty catch block ends the function with `undefined`, which is what `return undefined` returns (equivalent).
+  catch {
     return undefined
   }
 }
