@@ -5,6 +5,8 @@
  * @layer server/utils
  */
 import { Readable } from 'node:stream'
+import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { StorageException } from '../errors/storage-exception'
 import { describeError } from './describe-error'
 import { destroyStream, isBufferLike, type UploadBody } from './stream-utils'
 
@@ -107,13 +109,26 @@ export function withIdleTimeout(
  * @param body - The upload body.
  * @param idleMs - Longest silence allowed; `0` disables the guard.
  * @returns The body to hand to the uploader.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when the body cannot be examined; the error is the `cause`.
  */
 export function guardIdleBody(body: UploadBody, idleMs: number): Buffer | Uint8Array | Readable {
-  if (isBufferLike(body)) {
-    return body
+  // Examining a body runs host code when it is a Proxy (its `getPrototypeOf` trap), so a throw anywhere here is
+  // the library's refusal with the host's error as the cause.
+  try {
+    if (isBufferLike(body)) {
+      return body
+    }
+    if (idleMs !== 0) return withIdleTimeout(body, idleMs)
+    // A stream that is not a `Readable` (an old-style stream that only has `pipe`) is adapted, since the
+    // uploader needs a `Readable`; a `Readable` goes through as it is.
+    return body instanceof Readable ? body : new Readable().wrap(body)
+  } catch (error) {
+    throw new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED,
+      undefined,
+      { reason: 'the stream body could not be read' },
+      undefined,
+      error,
+    )
   }
-  if (idleMs !== 0) return withIdleTimeout(body, idleMs)
-  // A stream that is not a `Readable` (an old-style stream that only has `pipe`) is adapted, since the
-  // uploader needs a `Readable`; a `Readable` goes through as it is.
-  return body instanceof Readable ? body : new Readable().wrap(body)
 }
