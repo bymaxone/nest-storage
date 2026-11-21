@@ -5,6 +5,7 @@
  */
 import { PassThrough, Readable } from 'node:stream'
 import { runInNewContext } from 'node:vm'
+import { EventEmitter } from 'node:events'
 import { guardIdleBody, SourceIdleError, withIdleTimeout } from './idle-timeout'
 
 async function collect(stream: AsyncIterable<unknown>): Promise<string> {
@@ -177,7 +178,11 @@ describe('withIdleTimeout', () => {
 
     const reason: unknown = await Promise.race([
       collect(withIdleTimeout(source, 1000)).catch((err: unknown) => err),
-      new Promise((resolve) => setTimeout(() => { resolve(stalled) }, 400)),
+      new Promise((resolve) =>
+        setTimeout(() => {
+          resolve(stalled)
+        }, 400),
+      ),
     ])
 
     expect(reason).not.toBe(stalled)
@@ -247,6 +252,23 @@ describe('guardIdleBody', () => {
     const source = new Readable({ read() {} })
 
     expect(guardIdleBody(source, 0)).toBe(source)
+  })
+
+  it('adapts a stream that is not a Readable when the guard is off, and passes its data on', async () => {
+    // An old-style stream has `pipe` and events but is not a Readable; the uploader needs a Readable.
+    const legacy = new EventEmitter() as unknown as NodeJS.ReadableStream
+    Object.assign(legacy, { pause: () => legacy, resume: () => legacy })
+
+    const adapted = guardIdleBody(legacy, 0) as Readable
+    const received: Buffer[] = []
+    adapted.on('data', (chunk: Buffer) => received.push(chunk))
+    const ended = new Promise<void>((resolve) => adapted.on('end', resolve))
+    legacy.emit('data', Buffer.from('abc'))
+    legacy.emit('end')
+    await ended
+
+    expect(adapted).toBeInstanceOf(Readable)
+    expect(Buffer.concat(received).toString()).toBe('abc')
   })
 
   it('wraps a stream when the guard is on', () => {

@@ -48,7 +48,7 @@ export function withSizeLimit(
   })
   // `pipeline` destroys the source when the guard fails, and keeps an error on either side from
   // surfacing as an unhandled 'error' event.
-  pipeline(source as Readable, guard, () => undefined)
+  pipeline(source, guard, () => undefined)
   return guard
 }
 
