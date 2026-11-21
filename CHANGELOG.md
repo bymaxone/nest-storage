@@ -29,15 +29,13 @@ note on each entry is the compatibility contract — read it, not the number.
 - **An option array that lies about its length can no longer stall the start.** An array of `validation.mimeWhitelist`
   or `validation.customValidators` whose `length` answered a small number and then a very large one kept the copy of
   the options busy for seconds before the refusal. The length is read once, the copy takes at most that many entries,
-  and an array over the 1000-entry bound is refused without being walked.
+  and an array over the bound is refused without being walked.
 
   **Apply to a derived backend:** nothing to change.
 
 ### Changed
 
-- **The README names the checks on the options.** The paragraphs on the boolean flags, the 1000-entry bound and the
-  `STORAGE_INVALID_CONFIG` refusal of an option that cannot be read, with the exception's `cause`, are in the
-  configuration section.
+- **The README describes the checks on the options.** The configuration section now covers them.
 
   **Apply to a derived backend:** nothing to change; only the text was missing.
 
