@@ -41,3 +41,25 @@ export function readOnce<T extends object, K extends keyof T>(
   }
   return copy
 }
+
+/**
+ * Copies the own enumerable fields of a caller's request into a plain object, reading each once.
+ *
+ * @param request - The caller's request.
+ * @returns A plain copy of its own enumerable fields.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when reading a field throws; the error that was thrown is
+ *   the `cause` and none of its text is in the response.
+ */
+export function copyRequest<T extends object>(request: T): T {
+  try {
+    return { ...request }
+  } catch (error) {
+    throw new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED,
+      undefined,
+      { reason: 'the request could not be read' },
+      undefined,
+      error,
+    )
+  }
+}

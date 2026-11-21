@@ -88,10 +88,28 @@ export function assertMetadata(metadata: Readonly<Record<string, string>> | unde
  */
 function assertMetadataKind(metadata: unknown): void {
   // The tag tells an object of pairs from a `Map`, a `Set`, an array or a string, in any realm; a `Map`
-  // has no own entries to read, so its pairs would be dropped without a word.
-  if (Object.prototype.toString.call(metadata) !== '[object Object]') {
+  // has no own entries to read, so its pairs would be dropped without a word. Reading the tag runs host
+  // code when the value is a Proxy or has a `Symbol.toStringTag` getter.
+  let tag: string
+  try {
+    tag = Object.prototype.toString.call(metadata)
+  } catch (error) {
+    throw metadataUnreadable(error)
+  }
+  if (tag !== '[object Object]') {
     refuse('metadata', 'must be an object of header-safe strings')
   }
+}
+
+/** The refusal of metadata that throws when it is read: the library's code, the host's error as the cause. */
+function metadataUnreadable(cause: unknown): StorageException {
+  return new StorageException(
+    STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED,
+    undefined,
+    { field: 'metadata', reason: 'could not be read' },
+    undefined,
+    cause,
+  )
 }
 
 /**
@@ -108,12 +126,6 @@ export function copyMetadata(metadata: Readonly<Record<string, string>>): Record
   try {
     return { ...metadata }
   } catch (error) {
-    throw new StorageException(
-      STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED,
-      undefined,
-      { field: 'metadata', reason: 'could not be read' },
-      undefined,
-      error,
-    )
+    throw metadataUnreadable(error)
   }
 }

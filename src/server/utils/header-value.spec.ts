@@ -213,4 +213,38 @@ describe('copyMetadata', () => {
       error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'metadata' } },
     })
   })
+
+  it.each([
+    ['copyMetadata', (m: never) => copyMetadata(m)],
+    [
+      'assertMetadata',
+      (m: never) => {
+        assertMetadata(m)
+      },
+    ],
+  ])(
+    'wraps an error thrown while %s examines what the metadata is, with the error as the cause',
+    (_name, call) => {
+      // Reading the kind runs host code when the value has a Symbol.toStringTag getter or is a Proxy.
+      const failure = new Error('SENTINEL tag getter ran')
+      const metadata = {
+        get [Symbol.toStringTag](): string {
+          throw failure
+        },
+      }
+      let thrown: unknown
+      try {
+        call(metadata as never)
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(StorageException)
+      expect((thrown as StorageException).cause).toBe(failure)
+      expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
+      expect((thrown as StorageException).getResponse()).toMatchObject({
+        error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'metadata' } },
+      })
+    },
+  )
 })

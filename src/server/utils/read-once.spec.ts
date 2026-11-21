@@ -4,7 +4,7 @@
  * @layer server/utils
  */
 import { StorageException } from '../errors/storage-exception'
-import { readOnce } from './read-once'
+import { copyRequest, readOnce } from './read-once'
 
 describe('readOnce', () => {
   it('reads each named field once and copies what it read', () => {
@@ -58,5 +58,42 @@ describe('readOnce', () => {
     expect((thrown as StorageException).getResponse()).toMatchObject({
       error: { code: 'STORAGE_VALIDATION_FAILED' },
     })
+  })
+})
+
+describe('copyRequest', () => {
+  it('copies the own enumerable fields once, so a later read of the original changes nothing', () => {
+    let reads = 0
+    const request = {
+      get a(): string {
+        reads += 1
+        return reads === 1 ? 'first' : 'later'
+      },
+      b: 2,
+    }
+
+    const copy = copyRequest(request)
+
+    expect(copy).toStrictEqual({ a: 'first', b: 2 })
+    expect(reads).toBe(1)
+  })
+
+  it('wraps an error thrown by a field, with the error as the cause and none of its text in the response', () => {
+    const failure = new Error('SENTINEL field getter ran')
+    const request = {
+      get a(): string {
+        throw failure
+      },
+    }
+    let thrown: unknown
+    try {
+      copyRequest(request)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(StorageException)
+    expect((thrown as StorageException).cause).toBe(failure)
+    expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
   })
 })

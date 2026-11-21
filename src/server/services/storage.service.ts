@@ -53,6 +53,7 @@ import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 import { failureError } from '../utils/provider-failure-log'
 import { toListResult } from '../utils/list-result'
 import { assertHeaderValues, copyMetadata } from '../utils/header-value'
+import { copyRequest } from '../utils/read-once'
 import { guardIdleBody } from '../utils/idle-timeout'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { buildACL } from '../utils/header-utils'
@@ -144,7 +145,9 @@ export class StorageService {
     describe: (result) => ({ 'bymax.storage.multipart': result.multipart ? 'true' : 'false' }),
     bytes: uploadedBytesOf,
   })
-  async upload(options: UploadOptions): Promise<UploadResult> {
+  async upload(request: UploadOptions): Promise<UploadResult> {
+    // One read of each field of the caller's request; a field that throws when read is the library's refusal.
+    const options = copyRequest(request)
     try {
       return await this.uploadOwningBody(options)
     } catch (err) {

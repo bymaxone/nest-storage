@@ -95,4 +95,48 @@ describe('StorageService — upload metadata', () => {
     expect(JSON.stringify((thrown as { response: unknown }).response)).not.toContain('SENTINEL')
     expect(send).not.toHaveBeenCalled()
   })
+
+  it.each(['size', 'body', 'contentType', 'metadata'])(
+    'fails with the library code and the host error as the cause when the request field %s throws when read',
+    async (field) => {
+      const send = jest.fn<Promise<unknown>, [unknown]>()
+      const service = await serviceWith(send)
+      const failure = new Error('SENTINEL request getter ran')
+      const request = { ...REQUEST }
+      Object.defineProperty(request, field, {
+        enumerable: true,
+        get: () => {
+          throw failure
+        },
+      })
+
+      const thrown = await service.upload(request as never).catch((error: unknown) => error)
+
+      expect(thrown).toMatchObject({
+        response: { error: { code: 'STORAGE_VALIDATION_FAILED' } },
+        cause: failure,
+      })
+      expect(JSON.stringify((thrown as { response: unknown }).response)).not.toContain('SENTINEL')
+      expect(send).not.toHaveBeenCalled()
+    },
+  )
+
+  it('fails with the library code and the host error as the cause when the metadata throws when its kind is read', async () => {
+    const send = jest.fn<Promise<unknown>, [unknown]>()
+    const service = await serviceWith(send)
+    const failure = new Error('SENTINEL tag getter ran')
+    const metadata = {
+      get [Symbol.toStringTag](): string {
+        throw failure
+      },
+    }
+
+    const thrown = await service.upload({ ...REQUEST, metadata }).catch((error: unknown) => error)
+
+    expect(thrown).toMatchObject({
+      response: { error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'metadata' } } },
+      cause: failure,
+    })
+    expect(send).not.toHaveBeenCalled()
+  })
 })
