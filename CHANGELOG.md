@@ -22,7 +22,7 @@ note on each entry is the compatibility contract — read it, not the number.
   and `bymax_storage_scans_total` with labels from closed sets, and `StorageHealthIndicator` reports the bucket as
   `storage` from one `HeadBucket`. The main entry now exports `StorageMetricsTally` and the closed sets
   (`STORAGE_OPERATIONS`, `STORAGE_OUTCOMES`, `SCAN_VERDICTS`), counts every public operation, and starts the
-  `storage.upload`, `storage.download_url` and `storage.scan` spans when `@opentelemetry/api` is installed. The new
+  `storage.upload`, `storage.download_url` and `storage.scan` spans when `@opentelemetry/api` is installed. `bymax_storage_bytes_uploaded_total` counts the bytes an upload sent, including a stream without a declared `size`. The new
   peers `@bymax-one/nest-core >=1.6.15`, `prom-client ^15` and `@opentelemetry/api ^1.9` are optional.
 
   **Apply to a derived backend:** nothing changes unless you use it. To publish the metrics, add `StorageMetrics` and

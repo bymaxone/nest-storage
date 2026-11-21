@@ -4,9 +4,15 @@
  * exist is `down` with no detail.
  * @layer test/e2e
  */
+import { Readable } from 'node:stream'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { Registry } from 'prom-client'
-import { BymaxStorageModule, StorageService, providerRecipes } from '@bymax-one/nest-storage'
+import {
+  BymaxStorageModule,
+  StorageMetricsTally,
+  StorageService,
+  providerRecipes,
+} from '@bymax-one/nest-storage'
 import { StorageHealthIndicator, StorageMetrics } from '../../src/observability'
 import { startMinio, type MinioHandle } from './fixtures/minio-container'
 
@@ -17,7 +23,7 @@ describe('Storage E2E — observability', () => {
   const registry = new Registry()
 
   /** A module over the live bucket, or over `bucket` when given, with the observability providers. */
-  async function moduleFor(bucket: string): Promise<TestingModule> {
+  async function moduleFor(bucket: string, scan = true): Promise<TestingModule> {
     const built = await Test.createTestingModule({
       imports: [
         BymaxStorageModule.forRoot({
@@ -27,17 +33,21 @@ describe('Storage E2E — observability', () => {
             accessKeyId: minio.accessKeyId,
             secretAccessKey: minio.secretAccessKey,
           }),
-          scanner: {
-            mode: 'pre-upload',
-            impl: {
-              scan: ({ key }) =>
-                Promise.resolve(
-                  key.startsWith('virus')
-                    ? { status: 'infected' as const, engine: 'test', threat: 'EICAR' }
-                    : { status: 'clean' as const, engine: 'test' },
-                ),
-            },
-          },
+          ...(scan
+            ? {
+                scanner: {
+                  mode: 'pre-upload',
+                  impl: {
+                    scan: ({ key }) =>
+                      Promise.resolve(
+                        key.startsWith('virus')
+                          ? { status: 'infected' as const, engine: 'test', threat: 'EICAR' }
+                          : { status: 'clean' as const, engine: 'test' },
+                      ),
+                  },
+                },
+              }
+            : {}),
         }),
       ],
       providers: [StorageMetrics, StorageHealthIndicator],
@@ -100,5 +110,36 @@ describe('Storage E2E — observability', () => {
 
     expect(up).toEqual({ status: 'up' })
     expect(down).toEqual({ status: 'down' })
+  })
+
+  it('counts the bytes a stream without a declared size really sent, small and multipart', async () => {
+    const plain = await moduleFor(minio.bucket, false)
+    const plainStorage = plain.get(StorageService)
+    const MIB = 1024 * 1024
+
+    await plainStorage.upload({
+      key: 'obs/small.bin',
+      body: Readable.from([Buffer.alloc(500)]),
+      contentType: 'x/y',
+    })
+    await plainStorage.upload({
+      key: 'obs/big.bin',
+      body: Readable.from([Buffer.alloc(7 * MIB)]),
+      contentType: 'x/y',
+    })
+    await plainStorage.upload({
+      key: 'obs/direct.bin',
+      body: Buffer.alloc(1000),
+      contentType: 'x/y',
+    })
+
+    const counted = plain.get(StorageMetricsTally).snapshot().bytesUploaded
+    const stored =
+      (await plainStorage.head('obs/small.bin')).size +
+      (await plainStorage.head('obs/big.bin')).size +
+      (await plainStorage.head('obs/direct.bin')).size
+    await plain.close()
+    expect(stored).toBe(500 + 7 * MIB + 1000)
+    expect(counted).toBe(stored)
   })
 })
