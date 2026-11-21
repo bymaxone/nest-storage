@@ -354,6 +354,7 @@ await storage.upload({
 `onProgress` receives `{ loaded, total?, part? }`: the bytes sent so far, the total when it is known, and the
 part number on a multipart upload. A single-shot upload reports once, when it ends; a multipart upload reports
 as each part is sent.
+A hook that throws, or an async one that rejects, is ignored: the upload still resolves with its result and the process is not ended.
 
 Uploads are automatically routed to multipart when `size >= multipart.thresholdBytes` (default 5 MiB). A `Readable` without a `size` always uses multipart. Multipart aborts automatically on failure (`leavePartsOnError: false`).
 
