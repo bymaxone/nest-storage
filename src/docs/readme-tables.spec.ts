@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyDefaults } from '../server/config/apply-defaults'
+import { DEFAULT_SCANNER_TIMEOUT_MS } from '../server/constants/default-options.constants'
 import { STORAGE_ERROR_STATUS } from '../server/errors/storage-error-status'
 import { STORAGE_ERROR_CODES } from '../shared/constants/error-codes.constants'
 
@@ -57,7 +58,9 @@ function parseDefault(raw: string): unknown {
 }
 
 function valueAt(source: object, path: string): unknown {
-  return path.split('.').reduce<unknown>((acc, key) => (acc as Record<string, unknown> | undefined)?.[key], source)
+  return path
+    .split('.')
+    .reduce<unknown>((acc, key) => (acc as Record<string, unknown> | undefined)?.[key], source)
 }
 
 const resolved = applyDefaults({
@@ -103,6 +106,12 @@ describe('README configuration table', () => {
     expect(parseDefault(literal ?? '')).toEqual(valueAt(resolved, path))
   })
 
+  it('documents the real default of scanner.timeoutMs, which the scanner service applies and applyDefaults does not', () => {
+    expect(parseDefault(code(documented.get('scanner.timeoutMs')) ?? '')).toBe(
+      DEFAULT_SCANNER_TIMEOUT_MS,
+    )
+  })
+
   it('lists no option the module does not resolve or accept', () => {
     // A row naming an option that does not exist (a renamed field) fails here, by name.
     // `credentials` is a non-enumerable accessor and the rest have no default, so none is a key of `resolved`.
@@ -112,6 +121,10 @@ describe('README configuration table', () => {
       'validation.maxSizeBytes',
       'validation.customValidators',
       'scanner',
+      'scanner.impl',
+      'scanner.mode',
+      'scanner.rejectOnUnknown',
+      'scanner.timeoutMs',
       'serverSideEncryption',
       'kmsKeyId',
     ]
@@ -145,6 +158,8 @@ describe('README error-code table', () => {
   })
 
   it.each(Object.keys(STORAGE_ERROR_CODES))('documents the real HTTP status of %s', (name) => {
-    expect(documented.get(name)).toBe(STORAGE_ERROR_STATUS[name as keyof typeof STORAGE_ERROR_STATUS])
+    expect(documented.get(name)).toBe(
+      STORAGE_ERROR_STATUS[name as keyof typeof STORAGE_ERROR_STATUS],
+    )
   })
 })
