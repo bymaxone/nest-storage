@@ -5,7 +5,7 @@
  */
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
-import { StorageTracing } from './storage-tracing'
+import { StorageTracing, type StorageSpanAttributes } from './storage-tracing'
 
 interface FakeSpan {
   setStatus: jest.Mock
@@ -49,6 +49,23 @@ async function loaded(): Promise<StorageTracing> {
   return tracing
 }
 
+describe('StorageSpanAttributes', () => {
+  it('names the four keys the library states, so a host value cannot become an attribute', () => {
+    const allowed: StorageSpanAttributes = {
+      'bymax.storage.outcome': 'success',
+      'bymax.storage.multipart': 'false',
+      'bymax.storage.scan_mode': 'pre-upload',
+    }
+    // @ts-expect-error a key outside the union is refused at compile time
+    const key: StorageSpanAttributes = { 'bymax.storage.key': 'tenant/secret.txt' }
+    // @ts-expect-error a value outside a key's own values is refused at compile time
+    const value: StorageSpanAttributes = { 'bymax.storage.outcome': 'tenant/secret.txt' }
+
+    expect(Object.keys(allowed)).toHaveLength(3)
+    expect([key, value]).toHaveLength(2)
+  })
+})
+
 describe('StorageTracing', () => {
   beforeEach(() => {
     const live = span()
@@ -75,13 +92,13 @@ describe('StorageTracing', () => {
       await loaded()
     ).span(
       'storage.upload',
-      { 'bymax.storage.operation': 'upload' },
+      { 'bymax.storage.scan_mode': 'pre-upload' },
       () => Promise.resolve({ multipart: true }),
-      (value) => ({ 'bymax.storage.multipart': String(value.multipart) }),
+      (value) => ({ 'bymax.storage.multipart': value.multipart ? 'true' : 'false' }),
     )
 
     expect(result).toEqual({ multipart: true })
-    expect(seen).toEqual([['storage.upload', { 'bymax.storage.operation': 'upload' }]])
+    expect(seen).toEqual([['storage.upload', { 'bymax.storage.scan_mode': 'pre-upload' }]])
     expect(mockTracerNames).toContain('@bymax-one/nest-storage')
     expect(live.setAttributes).toHaveBeenCalledWith({
       'bymax.storage.outcome': 'success',

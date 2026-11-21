@@ -141,7 +141,7 @@ export class StorageService {
    */
   @Observed<UploadResult>('upload', {
     span: 'storage.upload',
-    describe: (result) => ({ 'bymax.storage.multipart': String(result.multipart) }),
+    describe: (result) => ({ 'bymax.storage.multipart': result.multipart ? 'true' : 'false' }),
     bytes: uploadedBytesOf,
   })
   async upload(options: UploadOptions): Promise<UploadResult> {

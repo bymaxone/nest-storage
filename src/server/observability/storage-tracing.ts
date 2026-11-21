@@ -6,13 +6,20 @@ import { Injectable } from '@nestjs/common'
 import type { OnModuleInit } from '@nestjs/common'
 import { StorageException } from '../errors/storage-exception'
 import { absorb } from '../utils/absorb'
-import { outcomeOf } from './storage-operations'
+import { outcomeOf, type StorageOutcome } from './storage-operations'
 
 /** The span names the library starts. */
 export type StorageSpanName = 'storage.upload' | 'storage.download_url' | 'storage.scan'
 
-/** Attributes are closed: an operation, an outcome, a mode or a flag, never a key, a bucket or a payload. */
-export type StorageSpanAttributes = Readonly<Record<string, string>>
+/**
+ * The attributes a span carries, named one by one: the outcome, whether an upload was multipart, and when a scan
+ * runs. A key, a bucket or a payload has no member, so a call site cannot add one.
+ */
+export interface StorageSpanAttributes {
+  readonly 'bymax.storage.outcome'?: StorageOutcome
+  readonly 'bymax.storage.multipart'?: 'true' | 'false'
+  readonly 'bymax.storage.scan_mode'?: 'pre-upload' | 'post-upload'
+}
 
 /** The few members of the API the seam uses, so that no declaration here imports an optional peer. */
 interface Span {

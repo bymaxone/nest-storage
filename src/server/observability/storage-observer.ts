@@ -80,7 +80,10 @@ export class StorageObserver {
    * @param mode - When the scan runs, `pre-upload` or `post-upload`.
    * @param run - The scan; its result or its error passes through unchanged.
    */
-  scan<T extends { readonly status: string }>(mode: string, run: () => Promise<T>): Promise<T> {
+  scan<T extends { readonly status: string }>(
+    mode: 'pre-upload' | 'post-upload',
+    run: () => Promise<T>,
+  ): Promise<T> {
     const counted = async (): Promise<T> => {
       try {
         const result = await run()
