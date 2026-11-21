@@ -48,14 +48,6 @@
     "reason": "Reads the entry points' declarations through the compiler and the README as text; it executes no code under src, so it can kill no mutant."
   },
   {
-    "file": "src/readme-log-events.spec.ts",
-    "reason": "Compares the README table with STORAGE_LOG_EVENTS, a frozen `as const` catalog that Stryker generates no mutant for; it executes no other code under src, so no mutant selects it."
-  },
-  {
-    "file": "src/server/utils/absorb.process.spec.ts",
-    "reason": "Transpiles the library's own helpers to a temporary directory and runs them in a child node process that counts unhandled rejections; the code it exercises runs outside the instrumented process, so it can kill no mutant."
-  },
-  {
     "file": "src/server/observability/observability.process.spec.ts",
     "reason": "Transpiles the tally, the observer and the tracing seam to a temporary directory and runs them in a child node process that counts unhandled rejections; the code it exercises runs outside the instrumented process, so it can kill no mutant."
   }
