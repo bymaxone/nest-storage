@@ -26,6 +26,7 @@ import { resolveBucket as resolveBucketInput } from '../utils/call-input'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { buildACL } from '../utils/header-utils'
+import { readOnce } from '../utils/read-once'
 import { callDetails, callerFields } from '../utils/call-details'
 import { clampTtl } from '../utils/ttl-clamp'
 import { assertMimeAllowed } from '../utils/mime-allowed'
@@ -115,8 +116,18 @@ export class SignedUrlService {
    * @throws StorageException `STORAGE_MIME_NOT_ALLOWED` when `validation.mimeWhitelist` is set and excludes `contentType`.
    */
   @Observed('get_upload_url')
-  async getUploadUrl(options: SignedPutUrlOptions): Promise<SignedUrlResult> {
+  async getUploadUrl(request: SignedPutUrlOptions): Promise<SignedUrlResult> {
     this.assertConfigured()
+    // One read of each field: the whitelist check and the signature must see the same content type.
+    const options = readOnce(request, [
+      'key',
+      'bucket',
+      'contentType',
+      'ttlSeconds',
+      'publicRead',
+      'metadata',
+    ])
+    if (options.metadata !== undefined) options.metadata = { ...options.metadata }
     assertMimeAllowed(this.options.validation?.mimeWhitelist, options.contentType)
     assertHeaderValues({ contentType: options.contentType })
     assertMetadata(options.metadata)
@@ -192,8 +203,10 @@ export class SignedUrlService {
    * @throws StorageException `STORAGE_MIME_NOT_ALLOWED` when `validation.mimeWhitelist` is set and excludes `contentType`.
    */
   @Observed('get_multipart_upload_urls')
-  async getMultipartUploadUrls(options: MultipartUploadUrlsOptions): Promise<MultipartUploadUrlsResult> {
+  async getMultipartUploadUrls(request: MultipartUploadUrlsOptions): Promise<MultipartUploadUrlsResult> {
     this.assertConfigured()
+    // One read of each field: the whitelist check and the signature must see the same content type.
+    const options = readOnce(request, ['key', 'bucket', 'contentType', 'parts', 'ttlSeconds'])
     assertMimeAllowed(this.options.validation?.mimeWhitelist, options.contentType)
     assertHeaderValues({ contentType: options.contentType })
     if (!Number.isInteger(options.parts) || options.parts < 1 || options.parts > MAX_MULTIPART_PARTS) {

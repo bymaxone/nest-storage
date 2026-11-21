@@ -414,6 +414,45 @@ describe('SignedUrlService', () => {
       expect(mockedGetSignedUrl).toHaveBeenCalledTimes(2)
     })
 
+    it('signs the content type the whitelist approved, even when the request answers differently on a later read', async () => {
+      // A getter that says text/plain once and text/html afterwards must not pass the check and sign the other value.
+      const service = await buildService(whitelisted(), buildMockS3Provider(), buildMockKeyResolver())
+      let reads = 0
+      const request = { key: KEY }
+      Object.defineProperty(request, 'contentType', {
+        enumerable: true,
+        get: () => {
+          reads += 1
+          return reads === 1 ? 'image/png' : 'text/html'
+        },
+      })
+
+      const result = await service.getUploadUrl(request as never)
+
+      const input = (mockedGetSignedUrl.mock.calls[0]?.[1] as PutObjectCommand).input
+      expect(input.ContentType).toBe('image/png')
+      expect(result.requiredHeaders['Content-Type']).toBe('image/png')
+    })
+
+    it('creates the multipart upload with the content type the whitelist approved, even when the request answers differently on a later read', async () => {
+      const s3Provider = buildMockS3Provider(true, { UploadId: MOCK_UPLOAD_ID })
+      const service = await buildService(whitelisted(), s3Provider, buildMockKeyResolver())
+      let reads = 0
+      const request = { key: KEY, parts: 2 }
+      Object.defineProperty(request, 'contentType', {
+        enumerable: true,
+        get: () => {
+          reads += 1
+          return reads === 1 ? 'image/png' : 'text/html'
+        },
+      })
+
+      await service.getMultipartUploadUrls(request as never)
+
+      const send = (s3Provider.getClient() as unknown as { send: jest.Mock<unknown, [unknown]> }).send
+      expect((send.mock.calls[0]?.[0] as CreateMultipartUploadCommand).input.ContentType).toBe('image/png')
+    })
+
     it('presigns any contentType when no whitelist is configured, or it is empty', async () => {
       const empty = { ...buildOptions(), validation: { mimeWhitelist: [] } }
       for (const options of [buildOptions(), empty]) {
