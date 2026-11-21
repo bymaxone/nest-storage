@@ -20,8 +20,7 @@ note on each entry is the compatibility contract — read it, not the number.
 - **An empty or unreadable iterator no longer turns a whitelist into an empty one.** The option arrays
   (`validation.mimeWhitelist`, `validation.customValidators`) were copied by their iterator, so an array of a subclass
   whose iterator yielded nothing copied to `[]`, and an empty whitelist allows every type. They are now copied by
-  index, the length read once and each index read once, and a custom validator is copied too: its `name` and `validate`
-  are read once, and `validate` is called on the validator.
+  index, and a custom validator is copied too, so a getter on it is read once.
 
   **Apply to a derived backend:** the validators the module exposes under `BYMAX_STORAGE_UPLOAD_VALIDATORS` are copies
   that keep the `name` and call the validator's own `validate`; code that compared them by identity with the objects it
