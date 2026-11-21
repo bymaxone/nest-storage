@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.20] - 2026-11-21
+
 ### Fixed
 
 - **A throwing `onProgress` no longer fails an upload that stored its object.** On the single-shot path the hook was
@@ -53,6 +55,15 @@ note on each entry is the compatibility contract — read it, not the number.
   **Apply to a derived backend:** nothing to change; only the text was wrong.
 
 ### Changed
+
+- **The span attributes are named, and the scan span takes the two scan modes.** `StorageSpanAttributes` was
+  `Readonly<Record<string, string>>`; it is now an interface naming the attributes the library sets, so a call site cannot add a key
+  that carries a bucket or a payload, and the scan span's `mode` parameter is `'pre-upload' | 'post-upload'` instead of
+  `string`.
+
+  **Apply to a derived backend:** code that calls the scan span with a mode the interface does not declare, that builds
+  attributes with another key, or that reads an attribute by a key it does not declare does not compile against the
+  interface; use the declared modes and names. Nothing changes at run time.
 
 - **`defaultPublicRead` and `forcePathStyle` must be booleans, and so must a per-call `publicRead`.** A string from an
   environment variable, `'false'`, is truthy: it passed the `??` default and made every upload `public-read`. A value
@@ -1240,4 +1251,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.17]: https://github.com/bymaxone/nest-storage/compare/v1.1.16...v1.1.17
 [1.1.18]: https://github.com/bymaxone/nest-storage/compare/v1.1.17...v1.1.18
 [1.1.19]: https://github.com/bymaxone/nest-storage/compare/v1.1.18...v1.1.19
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.19...HEAD
+[1.1.20]: https://github.com/bymaxone/nest-storage/compare/v1.1.19...v1.1.20
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.20...HEAD
