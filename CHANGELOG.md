@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.22] - 2026-11-21
+
 ### Fixed
 
 - **An empty or unreadable iterator no longer turns a whitelist into an empty one.** The option arrays
@@ -1338,4 +1340,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.19]: https://github.com/bymaxone/nest-storage/compare/v1.1.18...v1.1.19
 [1.1.20]: https://github.com/bymaxone/nest-storage/compare/v1.1.19...v1.1.20
 [1.1.21]: https://github.com/bymaxone/nest-storage/compare/v1.1.20...v1.1.21
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.21...HEAD
+[1.1.22]: https://github.com/bymaxone/nest-storage/compare/v1.1.21...v1.1.22
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.22...HEAD
