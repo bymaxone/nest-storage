@@ -21,8 +21,7 @@ note on each entry is the compatibility contract — read it, not the number.
   `storage` from one `HeadBucket`. The main entry now exports `StorageMetricsTally` and the closed sets
   (`STORAGE_OPERATIONS`, `STORAGE_OUTCOMES`, `SCAN_VERDICTS`), counts every public operation, and starts the
   `storage.upload`, `storage.download_url` and `storage.scan` spans when `@opentelemetry/api` is installed. The new
-  peers `@bymax-one/nest-core >=1.6.15`, `prom-client ^15` and `@opentelemetry/api ^1.9` are optional and the main
-  entry imports none of them.
+  peers `@bymax-one/nest-core >=1.6.15`, `prom-client ^15` and `@opentelemetry/api ^1.9` are optional.
 
   **Apply to a derived backend:** nothing changes unless you use it. To publish the metrics, add `StorageMetrics` and
   `StorageHealthIndicator` to the providers of a module and install `prom-client`; the README "Observability"

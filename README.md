@@ -829,7 +829,7 @@ try {
 
 ## 📊 Observability
 
-The main entry counts and times every operation and starts spans, and imports none of the packages below. They are
+The main entry counts and times every operation and starts spans. The packages below are
 optional peers: install what you use.
 
 ```bash
@@ -859,7 +859,7 @@ import { StorageHealthIndicator, StorageMetrics } from '@bymax-one/nest-storage/
 export class AppModule {}
 ```
 
-`@bymax-one/nest-core` finds both classes by their markers and calls `registerMetrics` once at bootstrap.
+`@bymax-one/nest-core` finds both classes by their markers and calls `registerMetrics` on `StorageMetrics` once at bootstrap.
 
 | Metric | Type | Labels | What it counts |
 | --- | --- | --- | --- |
@@ -886,7 +886,7 @@ with the module; the histogram starts when `StorageMetrics` registers.
 
 `StorageHealthIndicator` reports under the name `storage`. It asks `StorageService.checkBucket()` for one
 `HeadBucket` and answers `up` or `down` with no detail, so nothing about the bucket, the region or the endpoint
-leaves with it. The probe has its own deadline of 2 seconds, the answer is kept for 5 seconds, and checks that arrive
+leaves with it. The probe has its own deadline, the answer is kept, and checks that arrive
 while one is running share it. The probe is counted as `check_bucket`.
 
 ### Spans
