@@ -98,7 +98,7 @@ describe('StorageMetrics', () => {
     tally.bytesUploaded(Number.MAX_VALUE)
 
     await expect(registry.metrics()).resolves.toContain(
-      `bymax_storage_bytes_uploaded_total ${Number.MAX_VALUE}`,
+      `bymax_storage_bytes_uploaded_total ${String(Number.MAX_VALUE)}`,
     )
   })
 
