@@ -48,8 +48,7 @@ note on each entry is the compatibility contract — read it, not the number.
 
 - **The README names what the multipart path does on a failure.** It said the SDK aborts the upload
   (`leavePartsOnError: false`); the library passes `true` and sends `AbortMultipartUpload` itself, so a failing abort
-  cannot replace the error that caused it, and the outcome is in `details.abort`. A test now holds the README to the
-  value the code passes.
+  cannot replace the error that caused it, and the outcome is in `details.abort`.
 
   **Apply to a derived backend:** nothing to change; only the text was wrong.
 
