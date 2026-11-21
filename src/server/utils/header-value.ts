@@ -68,6 +68,7 @@ export function assertMetadata(metadata: Readonly<Record<string, string>> | unde
   if (metadata === undefined) {
     return
   }
+  assertMetadataKind(metadata)
   for (const [key, value] of Object.entries(metadata)) {
     if (!HEADER_NAME.test(key.toLowerCase())) {
       refuse('metadata', KEY_REASON)
@@ -76,4 +77,30 @@ export function assertMetadata(metadata: Readonly<Record<string, string>> | unde
       refuse('metadata', VALUE_REASON)
     }
   }
+}
+
+/**
+ * Refuses metadata that is not an object of pairs: a string or an array has index keys that would be read as
+ * header names, and `null` has no entries to read. The value is never repeated.
+ *
+ * @param metadata - The caller's metadata.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` with `details: { field: 'metadata', reason }`.
+ */
+function assertMetadataKind(metadata: unknown): void {
+  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+    refuse('metadata', 'must be an object of header-safe strings')
+  }
+}
+
+/**
+ * Copies the metadata once, so a value that answers differently on a later read has no later read: what is
+ * checked is what is signed.
+ *
+ * @param metadata - The caller's metadata, which is not `undefined`.
+ * @returns A plain copy of its own enumerable pairs.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when it is not an object of pairs.
+ */
+export function copyMetadata(metadata: Readonly<Record<string, string>>): Record<string, string> {
+  assertMetadataKind(metadata)
+  return { ...metadata }
 }

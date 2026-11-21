@@ -105,6 +105,31 @@ describe('SignedUrlService', () => {
   })
 
   describe('getDownloadUrl', () => {
+    it.each([
+      ['responseContentDisposition', 'inline', 'attachment\r\nx-evil: 1', 'ResponseContentDisposition'],
+      ['responseContentType', 'text/plain', 'text/html', 'ResponseContentType'],
+    ])(
+      'signs the %s it checked, even when the request answers differently on a later read',
+      async (field, first, later, input) => {
+        // A getter that answers a safe value for the check and another for the signature must not be signed.
+        const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+        let reads = 0
+        const request = { key: KEY }
+        Object.defineProperty(request, field, {
+          enumerable: true,
+          get: () => {
+            reads += 1
+            return reads === 1 ? first : later
+          },
+        })
+
+        await service.getDownloadUrl(request)
+
+        const command = mockedGetSignedUrl.mock.calls[0]?.[1] as GetObjectCommand
+        expect(command.input[input as 'ResponseContentType']).toBe(first)
+      },
+    )
+
     it('returns a URL with expiresAt calculated from the effective TTL', async () => {
       // happy path: returns the presigned URL and a correct expiresAt
       const ttlSeconds = 300
@@ -284,6 +309,26 @@ describe('SignedUrlService', () => {
       expect(mockedGetSignedUrl).not.toHaveBeenCalled()
     })
 
+    it('signs the metadata values it checked, even when a value answers differently on a later read', async () => {
+      // A value that is plain text on the first read and a header-splitting line afterwards must not pass the check and be signed.
+      const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+      let reads = 0
+      const metadata: Record<string, string> = {}
+      Object.defineProperty(metadata, 'owner', {
+        enumerable: true,
+        get: () => {
+          reads += 1
+          return reads === 1 ? 'alice' : 'alice\r\nx-amz-acl: public-read'
+        },
+      })
+
+      const result = await service.getUploadUrl({ key: KEY, contentType: 'image/png', metadata })
+
+      const input = (mockedGetSignedUrl.mock.calls[0]?.[1] as PutObjectCommand).input
+      expect(input.Metadata).toStrictEqual({ owner: 'alice' })
+      expect(result.requiredHeaders['x-amz-meta-owner']).toBe('alice')
+    })
+
     it('forwards Metadata when provided', async () => {
       // metadata must be forwarded to the PutObject command
       const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
@@ -412,6 +457,45 @@ describe('SignedUrlService', () => {
       await service.getUploadUrl({ key: KEY, contentType: 'application/pdf' })
 
       expect(mockedGetSignedUrl).toHaveBeenCalledTimes(2)
+    })
+
+    it('signs the content type the whitelist approved, even when the request answers differently on a later read', async () => {
+      // A getter that says text/plain once and text/html afterwards must not pass the check and sign the other value.
+      const service = await buildService(whitelisted(), buildMockS3Provider(), buildMockKeyResolver())
+      let reads = 0
+      const request = { key: KEY }
+      Object.defineProperty(request, 'contentType', {
+        enumerable: true,
+        get: () => {
+          reads += 1
+          return reads === 1 ? 'image/png' : 'text/html'
+        },
+      })
+
+      const result = await service.getUploadUrl(request as never)
+
+      const input = (mockedGetSignedUrl.mock.calls[0]?.[1] as PutObjectCommand).input
+      expect(input.ContentType).toBe('image/png')
+      expect(result.requiredHeaders['Content-Type']).toBe('image/png')
+    })
+
+    it('creates the multipart upload with the content type the whitelist approved, even when the request answers differently on a later read', async () => {
+      const s3Provider = buildMockS3Provider(true, { UploadId: MOCK_UPLOAD_ID })
+      const service = await buildService(whitelisted(), s3Provider, buildMockKeyResolver())
+      let reads = 0
+      const request = { key: KEY, parts: 2 }
+      Object.defineProperty(request, 'contentType', {
+        enumerable: true,
+        get: () => {
+          reads += 1
+          return reads === 1 ? 'image/png' : 'text/html'
+        },
+      })
+
+      await service.getMultipartUploadUrls(request as never)
+
+      const send = (s3Provider.getClient() as unknown as { send: jest.Mock<unknown, [unknown]> }).send
+      expect((send.mock.calls[0]?.[0] as CreateMultipartUploadCommand).input.ContentType).toBe('image/png')
     })
 
     it('presigns any contentType when no whitelist is configured, or it is empty', async () => {

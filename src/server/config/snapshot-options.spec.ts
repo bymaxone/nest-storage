@@ -257,4 +257,44 @@ describe('forRoot reads each option once', () => {
 
     expect(reads.sort()).toEqual(['accessKeyId', 'secretAccessKey'])
   })
+
+  it('takes at most as many entries as the length it read once, however long the array reports itself later', () => {
+    // Answers 2 the first time and a billion afterwards: a copy that follows the later answers never ends.
+    let lengthReads = 0
+    const entriesRead: string[] = []
+    const lying = new Proxy(['image/png', 'image/jpeg'], {
+      get: (target, key): unknown => {
+        if (typeof key === 'string' && /^\d+$/.test(key)) entriesRead.push(key)
+        if (key !== 'length') return Reflect.get(target, key) as unknown
+        lengthReads += 1
+        return lengthReads === 1 ? 2 : 1_000_000_000
+      },
+    })
+
+    const copy = snapshotOptions({ ...base, validation: { mimeWhitelist: lying } }) as {
+      validation: { mimeWhitelist: unknown[] }
+    }
+
+    expect(copy.validation.mimeWhitelist).toStrictEqual(['image/png', 'image/jpeg'])
+    // The entry at the reported length is never asked for: a Proxy that throws there cannot refuse a good list.
+    expect(entriesRead).toEqual(['0', '1'])
+  })
+
+  it('copies the entries the array yields when it reports a longer length than it holds', () => {
+    // The first answer says 5; the entries run out after 2, so the copy ends there.
+    let lengthReads = 0
+    const shrinking = new Proxy(['image/png', 'image/jpeg'], {
+      get: (target, key): unknown => {
+        if (key !== 'length') return Reflect.get(target, key) as unknown
+        lengthReads += 1
+        return lengthReads === 1 ? 5 : 2
+      },
+    })
+
+    const copy = snapshotOptions({ ...base, validation: { mimeWhitelist: shrinking } }) as {
+      validation: { mimeWhitelist: unknown[] }
+    }
+
+    expect(copy.validation.mimeWhitelist).toStrictEqual(['image/png', 'image/jpeg'])
+  })
 })

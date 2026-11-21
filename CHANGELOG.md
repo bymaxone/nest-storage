@@ -13,6 +13,41 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.21] - 2026-11-21
+
+### Fixed
+
+- **A signed URL is signed for the values that were checked.** `getUploadUrl`, `getMultipartUploadUrls` and
+  `getDownloadUrl` read fields of the request several times, once for the check and again for the signature, so a
+  request whose `contentType` getter answered `text/plain` first and `text/html` afterwards passed the whitelist and
+  was signed for the second, and a download's `responseContentDisposition` or `responseContentType` could pass the
+  header check and be signed as another value. Each field, and the metadata pairs, are now read once and the copy is
+  what is checked and signed.
+
+  **Apply to a derived backend:** nothing to change; a request that answered differently on each read is now signed
+  for the first answer.
+
+- **An option array that lies about its length can no longer stall the start.** An array of `validation.mimeWhitelist`
+  or `validation.customValidators` whose `length` answered a small number and then a very large one kept the copy of
+  the options busy for seconds before the refusal. The length is read once, the copy takes at most that many entries,
+  and an array over the bound is refused without being walked.
+
+  **Apply to a derived backend:** nothing to change.
+
+### Changed
+
+- **Metadata that is not an object is refused.** A string or an array as `metadata` was spread into index keys that
+  were read as header names, and `null` threw a `TypeError`. A `metadata` that is not an object of pairs now fails
+  with `STORAGE_VALIDATION_FAILED` (`details.field: 'metadata'`) before any request, on upload and on a signed PUT
+  URL.
+
+  **Apply to a derived backend:** a host that passed a string or an array as `metadata` now gets the refusal; pass an
+  object of header-safe strings.
+
+- **The README describes the checks on the options.** The configuration section now covers them.
+
+  **Apply to a derived backend:** nothing to change; only the text was missing.
+
 ## [1.1.20] - 2026-11-21
 
 ### Fixed
@@ -1252,4 +1287,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.18]: https://github.com/bymaxone/nest-storage/compare/v1.1.17...v1.1.18
 [1.1.19]: https://github.com/bymaxone/nest-storage/compare/v1.1.18...v1.1.19
 [1.1.20]: https://github.com/bymaxone/nest-storage/compare/v1.1.19...v1.1.20
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.20...HEAD
+[1.1.21]: https://github.com/bymaxone/nest-storage/compare/v1.1.20...v1.1.21
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.21...HEAD
