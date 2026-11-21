@@ -76,7 +76,13 @@ describe('BymaxStorageModule.forRootAsync', () => {
     // applyDefaults ran inside the factory (a defaulted field is present).
     expect(typeof resolved.maxAttempts).toBe('number')
     expect(moduleRef.get(StorageService)).toBeInstanceOf(StorageService)
-    expect(moduleRef.get(BYMAX_STORAGE_UPLOAD_VALIDATORS)).toEqual([validator])
+    // The module hands out a copy of each validator: it keeps the name and runs the validator's own validate.
+    const exposed = moduleRef.get<IUploadValidator[]>(BYMAX_STORAGE_UPLOAD_VALIDATORS)
+    expect(exposed).toHaveLength(1)
+    expect(exposed[0]?.name).toBe('v')
+    expect(await exposed[0]?.validate({ key: 'k', contentType: 'text/plain' })).toStrictEqual({
+      ok: true,
+    })
     expect(moduleRef.get(BYMAX_STORAGE_FILE_SCANNER)).toBe(scanner)
     await moduleRef.close()
   })
