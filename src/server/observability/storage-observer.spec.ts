@@ -108,12 +108,12 @@ describe('StorageObserver.observe', () => {
 
     await subject.observe('get_download_url', () => Promise.resolve('url'), {
       span: 'storage.download_url',
-      attributes: { 'bymax.storage.operation': 'get_download_url' },
+      attributes: { 'bymax.storage.scan_mode': 'post-upload' },
     })
 
     expect(span).toHaveBeenCalledWith(
       'storage.download_url',
-      { 'bymax.storage.operation': 'get_download_url' },
+      { 'bymax.storage.scan_mode': 'post-upload' },
       expect.any(Function),
       undefined,
     )

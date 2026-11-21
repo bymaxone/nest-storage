@@ -26,6 +26,8 @@ export class StorageException extends HttpException {
     details?: Record<string, unknown>,
     /** Defaults to the message of `code`. Pass only when the situation is more specific than the code. */
     message: string = STORAGE_ERROR_MESSAGES[code],
+    /** What made the call fail, for a log or a debugger; it is never part of the response body. */
+    cause?: unknown,
   ) {
     super(
       {
@@ -36,6 +38,7 @@ export class StorageException extends HttpException {
         },
       },
       statusCode,
+      { cause },
     )
     this.code = code
   }

@@ -141,7 +141,7 @@ export class StorageService {
    */
   @Observed<UploadResult>('upload', {
     span: 'storage.upload',
-    describe: (result) => ({ 'bymax.storage.multipart': String(result.multipart) }),
+    describe: (result) => ({ 'bymax.storage.multipart': result.multipart ? 'true' : 'false' }),
     bytes: uploadedBytesOf,
   })
   async upload(options: UploadOptions): Promise<UploadResult> {
@@ -718,6 +718,8 @@ export class StorageService {
     const destKey = this.keyResolver.normalize(options.destinationKey)
     const sourceBucket = this.resolveBucket(options.sourceBucket)
     const destBucket = this.resolveBucket(options.destinationBucket)
+    // Outside the `try`: a flag that is not a boolean is the caller's mistake, not a provider failure.
+    const acl = buildACL(options.publicRead, this.options.defaultPublicRead)
     try {
       const response = await this.s3Provider.getClient().send(
         new CopyObjectCommand({
@@ -728,7 +730,7 @@ export class StorageService {
           CopySource: `/${sourceBucket}/${sourceKey.split('/').map(encodeURIComponent).join('/')}`,
           CacheControl: options.cacheControl ?? this.options.defaultCacheControl,
           // ACLs are a no-op on modern S3 (Object Ownership) and R2; see header-utils.
-          ACL: buildACL(options.publicRead, this.options.defaultPublicRead),
+          ACL: acl,
           MetadataDirective: 'COPY',
         }),
       )

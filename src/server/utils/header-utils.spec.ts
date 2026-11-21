@@ -4,12 +4,8 @@
  * the ACL flag.
  * @layer server/utils
  */
-import {
-  buildACL,
-  buildCacheControl,
-  buildContentDisposition,
-  buildSSE,
-} from './header-utils'
+import { StorageException } from '../errors/storage-exception'
+import { buildACL, buildCacheControl, buildContentDisposition, buildSSE } from './header-utils'
 
 describe('header-utils', () => {
   describe('buildContentDisposition', () => {
@@ -93,5 +89,23 @@ describe('header-utils', () => {
       // Both ACL branches via per-call and default fallbacks.
       expect(buildACL(perCall, defaultValue)).toBe(expected)
     })
+
+    it.each([['false'], ['true'], [0], [1], [null], [{}]])(
+      'refuses a per-call flag of %p, which is not a boolean, instead of publishing the object',
+      (value) => {
+        // `'false'` is truthy: read as a flag it would make the object public-read.
+        let thrown: unknown
+        try {
+          buildACL(value as never, false)
+        } catch (error) {
+          thrown = error
+        }
+
+        expect(thrown).toBeInstanceOf(StorageException)
+        expect((thrown as StorageException).getResponse()).toMatchObject({
+          error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'publicRead' } },
+        })
+      },
+    )
   })
 })

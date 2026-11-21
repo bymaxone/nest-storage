@@ -225,11 +225,14 @@ describe('applyDefaults', () => {
     ['exactly the SigV4 limit', 604_800, 604_800],
     ['one second above the SigV4 limit', 604_801, 604_800],
     ['thirty days', 2_592_000, 604_800],
-  ])('should resolve a configured maxTtlSeconds %s to the effective ceiling', (_label, configured, effective) => {
-    // The signer rejects any presign longer than 7 days, so a larger ceiling is capped at init.
-    const r = applyDefaults({ ...base, signedUrls: { maxTtlSeconds: configured } })
-    expect(r.signedUrls.maxTtlSeconds).toBe(effective)
-  })
+  ])(
+    'should resolve a configured maxTtlSeconds %s to the effective ceiling',
+    (_label, configured, effective) => {
+      // The signer rejects any presign longer than 7 days, so a larger ceiling is capped at init.
+      const r = applyDefaults({ ...base, signedUrls: { maxTtlSeconds: configured } })
+      expect(r.signedUrls.maxTtlSeconds).toBe(effective)
+    },
+  )
 
   it('should cap only maxTtlSeconds and leave the other signed-URL options as configured', () => {
     const r = applyDefaults({
@@ -261,25 +264,46 @@ describe('applyDefaults', () => {
 describe('applyDefaults: an option group key that holds undefined or null', () => {
   // A key set to `undefined` or `null` means "use the default"; spread over the defaults it would replace them,
   // and `maxTtlSeconds: undefined` would resolve to NaN, which puts `X-Amz-Expires=NaN` in every signed URL.
-  it.each([undefined, null])('uses the default for %p in the signed-URL, multipart and size options', (value) => {
-    const resolved = applyDefaults({
-      ...base,
-      signedUrls: { defaultGetTtlSeconds: value, defaultPutTtlSeconds: value, maxTtlSeconds: value },
-      multipart: { thresholdBytes: value, partSizeBytes: value, queueSize: value },
-      validation: { maxSizeBytes: value },
-    } as unknown as BymaxStorageModuleOptions)
+  it.each([undefined, null])(
+    'uses the default for %p in the signed-URL, multipart and size options',
+    (value) => {
+      const resolved = applyDefaults({
+        ...base,
+        signedUrls: {
+          defaultGetTtlSeconds: value,
+          defaultPutTtlSeconds: value,
+          maxTtlSeconds: value,
+        },
+        multipart: { thresholdBytes: value, partSizeBytes: value, queueSize: value },
+        validation: { maxSizeBytes: value },
+      } as unknown as BymaxStorageModuleOptions)
 
-    expect(resolved.signedUrls).toEqual({ defaultGetTtlSeconds: 300, defaultPutTtlSeconds: 300, maxTtlSeconds: 604_800 })
-    expect(resolved.multipart).toEqual({ thresholdBytes: 5_242_880, partSizeBytes: 5_242_880, queueSize: 4 })
-    expect(resolved.validation?.maxSizeBytes).toBeUndefined()
-  })
+      expect(resolved.signedUrls).toEqual({
+        defaultGetTtlSeconds: 300,
+        defaultPutTtlSeconds: 300,
+        maxTtlSeconds: 604_800,
+      })
+      expect(resolved.multipart).toEqual({
+        thresholdBytes: 5_242_880,
+        partSizeBytes: 5_242_880,
+        queueSize: 4,
+      })
+      expect(resolved.validation?.maxSizeBytes).toBeUndefined()
+    },
+  )
 
-  it.each([undefined, null])('leaves the scanner timeout unset for %p, so the default applies at the scan', (value) => {
-    const resolved = applyDefaults({ ...base, scanner: { impl: scanner, timeoutMs: value } } as unknown as BymaxStorageModuleOptions)
+  it.each([undefined, null])(
+    'leaves the scanner timeout unset for %p, so the default applies at the scan',
+    (value) => {
+      const resolved = applyDefaults({
+        ...base,
+        scanner: { impl: scanner, timeoutMs: value },
+      } as unknown as BymaxStorageModuleOptions)
 
-    expect(resolved.scanner?.timeoutMs).toBeUndefined()
-    expect(resolved.scanner?.impl).toBe(scanner)
-  })
+      expect(resolved.scanner?.timeoutMs).toBeUndefined()
+      expect(resolved.scanner?.impl).toBe(scanner)
+    },
+  )
 
   it('keeps every value that is set, including a falsy one that is not nullish', () => {
     const resolved = applyDefaults({
@@ -300,7 +324,9 @@ describe('applyDefaults: an option group key that holds undefined or null', () =
 
 describe('applyDefaults: a scanner of null', () => {
   it('is no scanner, as undefined is', () => {
-    expect(applyDefaults({ ...base, scanner: null } as unknown as BymaxStorageModuleOptions)).not.toHaveProperty('scanner')
+    expect(
+      applyDefaults({ ...base, scanner: null } as unknown as BymaxStorageModuleOptions),
+    ).not.toHaveProperty('scanner')
   })
 })
 
@@ -359,9 +385,14 @@ describe('applyDefaults: a group that is a class instance', () => {
   })
 
   it('still carries the validators and the whitelist of the validation group', () => {
-    const resolved = applyDefaults({ ...base, validation: { mimeWhitelist: ['image/png'], customValidators: [validator] } })
+    const resolved = applyDefaults({
+      ...base,
+      validation: { mimeWhitelist: ['image/png'], customValidators: [validator] },
+    })
 
-    expect(resolved.validation).toEqual({ mimeWhitelist: ['image/png'], customValidators: [validator] })
+    expect(resolved.validation).toEqual({
+      mimeWhitelist: ['image/png'],
+      customValidators: [validator],
+    })
   })
 })
-

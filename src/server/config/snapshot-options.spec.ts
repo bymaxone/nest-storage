@@ -57,12 +57,39 @@ describe('snapshotOptions', () => {
   })
 
   it('keeps a value that is not an object where an object is expected, for validation to refuse', () => {
-    expect(snapshotOptions({ ...base, scanner: 'on', validation: null })).toMatchObject({ scanner: 'on', validation: null })
+    expect(snapshotOptions({ ...base, scanner: 'on', validation: null })).toMatchObject({
+      scanner: 'on',
+      validation: null,
+    })
     expect(snapshotOptions('not options')).toBe('not options')
     expect(snapshotOptions(null)).toBeNull()
-    expect(snapshotOptions({ ...base, validation: { mimeWhitelist: 'image/png', customValidators: { s: 1 } } })).toMatchObject({
+    expect(
+      snapshotOptions({
+        ...base,
+        validation: { mimeWhitelist: 'image/png', customValidators: { s: 1 } },
+      }),
+    ).toMatchObject({
       validation: { mimeWhitelist: 'image/png', customValidators: { s: 1 } },
     })
+  })
+
+  it('reads a value that a non-enumerable own getter serves, in a group and at the top level', () => {
+    const credentials = {}
+    Object.defineProperty(credentials, 'accessKeyId', { get: () => 'key-id', enumerable: false })
+    Object.defineProperty(credentials, 'secretAccessKey', {
+      get: () => 'secret',
+      enumerable: false,
+    })
+    const options = { ...base, credentials }
+    Object.defineProperty(options, 'maxAttempts', { get: () => 7, enumerable: false })
+
+    const snapshot = snapshotOptions(options) as {
+      credentials: Record<string, unknown>
+      maxAttempts: unknown
+    }
+
+    expect(snapshot.credentials).toEqual({ accessKeyId: 'key-id', secretAccessKey: 'secret' })
+    expect(snapshot.maxAttempts).toBe(7)
   })
 
   it('reads a value that a prototype getter serves', () => {
@@ -74,7 +101,9 @@ describe('snapshotOptions', () => {
       }
     }
 
-    expect(snapshotOptions({ ...base, validation: new Group() })).toMatchObject({ validation: { maxSizeBytes: 1234 } })
+    expect(snapshotOptions({ ...base, validation: new Group() })).toMatchObject({
+      validation: { maxSizeBytes: 1234 },
+    })
   })
 
   it('copies the arrays of the validation group, so a hole reaches validation as a value that is not a string', () => {
@@ -95,7 +124,9 @@ describe('snapshotOptions', () => {
     const snapshot = snapshotOptions({ ...base, validation: { customValidators: validators } }) as {
       validation: { customValidators: unknown[] }
     }
-    const bare = snapshotOptions({ ...base, validation: { maxSizeBytes: 5 } }) as { validation: object }
+    const bare = snapshotOptions({ ...base, validation: { maxSizeBytes: 5 } }) as {
+      validation: object
+    }
 
     expect(snapshot.validation.customValidators).toEqual(validators)
     expect(snapshot.validation.customValidators).not.toBe(validators)
@@ -103,7 +134,7 @@ describe('snapshotOptions', () => {
     expect(Object.keys(snapshotOptions(base) as object).sort()).toEqual(Object.keys(base).sort())
   })
 
-  it('keeps an array whose iterator throws as it is, for validation to refuse it as the wrong kind', () => {
+  it('does not catch an array whose iterator throws: forRoot refuses it with the host error as the cause', () => {
     const hostile = ['image/png']
     Object.defineProperty(hostile, Symbol.iterator, {
       value: () => {
@@ -111,11 +142,9 @@ describe('snapshotOptions', () => {
       },
     })
 
-    const snapshot = snapshotOptions({ ...base, validation: { mimeWhitelist: hostile } }) as {
-      validation: { mimeWhitelist: unknown }
-    }
-
-    expect(snapshot.validation.mimeWhitelist).toBe(hostile)
+    expect(() => snapshotOptions({ ...base, validation: { mimeWhitelist: hostile } })).toThrow(
+      'iterator ran',
+    )
   })
 })
 
@@ -135,7 +164,9 @@ describe('forRoot refuses an option group of the wrong kind', () => {
     const list = ['x']
 
     expect(snapshotOptions({ ...base, validation: list })).toMatchObject({ validation: list })
-    expect((snapshotOptions({ ...base, validation: list }) as { validation: unknown }).validation).toBe(list)
+    expect(
+      (snapshotOptions({ ...base, validation: list }) as { validation: unknown }).validation,
+    ).toBe(list)
   })
 })
 
@@ -148,50 +179,76 @@ describe('forRoot reads each option once', () => {
     ['validation', 'mimeWhitelist', [['image/png'], 'x']],
     ['signedUrls', 'maxTtlSeconds', [3600, Number.NaN]],
     ['multipart', 'queueSize', [4, Number.POSITIVE_INFINITY]],
-  ] as [string, string, unknown[]][])('%s.%s: a value that is valid once and hostile after is read once', async (group, key, values) => {
-    const reads: string[] = []
-    const groupValue = serving(key, values, reads)
-    if (group === 'scanner') groupValue.impl = scanner
+  ] as [string, string, unknown[]][])(
+    '%s.%s: a value that is valid once and hostile after is read once',
+    async (group, key, values) => {
+      const reads: string[] = []
+      const groupValue = serving(key, values, reads)
+      if (group === 'scanner') groupValue.impl = scanner
 
-    const moduleRef = await Test.createTestingModule({
-      imports: [BymaxStorageModule.forRoot({ ...base, [group]: groupValue })],
-    }).compile()
-    const resolved = moduleRef.get<ResolvedBymaxStorageOptions>(BYMAX_STORAGE_OPTIONS)
-    await moduleRef.close()
+      const moduleRef = await Test.createTestingModule({
+        imports: [BymaxStorageModule.forRoot({ ...base, [group]: groupValue })],
+      }).compile()
+      const resolved = moduleRef.get<ResolvedBymaxStorageOptions>(BYMAX_STORAGE_OPTIONS)
+      await moduleRef.close()
 
-    expect(reads).toEqual([key])
-    const resolvedGroup = resolved[group as 'scanner'] as unknown as Record<string, unknown>
-    expect(resolvedGroup[key]).toEqual(values[0])
-  })
+      expect(reads).toEqual([key])
+      const resolvedGroup = resolved[group as 'scanner'] as unknown as Record<string, unknown>
+      expect(resolvedGroup[key]).toEqual(values[0])
+    },
+  )
 
   it.each([
     ['region', ['us-east-1', 'bad region']],
     ['bucket', ['b', '']],
     ['keyPrefix', ['p', 5]],
-  ] as [string, unknown[]][])('%s: a top-level value that is valid once and hostile after is read once', async (key, values) => {
-    const reads: string[] = []
-    const options = Object.defineProperties({ ...base }, {
-      [key]: {
-        enumerable: true,
-        get: () => {
-          reads.push(key)
-          return values[Math.min(reads.length - 1, values.length - 1)]
+  ] as [string, unknown[]][])(
+    '%s: a top-level value that is valid once and hostile after is read once',
+    async (key, values) => {
+      const reads: string[] = []
+      const options = Object.defineProperties(
+        { ...base },
+        {
+          [key]: {
+            enumerable: true,
+            get: () => {
+              reads.push(key)
+              return values[Math.min(reads.length - 1, values.length - 1)]
+            },
+          },
         },
-      },
-    })
+      )
 
-    const moduleRef = await Test.createTestingModule({ imports: [BymaxStorageModule.forRoot(options)] }).compile()
-    await moduleRef.close()
+      const moduleRef = await Test.createTestingModule({
+        imports: [BymaxStorageModule.forRoot(options)],
+      }).compile()
+      await moduleRef.close()
 
-    expect(reads).toEqual([key])
-  })
+      expect(reads).toEqual([key])
+    },
+  )
 
   it('reads the credentials once', async () => {
     const reads: string[] = []
-    const credentials = Object.defineProperties({}, {
-      accessKeyId: { enumerable: true, get: () => { reads.push('accessKeyId'); return 'k' } },
-      secretAccessKey: { enumerable: true, get: () => { reads.push('secretAccessKey'); return 's' } },
-    })
+    const credentials = Object.defineProperties(
+      {},
+      {
+        accessKeyId: {
+          enumerable: true,
+          get: () => {
+            reads.push('accessKeyId')
+            return 'k'
+          },
+        },
+        secretAccessKey: {
+          enumerable: true,
+          get: () => {
+            reads.push('secretAccessKey')
+            return 's'
+          },
+        },
+      },
+    )
 
     const moduleRef = await Test.createTestingModule({
       imports: [BymaxStorageModule.forRoot({ ...base, credentials } as never)],

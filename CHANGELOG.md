@@ -13,6 +13,63 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A throwing `onProgress` no longer fails an upload that stored its object.** On the single-shot path the hook was
+  called in the upload's own `try` block, so a hook that threw made `upload()` reject with `STORAGE_PROVIDER_ERROR`
+  after `PutObject` had succeeded; on the multipart path a throw reached the uploader. An async hook that rejected was
+  an unhandled rejection that ends the Node process. Both paths now ignore what the hook throws or rejects with.
+
+  **Apply to a derived backend:** nothing to change. A hook that threw used to turn a stored upload into an error; it
+  now leaves the result alone, so an application that relied on a throwing hook to fail an upload must fail it itself.
+
+- **An option that throws when it is read is refused with `STORAGE_INVALID_CONFIG`.** A getter or a Proxy of the
+  host's as the options object, a group or a validator, and a `then` that throws on the object a `useFactory` returns,
+  surfaced the host's own error from `forRoot` and `forRootAsync`. They now fail `STORAGE_INVALID_CONFIG`
+  (`reason: 'the options could not be read'`), the host's error is kept as the `cause` of the exception and none of
+  its text is in the response, and a whitelist or a validator list whose iterator throws is refused the same way instead
+  of as "must be an array of strings". `StorageException` takes an optional `cause`.
+
+  **Apply to a derived backend:** a factory that throws is now reported as `STORAGE_INVALID_CONFIG` with the
+  factory's error as the `cause`; read `cause` where you matched the raw error.
+
+- **A lone surrogate in a logged value is escaped.** `escapeForLog` left a lone surrogate (`\ud800`) as it was, and a
+  logger writes it as an invalid character. It shows as `\ud800` now, like the other characters that cannot be shown;
+  a well-formed pair, an emoji, stays readable.
+
+  **Apply to a derived backend:** nothing to change; a log rule that matched the raw character reads the escape.
+
+- **A very large sum of uploaded bytes no longer fails the metrics scrape.** `bymax_storage_bytes_uploaded_total` is
+  the sum of every object's size, and two finite sizes can add up past the largest number, to `Infinity`, which a
+  counter refuses: the whole `/metrics` answer then failed. The count in the tally now stops at the largest finite
+  number.
+
+  **Apply to a derived backend:** nothing to change; a scrape that failed on that sum now answers.
+
+- **The README names what the multipart path does on a failure.** It said the SDK aborts the upload
+  (`leavePartsOnError: false`); the library passes `true` and sends `AbortMultipartUpload` itself, so a failing abort
+  cannot replace the error that caused it, and the outcome is in `details.abort`.
+
+  **Apply to a derived backend:** nothing to change; only the text was wrong.
+
+### Changed
+
+- **`defaultPublicRead` and `forcePathStyle` must be booleans, and so must a per-call `publicRead`.** A string from an
+  environment variable, `'false'`, is truthy: it passed the `??` default and made every upload `public-read`. A value
+  of another kind for either option is now refused at boot with `STORAGE_INVALID_CONFIG`, and a per-call `publicRead`
+  that is set and is not a boolean fails that call with `STORAGE_VALIDATION_FAILED` (`details.field: 'publicRead'`);
+  `null` is refused like any other non-boolean, and an absent value still takes the default.
+
+  **Apply to a derived backend:** a host that passes `process.env.X` straight into either option now gets a boot
+  refusal; compare it to `'true'` and pass the boolean.
+
+- **`validation.mimeWhitelist` and `validation.customValidators` hold at most 1000 entries.** A longer array, or an
+  array whose reported length is not a count, is refused at boot with `STORAGE_INVALID_CONFIG` before any entry is
+  read, so a sparse array of billions of holes no longer stalls the start.
+
+  **Apply to a derived backend:** nothing to change unless a list holds more than 1000 entries; a whitelist that long
+  can use a wildcard instead.
+
 ## [1.1.19] - 2026-11-20
 
 ### Added

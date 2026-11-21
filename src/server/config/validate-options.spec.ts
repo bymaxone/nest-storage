@@ -14,7 +14,10 @@ const valid: BymaxStorageModuleOptions = {
   credentials: { accessKeyId: 'k', secretAccessKey: 's' },
 }
 
-const scannerImpl = { scan: (): Promise<{ status: 'clean'; engine: string }> => Promise.resolve({ status: 'clean', engine: 't' }) }
+const scannerImpl = {
+  scan: (): Promise<{ status: 'clean'; engine: string }> =>
+    Promise.resolve({ status: 'clean', engine: 't' }),
+}
 
 function reasonOf(fn: () => void): string {
   try {
@@ -46,36 +49,58 @@ describe('validateOptions', () => {
 
   it('should throw when options is not an object', () => {
     // `isObject` left-false branch — with the exact reason string.
-    expect(reasonOf(() => {
-      validateOptions(undefined)
-    })).toBe('options object is required')
+    expect(
+      reasonOf(() => {
+        validateOptions(undefined)
+      }),
+    ).toBe('options object is required')
   })
 
   it('should throw when options is null', () => {
     // `isObject` left-true (typeof null === object) and right-false branch.
-    expect(reasonOf(() => {
-      validateOptions(null)
-    })).toBe('options object is required')
+    expect(
+      reasonOf(() => {
+        validateOptions(null)
+      }),
+    ).toBe('options object is required')
   })
 
   it.each([
-    ['endpoint missing', { ...valid, endpoint: undefined as unknown as string }, 'options.endpoint must be a non-empty string'],
+    [
+      'endpoint missing',
+      { ...valid, endpoint: undefined as unknown as string },
+      'options.endpoint must be a non-empty string',
+    ],
     ['endpoint empty', { ...valid, endpoint: '' }, 'options.endpoint must be a non-empty string'],
-    ['endpoint non-string', { ...valid, endpoint: 123 as unknown as string }, 'options.endpoint must be a non-empty string'],
+    [
+      'endpoint non-string',
+      { ...valid, endpoint: 123 as unknown as string },
+      'options.endpoint must be a non-empty string',
+    ],
     ['region empty', { ...valid, region: '' }, 'options.region must be a non-empty string'],
     ['bucket empty', { ...valid, bucket: '' }, 'options.bucket must be a non-empty string'],
-  ])('should throw STORAGE_INVALID_CONFIG with the field reason when %s', (_label, opts, reason) => {
-    // Each structural string field is mandatory and reports its own actionable reason.
-    expect(reasonOf(() => {
-      validateOptions(opts)
-    })).toBe(reason)
-  })
+  ])(
+    'should throw STORAGE_INVALID_CONFIG with the field reason when %s',
+    (_label, opts, reason) => {
+      // Each structural string field is mandatory and reports its own actionable reason.
+      expect(
+        reasonOf(() => {
+          validateOptions(opts)
+        }),
+      ).toBe(reason)
+    },
+  )
 
   it('should throw when credentials is missing', () => {
     // `isObject(options.credentials)` left-false branch — with the exact reason.
-    expect(reasonOf(() => {
-      validateOptions({ ...valid, credentials: undefined as unknown as BymaxStorageModuleOptions['credentials'] })
-    })).toBe('options.credentials is required')
+    expect(
+      reasonOf(() => {
+        validateOptions({
+          ...valid,
+          credentials: undefined as unknown as BymaxStorageModuleOptions['credentials'],
+        })
+      }),
+    ).toBe('options.credentials is required')
   })
 
   it('should accept a positive signedUrls.maxTtlSeconds', () => {
@@ -87,9 +112,11 @@ describe('validateOptions', () => {
 
   it('should throw when signedUrls.maxTtlSeconds is not positive', () => {
     // `maxTtlSeconds <= 0` right-true branch.
-    expect(reasonOf(() => {
-      validateOptions({ ...valid, signedUrls: { maxTtlSeconds: 0 } })
-    })).toMatch(/maxTtlSeconds/)
+    expect(
+      reasonOf(() => {
+        validateOptions({ ...valid, signedUrls: { maxTtlSeconds: 0 } })
+      }),
+    ).toMatch(/maxTtlSeconds/)
   })
 
   it('should accept a multipart partSizeBytes of at least 5 MB', () => {
@@ -101,9 +128,11 @@ describe('validateOptions', () => {
 
   it('should throw when multipart.partSizeBytes is below 5 MB', () => {
     // `partSizeBytes < 5 MB` right-true branch.
-    expect(reasonOf(() => {
-      validateOptions({ ...valid, multipart: { partSizeBytes: 1024 } })
-    })).toMatch(/5 MB/)
+    expect(
+      reasonOf(() => {
+        validateOptions({ ...valid, multipart: { partSizeBytes: 1024 } })
+      }),
+    ).toMatch(/5 MB/)
   })
 
   it.each([0, 1, 30_000])('should accept an uploadIdleTimeoutMs of %s', (value) => {
@@ -113,22 +142,30 @@ describe('validateOptions', () => {
     }).not.toThrow()
   })
 
-  it.each([-1, 1.5, Number.NaN, '100', null])('should reject an uploadIdleTimeoutMs of %p', (value) => {
-    // Negative, fractional, NaN and non-number values are configuration errors.
-    expect(reasonOf(() => {
-      validateOptions({ ...valid, uploadIdleTimeoutMs: value })
-    })).toMatch(/uploadIdleTimeoutMs/)
-  })
+  it.each([-1, 1.5, Number.NaN, '100', null])(
+    'should reject an uploadIdleTimeoutMs of %p',
+    (value) => {
+      // Negative, fractional, NaN and non-number values are configuration errors.
+      expect(
+        reasonOf(() => {
+          validateOptions({ ...valid, uploadIdleTimeoutMs: value })
+        }),
+      ).toMatch(/uploadIdleTimeoutMs/)
+    },
+  )
 
-  it.each(['requestTimeoutMs', 'maxAttempts'] as const)('should accept a %s of 1 and of a large integer', (name) => {
-    // The smallest valid value is 1; there is no upper bound beyond being an integer.
-    expect(() => {
-      validateOptions({ ...valid, [name]: 1 })
-    }).not.toThrow()
-    expect(() => {
-      validateOptions({ ...valid, [name]: 120_000 })
-    }).not.toThrow()
-  })
+  it.each(['requestTimeoutMs', 'maxAttempts'] as const)(
+    'should accept a %s of 1 and of a large integer',
+    (name) => {
+      // The smallest valid value is 1; there is no upper bound beyond being an integer.
+      expect(() => {
+        validateOptions({ ...valid, [name]: 1 })
+      }).not.toThrow()
+      expect(() => {
+        validateOptions({ ...valid, [name]: 120_000 })
+      }).not.toThrow()
+    },
+  )
 
   it.each([
     ['requestTimeoutMs', 0],
@@ -148,9 +185,11 @@ describe('validateOptions', () => {
   ])('should reject %s of %p', (name, value) => {
     // A zero, negative, fractional, non-finite or non-number value would switch the bound off
     // or make the SDK behave undefined; it is a configuration error, named in the reason.
-    expect(reasonOf(() => {
-      validateOptions({ ...valid, [name]: value })
-    })).toMatch(new RegExp(name))
+    expect(
+      reasonOf(() => {
+        validateOptions({ ...valid, [name]: value })
+      }),
+    ).toMatch(new RegExp(name))
   })
 
   it.each([0, 1, 30_000])('should accept a bodyIdleTimeoutMs of %s', (value) => {
@@ -160,12 +199,17 @@ describe('validateOptions', () => {
     }).not.toThrow()
   })
 
-  it.each([-1, 1.5, Number.NaN, '100', null])('should reject a bodyIdleTimeoutMs of %p', (value) => {
-    // Negative, fractional, NaN and non-number values are configuration errors, named in the reason.
-    expect(reasonOf(() => {
-      validateOptions({ ...valid, bodyIdleTimeoutMs: value })
-    })).toMatch(/bodyIdleTimeoutMs/)
-  })
+  it.each([-1, 1.5, Number.NaN, '100', null])(
+    'should reject a bodyIdleTimeoutMs of %p',
+    (value) => {
+      // Negative, fractional, NaN and non-number values are configuration errors, named in the reason.
+      expect(
+        reasonOf(() => {
+          validateOptions({ ...valid, bodyIdleTimeoutMs: value })
+        }),
+      ).toMatch(/bodyIdleTimeoutMs/)
+    },
+  )
 
   it.each([
     'https://AKIAEXAMPLE:SECRETEXAMPLE@s3.example.com',
@@ -185,15 +229,18 @@ describe('validateOptions', () => {
     expect(reason).not.toContain('SECRETEXAMPLE')
   })
 
-  it.each(['https://s3.example.com', 'http://localhost:9000', 'https://s3.example.com/base/path', 'minio:9000', 'localhost'])(
-    'should accept the endpoint %s',
-    (endpoint) => {
-      // Host, port and path are not credentials; a value that is not a URL is left to the client.
-      expect(() => {
-        validateOptions({ ...valid, endpoint })
-      }).not.toThrow()
-    },
-  )
+  it.each([
+    'https://s3.example.com',
+    'http://localhost:9000',
+    'https://s3.example.com/base/path',
+    'minio:9000',
+    'localhost',
+  ])('should accept the endpoint %s', (endpoint) => {
+    // Host, port and path are not credentials; a value that is not a URL is left to the client.
+    expect(() => {
+      validateOptions({ ...valid, endpoint })
+    }).not.toThrow()
+  })
 
   it.each(['publicBaseUrl', 'cdnBaseUrl'])(
     'should refuse a %s that carries credentials, without echoing them',
@@ -255,16 +302,20 @@ describe('validateOptions', () => {
     ['requestTimeoutMs', 1, false],
     ['uploadIdleTimeoutMs', 0, true],
     ['bodyIdleTimeoutMs', 0, true],
-  ] as const)('should state the range of %s, and that 0 disables the guard only where it does', (name, min, zeroAllowed) => {
-    // A reader fixing a rejected option needs the exact range; promising 0 where it is refused would mislead.
-    const reason = reasonOf(() => {
-      validateOptions({ ...valid, [name]: -1 })
-    })
+  ] as const)(
+    'should state the range of %s, and that 0 disables the guard only where it does',
+    (name, min, zeroAllowed) => {
+      // A reader fixing a rejected option needs the exact range; promising 0 where it is refused would mislead.
+      const reason = reasonOf(() => {
+        validateOptions({ ...valid, [name]: -1 })
+      })
 
-    expect(reason).toBe(
-      `${name} must be an integer from ${String(min)} to 2147483647` + (zeroAllowed ? ' (0 disables the guard)' : ''),
-    )
-  })
+      expect(reason).toBe(
+        `${name} must be an integer from ${String(min)} to 2147483647` +
+          (zeroAllowed ? ' (0 disables the guard)' : ''),
+      )
+    },
+  )
 
   it.each(['requestTimeoutMs', 'uploadIdleTimeoutMs', 'bodyIdleTimeoutMs'])(
     'should refuse a %s above the longest delay a timer holds, and accept that delay itself',
@@ -272,12 +323,16 @@ describe('validateOptions', () => {
       // Node clamps a timer above 2**31 - 1 ms to 1 ms, so a larger value would make every request or read fail at once.
       const longest = 2 ** 31 - 1
 
-      expect(reasonOf(() => {
-        validateOptions({ ...valid, [name]: longest + 1 })
-      })).toContain(name)
-      expect(reasonOf(() => {
-        validateOptions({ ...valid, [name]: Number.MAX_SAFE_INTEGER })
-      })).toContain(name)
+      expect(
+        reasonOf(() => {
+          validateOptions({ ...valid, [name]: longest + 1 })
+        }),
+      ).toContain(name)
+      expect(
+        reasonOf(() => {
+          validateOptions({ ...valid, [name]: Number.MAX_SAFE_INTEGER })
+        }),
+      ).toContain(name)
       expect(() => {
         validateOptions({ ...valid, [name]: longest })
       }).not.toThrow()
@@ -293,22 +348,29 @@ describe('validateOptions', () => {
 
   it('should throw when aws:kms is set without a kmsKeyId', () => {
     // SSE `&&` both-true branch.
-    expect(reasonOf(() => {
-      validateOptions({ ...valid, serverSideEncryption: 'aws:kms' })
-    })).toMatch(/kmsKeyId/)
+    expect(
+      reasonOf(() => {
+        validateOptions({ ...valid, serverSideEncryption: 'aws:kms' })
+      }),
+    ).toMatch(/kmsKeyId/)
   })
 
-  it.each(['defaultCacheControl', 'kmsKeyId'] as const)('should reject a %s that cannot be a header value', (name) => {
-    // The module defaults reach every request, so a line break or a non-ASCII character fails at bootstrap.
-    for (const bad of ['a\r\nX-Injected: 1', 'caf\u00e9', 'a\u0000b']) {
-      expect(reasonOf(() => {
-        validateOptions({ ...valid, [name]: bad })
-      })).toBe(`options.${name} must be a string of tab, space and printable ASCII characters`)
-    }
-    expect(() => {
-      validateOptions({ ...valid, [name]: 'public, max-age=60' })
-    }).not.toThrow()
-  })
+  it.each(['defaultCacheControl', 'kmsKeyId'] as const)(
+    'should reject a %s that cannot be a header value',
+    (name) => {
+      // The module defaults reach every request, so a line break or a non-ASCII character fails at bootstrap.
+      for (const bad of ['a\r\nX-Injected: 1', 'caf\u00e9', 'a\u0000b']) {
+        expect(
+          reasonOf(() => {
+            validateOptions({ ...valid, [name]: bad })
+          }),
+        ).toBe(`options.${name} must be a string of tab, space and printable ASCII characters`)
+      }
+      expect(() => {
+        validateOptions({ ...valid, [name]: 'public, max-age=60' })
+      }).not.toThrow()
+    },
+  )
 })
 
 describe('validateOptions: the numeric options in a group', () => {
@@ -319,8 +381,14 @@ describe('validateOptions: the numeric options in a group', () => {
   const BAD = [Number.NaN, Infinity, -1, 0, 1.5, '3']
   const options: [string, (value: unknown) => Record<string, unknown>][] = [
     ['validation.maxSizeBytes', (value) => ({ validation: { maxSizeBytes: value } })],
-    ['signedUrls.defaultGetTtlSeconds', (value) => ({ signedUrls: { defaultGetTtlSeconds: value } })],
-    ['signedUrls.defaultPutTtlSeconds', (value) => ({ signedUrls: { defaultPutTtlSeconds: value } })],
+    [
+      'signedUrls.defaultGetTtlSeconds',
+      (value) => ({ signedUrls: { defaultGetTtlSeconds: value } }),
+    ],
+    [
+      'signedUrls.defaultPutTtlSeconds',
+      (value) => ({ signedUrls: { defaultPutTtlSeconds: value } }),
+    ],
     ['signedUrls.maxTtlSeconds', (value) => ({ signedUrls: { maxTtlSeconds: value } })],
     ['multipart.thresholdBytes', (value) => ({ multipart: { thresholdBytes: value } })],
     ['multipart.partSizeBytes', (value) => ({ multipart: { partSizeBytes: value } })],
@@ -330,69 +398,131 @@ describe('validateOptions: the numeric options in a group', () => {
 
   describe.each(options)('%s', (name, build) => {
     it.each(BAD)('refuses %p, naming the option', (value) => {
-      expect(reasonOf(() => { validateOptions({ ...valid, ...build(value) }) })).toContain(name)
+      expect(
+        reasonOf(() => {
+          validateOptions({ ...valid, ...build(value) })
+        }),
+      ).toContain(name)
     })
 
     it('accepts a whole number inside its range', () => {
       const value = name === 'multipart.queueSize' ? 4 : 5 * 1024 * 1024
-      expect(() => { validateOptions({ ...valid, ...build(value) }) }).not.toThrow()
+      expect(() => {
+        validateOptions({ ...valid, ...build(value) })
+      }).not.toThrow()
     })
   })
 
   it.each([
     [{ multipart: { queueSize: 0 } }, 'multipart.queueSize must be an integer from 1 to 1000'],
-    [{ signedUrls: { maxTtlSeconds: 0 } }, 'signedUrls.maxTtlSeconds must be an integer from 1 to 9007199254740991'],
-    [{ validation: { maxSizeBytes: Number.NaN } }, 'validation.maxSizeBytes must be an integer from 1 to 9007199254740991'],
+    [
+      { signedUrls: { maxTtlSeconds: 0 } },
+      'signedUrls.maxTtlSeconds must be an integer from 1 to 9007199254740991',
+    ],
+    [
+      { validation: { maxSizeBytes: Number.NaN } },
+      'validation.maxSizeBytes must be an integer from 1 to 9007199254740991',
+    ],
   ])('states the range in the reason: %j', (extra, reason) => {
-    expect(reasonOf(() => { validateOptions({ ...valid, ...extra }) })).toBe(reason)
+    expect(
+      reasonOf(() => {
+        validateOptions({ ...valid, ...extra })
+      }),
+    ).toBe(reason)
   })
 
   it('states the part size range in megabytes and gigabytes', () => {
-    expect(reasonOf(() => { validateOptions({ ...valid, multipart: { partSizeBytes: 1024 } }) })).toBe(
-      'multipart.partSizeBytes must be an integer >= 5 MB (S3 hard limit) and <= 5 GB',
-    )
+    expect(
+      reasonOf(() => {
+        validateOptions({ ...valid, multipart: { partSizeBytes: 1024 } })
+      }),
+    ).toBe('multipart.partSizeBytes must be an integer >= 5 MB (S3 hard limit) and <= 5 GB')
   })
 
   it.each([
     ['multipart.queueSize', { multipart: { queueSize: 1000 } }, { multipart: { queueSize: 1001 } }],
-    ['multipart.partSizeBytes', { multipart: { partSizeBytes: 5 * 1024 ** 3 } }, { multipart: { partSizeBytes: 5 * 1024 ** 3 + 1 } }],
-    ['multipart.partSizeBytes', { multipart: { partSizeBytes: 5 * 1024 ** 2 } }, { multipart: { partSizeBytes: 5 * 1024 ** 2 - 1 } }],
-    ['validation.maxSizeBytes', { validation: { maxSizeBytes: Number.MAX_SAFE_INTEGER } }, { validation: { maxSizeBytes: Number.MAX_SAFE_INTEGER + 1 } }],
-    ['signedUrls.maxTtlSeconds', { signedUrls: { maxTtlSeconds: 1 } }, { signedUrls: { maxTtlSeconds: 0 } }],
-    ['scanner.timeoutMs', { scanner: { impl: scannerImpl, timeoutMs: 2_147_483_647 } }, { scanner: { impl: scannerImpl, timeoutMs: 2_147_483_648 } }],
-    ['scanner.timeoutMs', { scanner: { impl: scannerImpl, timeoutMs: 1 } }, { scanner: { impl: scannerImpl, timeoutMs: 0 } }],
+    [
+      'multipart.partSizeBytes',
+      { multipart: { partSizeBytes: 5 * 1024 ** 3 } },
+      { multipart: { partSizeBytes: 5 * 1024 ** 3 + 1 } },
+    ],
+    [
+      'multipart.partSizeBytes',
+      { multipart: { partSizeBytes: 5 * 1024 ** 2 } },
+      { multipart: { partSizeBytes: 5 * 1024 ** 2 - 1 } },
+    ],
+    [
+      'validation.maxSizeBytes',
+      { validation: { maxSizeBytes: Number.MAX_SAFE_INTEGER } },
+      { validation: { maxSizeBytes: Number.MAX_SAFE_INTEGER + 1 } },
+    ],
+    [
+      'signedUrls.maxTtlSeconds',
+      { signedUrls: { maxTtlSeconds: 1 } },
+      { signedUrls: { maxTtlSeconds: 0 } },
+    ],
+    [
+      'scanner.timeoutMs',
+      { scanner: { impl: scannerImpl, timeoutMs: 2_147_483_647 } },
+      { scanner: { impl: scannerImpl, timeoutMs: 2_147_483_648 } },
+    ],
+    [
+      'scanner.timeoutMs',
+      { scanner: { impl: scannerImpl, timeoutMs: 1 } },
+      { scanner: { impl: scannerImpl, timeoutMs: 0 } },
+    ],
   ])('%s: accepts its bound and refuses the next value', (_name, atBound, past) => {
-    expect(() => { validateOptions({ ...valid, ...atBound }) }).not.toThrow()
-    expect(() => { validateOptions({ ...valid, ...past }) }).toThrow()
+    expect(() => {
+      validateOptions({ ...valid, ...atBound })
+    }).not.toThrow()
+    expect(() => {
+      validateOptions({ ...valid, ...past })
+    }).toThrow()
   })
 
   it('leaves an unset group alone', () => {
-    expect(() => { validateOptions({ ...valid, multipart: {}, signedUrls: {}, validation: {} }) }).not.toThrow()
+    expect(() => {
+      validateOptions({ ...valid, multipart: {}, signedUrls: {}, validation: {} })
+    }).not.toThrow()
   })
 })
 
 describe('validateOptions: nullish keys and the retry ceiling', () => {
-  it.each([undefined, null])('accepts %p for a numeric option inside a group, which means the default', (value) => {
-    expect(() => {
-      validateOptions({
-        ...valid,
-        // `maxSizeBytes` has no default (omitting it means no limit), so `null` is refused for it: see validate-options.kinds.spec.ts.
-        validation: { maxSizeBytes: undefined },
-        signedUrls: { defaultGetTtlSeconds: value, defaultPutTtlSeconds: value, maxTtlSeconds: value },
-        multipart: { thresholdBytes: value, partSizeBytes: value, queueSize: value },
-        scanner: { impl: scannerImpl, timeoutMs: value },
-      })
-    }).not.toThrow()
-  })
+  it.each([undefined, null])(
+    'accepts %p for a numeric option inside a group, which means the default',
+    (value) => {
+      expect(() => {
+        validateOptions({
+          ...valid,
+          // `maxSizeBytes` has no default (omitting it means no limit), so `null` is refused for it: see validate-options.kinds.spec.ts.
+          validation: { maxSizeBytes: undefined },
+          signedUrls: {
+            defaultGetTtlSeconds: value,
+            defaultPutTtlSeconds: value,
+            maxTtlSeconds: value,
+          },
+          multipart: { thresholdBytes: value, partSizeBytes: value, queueSize: value },
+          scanner: { impl: scannerImpl, timeoutMs: value },
+        })
+      }).not.toThrow()
+    },
+  )
 
-  it.each([1e300, Number.MAX_SAFE_INTEGER + 2])('refuses a maxAttempts of %p, above the safe-integer ceiling', (value) => {
-    expect(reasonOf(() => { validateOptions({ ...valid, maxAttempts: value }) })).toBe(
-      'maxAttempts must be an integer from 1 to 9007199254740991',
-    )
-  })
+  it.each([1e300, Number.MAX_SAFE_INTEGER + 2])(
+    'refuses a maxAttempts of %p, above the safe-integer ceiling',
+    (value) => {
+      expect(
+        reasonOf(() => {
+          validateOptions({ ...valid, maxAttempts: value })
+        }),
+      ).toBe('maxAttempts must be an integer from 1 to 9007199254740991')
+    },
+  )
 
   it('accepts a maxAttempts at the ceiling', () => {
-    expect(() => { validateOptions({ ...valid, maxAttempts: Number.MAX_SAFE_INTEGER }) }).not.toThrow()
+    expect(() => {
+      validateOptions({ ...valid, maxAttempts: Number.MAX_SAFE_INTEGER })
+    }).not.toThrow()
   })
 })
 
@@ -407,37 +537,63 @@ describe('validateOptions: a scanner that would leave scanning silently off', ()
     ['an impl with no scan function', { impl: {} }],
     ['an impl whose scan is not a function', { impl: { scan: 'yes' } }],
   ])('refuses a scanner with %s', (_label, scanner) => {
-    expect(reasonOf(() => { validateOptions({ ...valid, scanner }) })).toBe('scanner.impl must be an object with a scan function')
+    expect(
+      reasonOf(() => {
+        validateOptions({ ...valid, scanner })
+      }),
+    ).toBe('scanner.impl must be an object with a scan function')
   })
 
-  it.each(['preupload', 'pre_upload', 'Pre-Upload', 'post_upload', '', 1, true, {}])('refuses a scanner mode of %p', (mode) => {
-    expect(reasonOf(() => { validateOptions({ ...valid, scanner: { impl: scannerImpl, mode } }) })).toBe(
-      "scanner.mode must be 'pre-upload' or 'post-upload'",
-    )
-  })
+  it.each(['preupload', 'pre_upload', 'Pre-Upload', 'post_upload', '', 1, true, {}])(
+    'refuses a scanner mode of %p',
+    (mode) => {
+      expect(
+        reasonOf(() => {
+          validateOptions({ ...valid, scanner: { impl: scannerImpl, mode } })
+        }),
+      ).toBe("scanner.mode must be 'pre-upload' or 'post-upload'")
+    },
+  )
 
-  it.each(['pre-upload', 'post-upload', undefined, null])('accepts a scanner mode of %p', (mode) => {
-    expect(() => { validateOptions({ ...valid, scanner: { impl: scannerImpl, mode } }) }).not.toThrow()
-  })
+  it.each(['pre-upload', 'post-upload', undefined, null])(
+    'accepts a scanner mode of %p',
+    (mode) => {
+      expect(() => {
+        validateOptions({ ...valid, scanner: { impl: scannerImpl, mode } })
+      }).not.toThrow()
+    },
+  )
 
-  it.each(['false', 'true', 0, 1, {}])('refuses a rejectOnUnknown of %p instead of reading it as a boolean', (value) => {
-    expect(reasonOf(() => { validateOptions({ ...valid, scanner: { impl: scannerImpl, rejectOnUnknown: value } }) })).toBe(
-      'scanner.rejectOnUnknown must be a boolean',
-    )
-  })
+  it.each(['false', 'true', 0, 1, {}])(
+    'refuses a rejectOnUnknown of %p instead of reading it as a boolean',
+    (value) => {
+      expect(
+        reasonOf(() => {
+          validateOptions({ ...valid, scanner: { impl: scannerImpl, rejectOnUnknown: value } })
+        }),
+      ).toBe('scanner.rejectOnUnknown must be a boolean')
+    },
+  )
 
   it.each([true, false, undefined, null])('accepts a rejectOnUnknown of %p', (value) => {
-    expect(() => { validateOptions({ ...valid, scanner: { impl: scannerImpl, rejectOnUnknown: value } }) }).not.toThrow()
+    expect(() => {
+      validateOptions({ ...valid, scanner: { impl: scannerImpl, rejectOnUnknown: value } })
+    }).not.toThrow()
   })
 
   // Only `undefined` is no scanner: a `null` that a config lookup returns for a missing key must not turn scanning
   // off, so it is refused (see validate-options.kinds.spec.ts).
   it('treats an absent scanner as no scanner', () => {
-    expect(() => { validateOptions({ ...valid, scanner: undefined }) }).not.toThrow()
+    expect(() => {
+      validateOptions({ ...valid, scanner: undefined })
+    }).not.toThrow()
   })
 
   it.each([true, 'on', 42])('refuses a scanner that is %p, not an object', (scanner) => {
-    expect(reasonOf(() => { validateOptions({ ...valid, scanner }) })).toBe('scanner must be an object')
+    expect(
+      reasonOf(() => {
+        validateOptions({ ...valid, scanner })
+      }),
+    ).toBe('scanner must be an object')
   })
 })
-
