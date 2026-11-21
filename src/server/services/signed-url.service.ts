@@ -30,7 +30,7 @@ import { readOnce } from '../utils/read-once'
 import { callDetails, callerFields } from '../utils/call-details'
 import { clampTtl } from '../utils/ttl-clamp'
 import { assertMimeAllowed } from '../utils/mime-allowed'
-import { assertHeaderValues, assertMetadata } from '../utils/header-value'
+import { assertHeaderValues, assertMetadata, copyMetadata } from '../utils/header-value'
 
 /** S3 allows part numbers 1 to 10 000 in one multipart upload. */
 const MAX_MULTIPART_PARTS = 10_000
@@ -56,8 +56,16 @@ export class SignedUrlService {
    * @throws StorageException `STORAGE_SIGNED_URL_TTL_INVALID` for non-positive TTL.
    */
   @Observed('get_download_url', { span: 'storage.download_url' })
-  async getDownloadUrl(options: SignedGetUrlOptions): Promise<SignedUrlResult> {
+  async getDownloadUrl(request: SignedGetUrlOptions): Promise<SignedUrlResult> {
     this.assertConfigured()
+    // One read of each field: the header check and the signature must see the same values.
+    const options = readOnce(request, [
+      'key',
+      'bucket',
+      'ttlSeconds',
+      'responseContentDisposition',
+      'responseContentType',
+    ])
     assertHeaderValues({
       responseContentDisposition: options.responseContentDisposition,
       responseContentType: options.responseContentType,
@@ -127,7 +135,7 @@ export class SignedUrlService {
       'publicRead',
       'metadata',
     ])
-    if (options.metadata !== undefined) options.metadata = { ...options.metadata }
+    if (options.metadata !== undefined) options.metadata = copyMetadata(options.metadata)
     assertMimeAllowed(this.options.validation?.mimeWhitelist, options.contentType)
     assertHeaderValues({ contentType: options.contentType })
     assertMetadata(options.metadata)

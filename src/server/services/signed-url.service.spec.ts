@@ -105,6 +105,31 @@ describe('SignedUrlService', () => {
   })
 
   describe('getDownloadUrl', () => {
+    it.each([
+      ['responseContentDisposition', 'inline', 'attachment\r\nx-evil: 1', 'ResponseContentDisposition'],
+      ['responseContentType', 'text/plain', 'text/html', 'ResponseContentType'],
+    ])(
+      'signs the %s it checked, even when the request answers differently on a later read',
+      async (field, first, later, input) => {
+        // A getter that answers a safe value for the check and another for the signature must not be signed.
+        const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+        let reads = 0
+        const request = { key: KEY }
+        Object.defineProperty(request, field, {
+          enumerable: true,
+          get: () => {
+            reads += 1
+            return reads === 1 ? first : later
+          },
+        })
+
+        await service.getDownloadUrl(request)
+
+        const command = mockedGetSignedUrl.mock.calls[0]?.[1] as GetObjectCommand
+        expect(command.input[input as 'ResponseContentType']).toBe(first)
+      },
+    )
+
     it('returns a URL with expiresAt calculated from the effective TTL', async () => {
       // happy path: returns the presigned URL and a correct expiresAt
       const ttlSeconds = 300

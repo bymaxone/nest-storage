@@ -4,9 +4,10 @@
  * @layer server/utils
  */
 import type { StorageException } from '../errors/storage-exception'
-import { assertHeaderValues, assertMetadata, isHeaderValue } from './header-value'
+import { assertHeaderValues, assertMetadata, copyMetadata, isHeaderValue } from './header-value'
 
 const VALUE_REASON = 'must be a string of tab, space and printable ASCII characters'
+const KIND_REASON = 'must be an object of header-safe strings'
 const KEY_REASON =
   "every key must be a non-empty header name of letters, digits and the characters !#$%&'*+-.^_`|~"
 
@@ -123,6 +124,24 @@ describe('assertMetadata', () => {
     expect(details).toStrictEqual({ field: 'metadata', reason: KEY_REASON })
   })
 
+  it.each([
+    ['a string', 'abc'],
+    ['an array', ['a', 'b']],
+    ['null', null],
+    ['a number', 5],
+  ])(
+    'refuses metadata that is %s, which is not an object of pairs, without repeating it',
+    (_label, metadata) => {
+      // A string or an array spread into index keys would be read as header names.
+      const { code, details } = refusal(() => {
+        assertMetadata(metadata as never)
+      })
+
+      expect(code).toBe('STORAGE_VALIDATION_FAILED')
+      expect(details).toStrictEqual({ field: 'metadata', reason: KIND_REASON })
+    },
+  )
+
   it.each(REFUSED)('refuses a value with %s, without repeating it', (_label, value) => {
     const { details } = refusal(() => {
       assertMetadata({ k: value })
@@ -136,5 +155,38 @@ describe('assertMetadata', () => {
     expect(() => {
       assertMetadata({ "Aa09!#$%&'*+-.^_`|~": 'v' })
     }).not.toThrow()
+  })
+})
+
+describe('copyMetadata', () => {
+  it('copies the pairs once, so a value that answers differently later is not read again', () => {
+    let reads = 0
+    const metadata: Record<string, string> = {}
+    Object.defineProperty(metadata, 'owner', {
+      enumerable: true,
+      get: () => {
+        reads += 1
+        return reads === 1 ? 'alice' : 'bob'
+      },
+    })
+
+    const copy = copyMetadata(metadata)
+
+    expect(copy).toStrictEqual({ owner: 'alice' })
+    expect(copy.owner).toBe('alice')
+    expect(reads).toBe(1)
+  })
+
+  it.each([
+    ['a string', 'abc'],
+    ['an array', ['a', 'b']],
+    ['null', null],
+  ])('refuses %s before it is copied', (_label, metadata) => {
+    const { code, details } = refusal(() => {
+      copyMetadata(metadata as never)
+    })
+
+    expect(code).toBe('STORAGE_VALIDATION_FAILED')
+    expect(details).toStrictEqual({ field: 'metadata', reason: KIND_REASON })
   })
 })
