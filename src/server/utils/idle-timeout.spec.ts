@@ -324,7 +324,12 @@ describe('guardIdleBody', () => {
     }
 
     expect(thrown).toMatchObject({
-      response: { error: { code: 'STORAGE_VALIDATION_FAILED' } },
+      response: {
+        error: {
+          code: 'STORAGE_VALIDATION_FAILED',
+          details: { reason: 'the stream body could not be read' },
+        },
+      },
       cause: failure,
     })
     expect(JSON.stringify((thrown as { response: unknown }).response)).not.toContain('SENTINEL')
