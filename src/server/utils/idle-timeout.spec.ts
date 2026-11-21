@@ -5,6 +5,7 @@
  */
 import { PassThrough, Readable } from 'node:stream'
 import { runInNewContext } from 'node:vm'
+import { EventEmitter } from 'node:events'
 import { guardIdleBody, SourceIdleError, withIdleTimeout } from './idle-timeout'
 
 async function collect(stream: AsyncIterable<unknown>): Promise<string> {
@@ -177,7 +178,11 @@ describe('withIdleTimeout', () => {
 
     const reason: unknown = await Promise.race([
       collect(withIdleTimeout(source, 1000)).catch((err: unknown) => err),
-      new Promise((resolve) => setTimeout(() => { resolve(stalled) }, 400)),
+      new Promise((resolve) =>
+        setTimeout(() => {
+          resolve(stalled)
+        }, 400),
+      ),
     ])
 
     expect(reason).not.toBe(stalled)
@@ -234,6 +239,44 @@ describe('withIdleTimeout', () => {
   })
 })
 
+/** An old-style stream: it has the events and `pipe` of the stream contract but is not a `Readable`. */
+class LegacyStream extends EventEmitter implements NodeJS.ReadableStream {
+  readable = true
+  read(): string {
+    return ''
+  }
+  setEncoding(): this {
+    return this
+  }
+  pause(): this {
+    return this
+  }
+  resume(): this {
+    return this
+  }
+  isPaused(): boolean {
+    return false
+  }
+  pipe<T extends NodeJS.WritableStream>(destination: T): T {
+    return destination
+  }
+  unpipe(): this {
+    return this
+  }
+  unshift(): void {
+    // An old-style stream has nothing to put back.
+  }
+  wrap(): this {
+    return this
+  }
+  [Symbol.asyncIterator](): AsyncIterableIterator<string | Buffer> {
+    return (async function* () {
+      await Promise.resolve()
+      yield Buffer.alloc(0)
+    })()
+  }
+}
+
 describe('guardIdleBody', () => {
   it('returns a buffer or a Uint8Array as is', () => {
     const buffer = Buffer.from('abc')
@@ -247,6 +290,49 @@ describe('guardIdleBody', () => {
     const source = new Readable({ read() {} })
 
     expect(guardIdleBody(source, 0)).toBe(source)
+  })
+
+  it('adapts a stream that is not a Readable when the guard is off, and passes its data on', async () => {
+    // An old-style stream has `pipe` and events but is not a Readable; the uploader needs a Readable.
+    const legacy = new LegacyStream()
+
+    const adapted = guardIdleBody(legacy, 0) as Readable
+    const received: Buffer[] = []
+    adapted.on('data', (chunk: Buffer) => received.push(chunk))
+    const ended = new Promise<void>((resolve) => adapted.on('end', resolve))
+    legacy.emit('data', Buffer.from('abc'))
+    legacy.emit('end')
+    await ended
+
+    expect(adapted).toBeInstanceOf(Readable)
+    expect(Buffer.concat(received).toString()).toBe('abc')
+  })
+
+  it('refuses with the library code and the host error as the cause when examining the stream throws', () => {
+    // A Proxy runs host code on `instanceof`; what it throws must not reach the caller raw.
+    const failure = new Error('SENTINEL trap ran')
+    const hostile = new Proxy(new LegacyStream(), {
+      getPrototypeOf: () => {
+        throw failure
+      },
+    })
+    let thrown: unknown
+    try {
+      guardIdleBody(hostile, 0)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toMatchObject({
+      response: {
+        error: {
+          code: 'STORAGE_VALIDATION_FAILED',
+          details: { reason: 'the stream body could not be read' },
+        },
+      },
+      cause: failure,
+    })
+    expect(JSON.stringify((thrown as { response: unknown }).response)).not.toContain('SENTINEL')
   })
 
   it('wraps a stream when the guard is on', () => {

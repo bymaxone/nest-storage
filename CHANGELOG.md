@@ -13,6 +13,17 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Changed
+
+- **An upload source that is not a `Readable` is adapted when the idle guard is off.** With `uploadIdleTimeoutMs: 0` a
+  stream body was handed to the uploader as it was, even one that only has `pipe` and events (an old-style stream) and
+  is not a `Readable`; it is now adapted to a `Readable`, and a `Readable` still goes through as it is. A stream body
+  that throws when it is examined (a Proxy whose `getPrototypeOf` trap throws) fails with `STORAGE_VALIDATION_FAILED`
+  and the error as the `cause`.
+
+  **Apply to a derived backend:** nothing to change; an old-style stream body now reaches the uploader as a
+  `Readable`, the type its body option names.
+
 ## [1.1.21] - 2026-11-21
 
 ### Fixed
