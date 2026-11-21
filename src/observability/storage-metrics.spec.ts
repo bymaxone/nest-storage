@@ -91,6 +91,17 @@ describe('StorageMetrics', () => {
     expect(second).toBe(first)
   })
 
+  it('still answers a scrape when the bytes uploaded overflow a number', async () => {
+    // Two finite sizes whose sum is Infinity: prom-client refuses `inc(Infinity)`, which would fail the whole scrape.
+    const { registry, tally } = registered()
+    tally.bytesUploaded(Number.MAX_VALUE)
+    tally.bytesUploaded(Number.MAX_VALUE)
+
+    await expect(registry.metrics()).resolves.toContain(
+      `bymax_storage_bytes_uploaded_total ${Number.MAX_VALUE}`,
+    )
+  })
+
   it('counts an operation that ended before the contributor registered', async () => {
     const tally = new StorageMetricsTally()
     tally.operation('copy', 'error', 0.1)

@@ -57,6 +57,8 @@ describe('StorageMetricsTally', () => {
   it.each([
     [[10, 5], 15],
     [[undefined, 0, -3, Number.NaN, Number.POSITIVE_INFINITY, 7], 7],
+    // Two finite sizes whose sum overflows must not turn the count into Infinity, which no counter accepts.
+    [[Number.MAX_VALUE, Number.MAX_VALUE, 5], Number.MAX_VALUE],
   ] as const)(
     'adds the bytes uploaded of %j and ignores what is not a positive finite number',
     (sizes, total) => {
