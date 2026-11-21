@@ -73,6 +73,25 @@ describe('snapshotOptions', () => {
     })
   })
 
+  it('reads a value that a non-enumerable own getter serves, in a group and at the top level', () => {
+    const credentials = {}
+    Object.defineProperty(credentials, 'accessKeyId', { get: () => 'key-id', enumerable: false })
+    Object.defineProperty(credentials, 'secretAccessKey', {
+      get: () => 'secret',
+      enumerable: false,
+    })
+    const options = { ...base, credentials }
+    Object.defineProperty(options, 'maxAttempts', { get: () => 7, enumerable: false })
+
+    const snapshot = snapshotOptions(options) as {
+      credentials: Record<string, unknown>
+      maxAttempts: unknown
+    }
+
+    expect(snapshot.credentials).toEqual({ accessKeyId: 'key-id', secretAccessKey: 'secret' })
+    expect(snapshot.maxAttempts).toBe(7)
+  })
+
   it('reads a value that a prototype getter serves', () => {
     class Group {
       private readonly limit = 1234
