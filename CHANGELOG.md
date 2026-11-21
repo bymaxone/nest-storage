@@ -30,7 +30,8 @@ note on each entry is the compatibility contract — read it, not the number.
 - **The pairs of `metadata` are read once on upload.** An upload checked the pairs of the caller's `metadata` object and
   sent that same object, reading each pair again for the request, so a value that answered differently on a later read
   was sent as something that had not been checked. The pairs are copied once, as a signed PUT URL already did, and a
-  request field or a pair that throws when read fails with `STORAGE_VALIDATION_FAILED` with the error as the `cause`.
+  pair that throws when read fails with `STORAGE_VALIDATION_FAILED` with the error as the `cause`; a request field of a
+  signed URL that throws when read fails the same way.
 
   **Apply to a derived backend:** nothing to change.
 
