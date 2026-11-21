@@ -52,6 +52,7 @@ const MAX_FIELD_LENGTH = 128
 function readOrUndefined<T>(read: () => T): T | undefined {
   try {
     return read()
+    // Stryker disable next-line BlockStatement: an empty block ends the function with `undefined`, which is what `return undefined` returns (equivalent).
   } catch {
     return undefined
   }
