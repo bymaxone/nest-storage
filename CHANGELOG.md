@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.21] - 2026-11-21
+
 ### Fixed
 
 - **A signed upload URL is signed for the content type the whitelist approved.** `getUploadUrl` and
@@ -1278,4 +1280,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.18]: https://github.com/bymaxone/nest-storage/compare/v1.1.17...v1.1.18
 [1.1.19]: https://github.com/bymaxone/nest-storage/compare/v1.1.18...v1.1.19
 [1.1.20]: https://github.com/bymaxone/nest-storage/compare/v1.1.19...v1.1.20
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.20...HEAD
+[1.1.21]: https://github.com/bymaxone/nest-storage/compare/v1.1.20...v1.1.21
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.21...HEAD
