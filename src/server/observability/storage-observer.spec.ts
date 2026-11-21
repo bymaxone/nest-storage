@@ -41,11 +41,23 @@ describe('StorageObserver.observe', () => {
   })
 
   it.each([
-    [new StorageException(STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND), 'not_found'],
-    [new StorageException(STORAGE_ERROR_CODES.STORAGE_REQUEST_ABORTED), 'aborted'],
-    [new StorageException(STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR), 'error'],
-    [new Error('boom'), 'error'],
-  ] as const)('counts %s as %s and rethrows it unchanged', async (failure, outcome) => {
+    [
+      'STORAGE_OBJECT_NOT_FOUND',
+      'not_found',
+      new StorageException(STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND),
+    ],
+    [
+      'STORAGE_REQUEST_ABORTED',
+      'aborted',
+      new StorageException(STORAGE_ERROR_CODES.STORAGE_REQUEST_ABORTED),
+    ],
+    [
+      'STORAGE_PROVIDER_ERROR',
+      'error',
+      new StorageException(STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR),
+    ],
+    ['a plain Error', 'error', new Error('boom')],
+  ] as const)('counts %s as %s and rethrows it unchanged', async (_label, outcome, failure) => {
     const { tally, observer: subject } = observer()
 
     await expect(subject.observe('delete', () => Promise.reject(failure))).rejects.toBe(failure)
@@ -147,11 +159,19 @@ describe('StorageObserver.scan', () => {
   })
 
   it.each([
-    [new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED), 'infected'],
-    [new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INCONCLUSIVE), 'unknown'],
-    [new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT), 'timeout'],
-    [new Error('scanner crashed'), 'error'],
-  ] as const)('counts %s as %s and rethrows it unchanged', async (failure, verdict) => {
+    [
+      'STORAGE_SCAN_INFECTED',
+      'infected',
+      new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INFECTED),
+    ],
+    [
+      'STORAGE_SCAN_INCONCLUSIVE',
+      'unknown',
+      new StorageException(STORAGE_ERROR_CODES.STORAGE_SCAN_INCONCLUSIVE),
+    ],
+    ['STORAGE_TIMEOUT', 'timeout', new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT)],
+    ['a plain Error', 'error', new Error('scanner crashed')],
+  ] as const)('counts %s as %s and rethrows it unchanged', async (_label, verdict, failure) => {
     const { tally, observer: subject } = observer()
 
     await expect(subject.scan('post-upload', () => Promise.reject(failure))).rejects.toBe(failure)
