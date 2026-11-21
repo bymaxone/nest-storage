@@ -118,7 +118,7 @@ beforeEach(() => {
 
 describe('StorageService — multipart upload', () => {
   it('has its README name the leavePartsOnError value it passes, and not the opposite one', async () => {
-    // The README once said `false` while the service passes `true` and aborts the upload itself.
+    // The library owns the multipart cleanup, so the README must name the `leavePartsOnError` value the service passes.
     const { service } = makeService()
     installUploader(() => Promise.resolve({ ETag: '"m"' }))
     await service.upload(uploadOf())
