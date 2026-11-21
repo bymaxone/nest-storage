@@ -322,11 +322,45 @@ describe('SignedUrlService', () => {
         },
       })
 
-      const result = await service.getUploadUrl({ key: KEY, contentType: 'image/png', metadata })
+      await service.getUploadUrl({ key: KEY, contentType: 'image/png', metadata })
 
       const input = (mockedGetSignedUrl.mock.calls[0]?.[1] as PutObjectCommand).input
       expect(input.Metadata).toStrictEqual({ owner: 'alice' })
-      expect(result.requiredHeaders['x-amz-meta-owner']).toBe('alice')
+    })
+
+    it('refuses a Map as metadata, which has no pairs to sign', async () => {
+      const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+
+      await expect(
+        service.getUploadUrl({
+          key: KEY,
+          contentType: 'image/png',
+          metadata: new Map([['owner', 'alice']]) as never,
+        }),
+      ).rejects.toMatchObject({
+        response: { error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'metadata' } } },
+      })
+      expect(mockedGetSignedUrl).not.toHaveBeenCalled()
+    })
+
+    it('wraps a request field that throws when read, with the host error as the cause', async () => {
+      const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+      const failure = new Error('SENTINEL request getter ran')
+      const request = { key: KEY }
+      Object.defineProperty(request, 'contentType', {
+        enumerable: true,
+        get: () => {
+          throw failure
+        },
+      })
+
+      const thrown = await service.getUploadUrl(request as never).catch((error: unknown) => error)
+
+      expect(thrown).toMatchObject({
+        response: { error: { code: 'STORAGE_VALIDATION_FAILED' } },
+        cause: failure,
+      })
+      expect(JSON.stringify((thrown as { response: unknown }).response)).not.toContain('SENTINEL')
     })
 
     it('forwards Metadata when provided', async () => {
@@ -374,8 +408,9 @@ describe('SignedUrlService', () => {
       expect(result.requiredHeaders).not.toHaveProperty('x-amz-acl')
     })
 
-    it('includes an x-amz-meta-<key> entry in requiredHeaders per metadata pair', async () => {
-      // signed metadata headers must be echoed to the client or the signature breaks
+    it('lists no x-amz-meta-<key> entry in requiredHeaders: the pairs are in the signed query', async () => {
+      // The presigner hoists each x-amz-meta-* into the query string, and a provider refuses a client that
+      // sends the same pair as a header too.
       const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
 
       const result = await service.getUploadUrl({
@@ -384,7 +419,9 @@ describe('SignedUrlService', () => {
         metadata: { a: 'b' },
       })
 
-      expect(result.requiredHeaders['x-amz-meta-a']).toBe('b')
+      const input = (mockedGetSignedUrl.mock.calls[0]?.[1] as PutObjectCommand).input
+      expect(input.Metadata).toStrictEqual({ a: 'b' })
+      expect(Object.keys(result.requiredHeaders)).toStrictEqual(['Content-Type'])
     })
 
     it('maps a non-StorageException error from getSignedUrl to STORAGE_PROVIDER_ERROR', async () => {

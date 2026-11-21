@@ -52,7 +52,7 @@ import { emit } from '../utils/log-event'
 import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 import { failureError } from '../utils/provider-failure-log'
 import { toListResult } from '../utils/list-result'
-import { assertHeaderValues } from '../utils/header-value'
+import { assertHeaderValues, copyMetadata } from '../utils/header-value'
 import { guardIdleBody } from '../utils/idle-timeout'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { buildACL } from '../utils/header-utils'
@@ -164,6 +164,8 @@ export class StorageService {
     }
     assertIntegerInput(requested.size, 'size', 0)
     const options = withBytesBody(requested)
+    // One read of each pair: what is checked, signed and sent is the copy, not the caller's object.
+    if (options.metadata !== undefined) options.metadata = copyMetadata(options.metadata)
     if (!options.contentType) {
       throw new StorageException(STORAGE_ERROR_CODES.STORAGE_CONTENT_TYPE_REQUIRED)
     }

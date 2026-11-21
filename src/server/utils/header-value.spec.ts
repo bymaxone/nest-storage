@@ -3,7 +3,7 @@
  * error never repeats the offending value.
  * @layer server/utils
  */
-import type { StorageException } from '../errors/storage-exception'
+import { StorageException } from '../errors/storage-exception'
 import { assertHeaderValues, assertMetadata, copyMetadata, isHeaderValue } from './header-value'
 
 const VALUE_REASON = 'must be a string of tab, space and printable ASCII characters'
@@ -188,5 +188,29 @@ describe('copyMetadata', () => {
 
     expect(code).toBe('STORAGE_VALIDATION_FAILED')
     expect(details).toStrictEqual({ field: 'metadata', reason: KIND_REASON })
+  })
+
+  it('wraps an error thrown while a pair is read, with the error as the cause and none of its text in the response', () => {
+    const failure = new Error('SENTINEL pair getter ran')
+    const metadata: Record<string, string> = {}
+    Object.defineProperty(metadata, 'owner', {
+      enumerable: true,
+      get: () => {
+        throw failure
+      },
+    })
+    let thrown: unknown
+    try {
+      copyMetadata(metadata)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(StorageException)
+    expect((thrown as StorageException).cause).toBe(failure)
+    expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
+    expect((thrown as StorageException).getResponse()).toMatchObject({
+      error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'metadata' } },
+    })
   })
 })

@@ -3,6 +3,7 @@
  * getter that answers differently on a later read has no later read to answer.
  * @layer server/utils
  */
+import { StorageException } from '../errors/storage-exception'
 import { readOnce } from './read-once'
 
 describe('readOnce', () => {
@@ -28,12 +29,34 @@ describe('readOnce', () => {
     expect(Object.getOwnPropertyDescriptor(copy, 'a')).toMatchObject({ value: 'A' })
   })
 
-  it('leaves out the fields it was not asked for and gives undefined for one the request lacks', () => {
+  it('leaves out the fields it was not asked for and one the request does not set', () => {
     const request: { a?: string; c: string } = { c: 'C' }
 
     const copy = readOnce(request, ['a'])
 
-    expect(copy).toEqual({ a: undefined })
+    expect(copy).toStrictEqual({})
     expect('c' in copy).toBe(false)
+  })
+
+  it('wraps an error thrown by a field, with the error as the cause and none of its text in the response', () => {
+    const failure = new Error('SENTINEL field getter ran')
+    const request = {
+      get a(): string {
+        throw failure
+      },
+    }
+    let thrown: unknown
+    try {
+      readOnce(request, ['a'])
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(StorageException)
+    expect((thrown as StorageException).cause).toBe(failure)
+    expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
+    expect((thrown as StorageException).getResponse()).toMatchObject({
+      error: { code: 'STORAGE_VALIDATION_FAILED' },
+    })
   })
 })
