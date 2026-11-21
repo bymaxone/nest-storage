@@ -42,10 +42,13 @@ describe('logValue', () => {
     ['a\u00adb', '"a\\u00adb"'],
     ['a\u2060b', '"a\\u2060b"'],
     ['a\ufeffb', '"a\\ufeffb"'],
-  ])('escapes the format character in %j that can reorder or hide text in a viewer', (raw, expected) => {
-    // A right-to-left override in a key can make a log viewer show `a.txt` + `exe.txt` reversed as something else.
-    expect(logValue(raw)).toBe(expected)
-  })
+  ])(
+    'escapes the format character in %j that can reorder or hide text in a viewer',
+    (raw, expected) => {
+      // A right-to-left override in a key can make a log viewer show `a.txt` + `exe.txt` reversed as something else.
+      expect(logValue(raw)).toBe(expected)
+    },
+  )
 
   it.each([
     ['a\u061cb', '"a\\u061cb"'],
@@ -63,10 +66,13 @@ describe('logValue', () => {
     ['a\u65e5\u672cb', '"a\u65e5\u672cb"'],
     ['e\u0301', '"e\u0301"'],
     ['a\ufe0fb', '"a\ufe0fb"'],
-  ])('leaves %j readable: letters, emoji, combining marks and variation selectors are not controls', (raw, expected) => {
-    // Escaping by category must not turn ordinary text in a key into escapes.
-    expect(logValue(raw)).toBe(expected)
-  })
+  ])(
+    'leaves %j readable: letters, emoji, combining marks and variation selectors are not controls',
+    (raw, expected) => {
+      // Escaping by category must not turn ordinary text in a key into escapes.
+      expect(logValue(raw)).toBe(expected)
+    },
+  )
 
   it('escapes a Unicode tag character, which is invisible, as a code point escape', () => {
     // Tag characters are outside the BMP and print as nothing; they are shown as \\u{...}.
@@ -117,6 +123,21 @@ describe('escapeForLog', () => {
   ])('escapes the control, format or separator character of %j', (raw, expected) => {
     // A newline or a right-to-left override in a key must read as text, not act on the log.
     expect(escapeForLog(raw)).toBe(expected)
+  })
+
+  it.each([
+    ['a\ud800b', 'a\\ud800b'],
+    ['a\udfffb', 'a\\udfffb'],
+    ['\udc00\ud800', '\\udc00\\ud800'],
+  ])(
+    'escapes the lone surrogate of %j, which a logger would otherwise write as an invalid character',
+    (raw, expected) => {
+      expect(escapeForLog(raw)).toBe(expected)
+    },
+  )
+
+  it('leaves a well-formed surrogate pair, an emoji, readable', () => {
+    expect(escapeForLog('ok \u{1f600} ok')).toBe('ok \u{1f600} ok')
   })
 
   it('returns text with nothing to escape unchanged', () => {
