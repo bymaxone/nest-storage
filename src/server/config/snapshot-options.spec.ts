@@ -261,8 +261,10 @@ describe('forRoot reads each option once', () => {
   it('takes at most as many entries as the length it read once, however long the array reports itself later', () => {
     // Answers 2 the first time and a billion afterwards: a copy that follows the later answers never ends.
     let lengthReads = 0
+    const entriesRead: string[] = []
     const lying = new Proxy(['image/png', 'image/jpeg'], {
       get: (target, key): unknown => {
+        if (typeof key === 'string' && /^\d+$/.test(key)) entriesRead.push(key)
         if (key !== 'length') return Reflect.get(target, key) as unknown
         lengthReads += 1
         return lengthReads === 1 ? 2 : 1_000_000_000
@@ -274,5 +276,7 @@ describe('forRoot reads each option once', () => {
     }
 
     expect(copy.validation.mimeWhitelist).toEqual(['image/png', 'image/jpeg'])
+    // The entry at the reported length is never asked for: a Proxy that throws there cannot refuse a good list.
+    expect(entriesRead).toEqual(['0', '1'])
   })
 })

@@ -40,8 +40,8 @@ function pickGroup(value: unknown, keys: readonly string[]): unknown {
 /**
  * The array copied once, so a hole becomes `undefined` (which validation refuses as a value that is not a
  * string) and a later change to the caller's array is not seen. A value that is not an array is kept as it is.
- * The length is read once, and the copy takes at most that many entries however long the array reports itself
- * afterwards. An array longer than the bound, or whose length is not a count, becomes
+ * The length is read once here and no more entries are requested than that, however long the array reports
+ * itself afterwards. An array longer than the bound, or whose length is not a count, becomes
  * {@link OVERSIZED_ARRAY} and is not walked. An array whose iterator throws is not caught here: `forRoot`
  * refuses it with the library's code and keeps the host's error as the cause.
  */
@@ -50,10 +50,13 @@ function copyArray(value: unknown): unknown {
   const length: unknown = value.length
   if (!isBoundedLength(length)) return OVERSIZED_ARRAY
   const copy: unknown[] = []
-  for (const entry of value as unknown[]) {
-    if (copy.length >= (length as number)) break
-    copy.push(entry)
+  const entries = (value as unknown[])[Symbol.iterator]()
+  while (copy.length < (length as number)) {
+    const step = entries.next()
+    if (step.done === true) break
+    copy.push(step.value)
   }
+  entries.return?.()
   return copy
 }
 
