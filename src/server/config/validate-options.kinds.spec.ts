@@ -343,6 +343,27 @@ function refusedAtBoot(options: unknown): string {
   throw new Error('expected forRoot to throw')
 }
 
+describe.each([
+  ['mimeWhitelist', ['image/png'], 'validation.mimeWhitelist must be an array of strings'],
+  [
+    'customValidators',
+    [{ validate: () => undefined }],
+    'validation.customValidators must hold objects with a validate function',
+  ],
+])('validation.%s copied by index', (name, good, reason) => {
+  it.each([
+    ['a hole', 1],
+    ['an undefined entry', 0],
+  ])('refuses at boot a list with %s, because the copy holds undefined there', (_label, kind) => {
+    // The copy reads every index up to the length, so a hole becomes undefined and cannot pass as an entry.
+    const list: unknown[] = [...good]
+    if (kind === 1) list.length = good.length + 1
+    else list.push(undefined)
+
+    expect(refusedAtBoot({ ...valid, validation: { [name]: list } })).toBe(reason)
+  })
+})
+
 describe.each(['mimeWhitelist', 'customValidators'])('validation.%s length', (name) => {
   const tooMany = `validation.${name} must hold at most 1000 entries`
 
