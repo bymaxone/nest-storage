@@ -237,6 +237,10 @@ Options accepted by `forRoot` and `forRootAsync`:
 | `multipart.thresholdBytes`     | `number`                                          | `5 MiB`           | Switch to multipart at or above this size      |
 | `multipart.partSizeBytes`      | `number`                                          | `5 MiB`           | Part size (S3 minimum: 5 MiB)                  |
 | `multipart.queueSize`          | `number`                                          | `4`               | Concurrent parts                               |
+| `scanner.impl`                 | `IFileScanner`                                    | —                 | The scanner. Without it no scan runs; an object with a `scan` function, see Virus Scanning |
+| `scanner.mode`                 | `'pre-upload' \| 'post-upload'`                   | `'pre-upload'`    | When the scan runs: before the bytes are stored, or after, on the stored key |
+| `scanner.rejectOnUnknown`      | `boolean`                                         | `false`           | `true` rejects an inconclusive (`'unknown'`) scan; `false` lets it through with a warning |
+| `scanner.timeoutMs`            | `number`                                          | `60000`           | Deadline of one scan; a whole number from `1` to `2147483647`; past it the upload is refused with `STORAGE_TIMEOUT` |
 | `validation.mimeWhitelist`     | `string[]`                                        | —                 | No MIME check when absent. Wildcards: `'image/*'`. A value that lists several types never matches. An array of strings: any other kind fails `forRoot`, and `null` is refused (omit it to allow every type) |
 | `validation.maxSizeBytes`      | `number`                                          | —                 | Maximum upload size in bytes; counted as a stream is read, so it holds with or without `size`. `null` is refused: omit it for no limit |
 | `validation.customValidators`  | `IUploadValidator[]`                              | —                 | Run in order before the upload. An array of objects that each have a `validate` function: any other kind, or an entry that is not such an object, fails `forRoot`; `null` is refused (omit it to run none) |
@@ -346,6 +350,10 @@ await storage.upload({
   onProgress: (e) => console.log(`${e.loaded}/${e.total ?? '?'} bytes`),
 })
 ```
+
+`onProgress` receives `{ loaded, total?, part? }`: the bytes sent so far, the total when it is known, and the
+part number on a multipart upload. A single-shot upload reports once, when it ends; a multipart upload reports
+as each part is sent.
 
 Uploads are automatically routed to multipart when `size >= multipart.thresholdBytes` (default 5 MiB). A `Readable` without a `size` always uses multipart. Multipart aborts automatically on failure (`leavePartsOnError: false`).
 
@@ -606,6 +614,11 @@ BymaxStorageModule.forRoot({
 })
 ```
 
+**What your scanner is given.** `scan(input)` receives `mode` (`'pre-upload'` or `'post-upload'`, the configured
+`scanner.mode`), the `key` and `bucket` as the provider holds them, the `contentType`, the `size` when known, a
+`signal` that aborts at `scanner.timeoutMs`, and a `body` (a `Buffer` or a stream) only when `mode` is
+`'pre-upload'`. In `'post-upload'` mode the scanner reads the object itself.
+
 **Streams in pre-upload mode.** A stream can be read once, so in `pre-upload` mode it is first read
 into memory, bounded by `validation.maxSizeBytes`, and the scanner and the upload share that buffer. A `Buffer` or `Uint8Array` body is copied once in this mode, so a change the caller makes to its own array while the scan runs reaches neither (the second copy of the body is held until the upload ends, so the body takes twice its size in memory). The library validates and scans the bytes at call time; do not change a buffer you passed until the call settles. A
 stream longer than the limit is refused with `STORAGE_VALIDATION_FAILED` as soon as it passes it, and
@@ -652,6 +665,18 @@ if (page1.nextContinuationToken) {
 }
 ```
 
+| Option | Meaning |
+| --- | --- |
+| `prefix` | Only keys that start with it, after `keyPrefix` |
+| `maxKeys` | Page size, a whole number of at least `1`; above `1000` it is lowered to `1000` (the S3 maximum). Default `1000` |
+| `continuationToken` | The `nextContinuationToken` of the previous page |
+| `delimiter` | Groups keys under sub-prefixes: with `'/'`, objects below `avatars/2026/` are not listed, and `avatars/2026/` is returned in `commonPrefixes` instead |
+| `bucket` | Lists another bucket for this call |
+| `abortSignal` | Ends the call when it aborts, see Cancelling a call |
+
+The result is `{ objects, commonPrefixes, isTruncated, nextContinuationToken? }`. Keys and prefixes come back
+relative to `keyPrefix`, so they can be passed to any other method as they are.
+
 ### Copy (server-side)
 
 ```typescript
@@ -660,6 +685,10 @@ const { etag } = await storage.copy({
   destinationKey: 'published/file.pdf',
 })
 ```
+
+`sourceBucket` and `destinationBucket` default to the module's bucket and may each name another, so a copy can
+cross buckets; both keys are relative to `keyPrefix`. `publicRead` and `cacheControl` set the ACL and the
+`Cache-Control` of the copy.
 
 ### Delete / Batch Delete
 
@@ -878,7 +907,7 @@ message is ever a label:
   upload), `error`.
 - `verdict`: `clean`, `infected`, `unknown`, `timeout`, `error`.
 
-`exists()` is counted as `head`, and `downloadBuffer()` as `download`. A download is timed to the response, not to the
+`exists()` is counted as `head`, `downloadBuffer()` as `download`, and the delete that removes an object a post-upload scan rejected as `delete`. A download is timed to the response, not to the
 last byte. A result returned from the idempotency cache counts as an upload but adds no bytes. The counters start
 with the module; the histogram starts when `StorageMetrics` registers.
 
@@ -1162,6 +1191,13 @@ is the one full value: it is a URL, and the prefix is part of the object's real 
   `LifecycleBucketOptions` (`{ bucket? }`).
 - **Extension points:** `IUploadValidator`, `IFileScanner`, `FileScanResult`, and the helpers
   `NoOpUploadValidator` and `NoOpFileScanner`.
+- **Observability (main entry):** `StorageMetricsTally`, the counts the `./observability` subpath publishes, and the
+  closed sets they are keyed by: `STORAGE_OPERATIONS` and `StorageOperation`, `STORAGE_OUTCOMES` and
+  `StorageOutcome`, `SCAN_VERDICTS` and `ScanVerdict`.
+- **From `./observability`:** `StorageMetrics`, `StorageHealthIndicator`, the name it reports under
+  (`STORAGE_HEALTH_INDICATOR_NAME`), its deadline and cache (`STORAGE_HEALTH_TIMEOUT_MS`,
+  `STORAGE_HEALTH_CACHE_MS`), and the metadata keys `@bymax-one/nest-core` discovers them by
+  (`METRICS_CONTRIBUTOR_METADATA`, `HEALTH_INDICATOR_METADATA`).
 - **From `./shared`:** `UploadResult`, `ObjectMetadata`, `ListedObject`, `SignedUrlResult`,
   `StorageErrorResponse`, `StorageErrorCode`, `STORAGE_ERROR_CODES`, the MIME presets
   `DEFAULT_IMAGE_MIME_WHITELIST`, `DEFAULT_VIDEO_MIME_WHITELIST`, `DEFAULT_DOC_MIME_WHITELIST`, and the
