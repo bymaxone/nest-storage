@@ -36,6 +36,8 @@ import { StorageService } from './services/storage.service'
 import { SignedUrlService } from './services/signed-url.service'
 import { ValidationService } from './services/validation.service'
 import { FileScannerService } from './services/file-scanner.service'
+import { StorageException } from './errors/storage-exception'
+import { STORAGE_ERROR_CODES } from '../shared/constants/error-codes.constants'
 import { StorageMetricsTally } from './observability/storage-metrics-tally'
 import { StorageObserver } from './observability/storage-observer'
 import { StorageTracing } from './observability/storage-tracing'
@@ -43,8 +45,53 @@ import { IdempotencyCache } from './utils/idempotency-cache'
 import { emit } from './utils/log-event'
 import { STORAGE_LOG_EVENTS } from './utils/log-events'
 
-/** Validates raw options and materializes the fully-resolved options shape. */
+/** Whether `error` is one of the library's own refusals; a value whose prototype cannot be read is not. */
+function isLibraryError(error: unknown): boolean {
+  try {
+    return error instanceof StorageException
+  } catch {
+    return false
+  }
+}
+
+/** Refuses what made the options unreadable with the library's own code, keeping the host's error as the cause. */
+function refuseUnreadable(error: unknown): never {
+  // The host's error text never reaches the response.
+  if (isLibraryError(error)) throw error
+  throw new StorageException(
+    STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG,
+    undefined,
+    { reason: 'the options could not be read' },
+    undefined,
+    error,
+  )
+}
+
+/** Reads, validates and resolves the options; a read that throws is refused with the library's own code. */
 function resolveAsyncOptions(raw: BymaxStorageModuleOptions): ResolvedBymaxStorageOptions {
+  try {
+    return resolveOptions(raw)
+  } catch (error) {
+    return refuseUnreadable(error)
+  }
+}
+
+/**
+ * As {@link resolveAsyncOptions} for options a host produces: awaiting a result reads its `then`, so a host
+ * object that throws there, or a factory that fails, is refused the same way.
+ */
+async function resolveProducedOptions(
+  produce: () => BymaxStorageModuleOptions | Promise<BymaxStorageModuleOptions>,
+): Promise<ResolvedBymaxStorageOptions> {
+  try {
+    return resolveOptions(await produce())
+  } catch (error) {
+    return refuseUnreadable(error)
+  }
+}
+
+/** Validates raw options and materializes the fully-resolved options shape. */
+function resolveOptions(raw: BymaxStorageModuleOptions): ResolvedBymaxStorageOptions {
   // Every option is read once, here: the copy is what is validated and what is resolved.
   const options = snapshotOptions(raw) as BymaxStorageModuleOptions
   validateOptions(options)
@@ -54,7 +101,8 @@ function resolveAsyncOptions(raw: BymaxStorageModuleOptions): ResolvedBymaxStora
     // Once per module init: this runs when the options are resolved, never per request.
     emit(new Logger(BymaxStorageModule.name), 'warn', {
       event: STORAGE_LOG_EVENTS.ttlClamped,
-      message: 'signedUrls.maxTtlSeconds exceeds the SigV4 presigned-URL limit; the limit is used instead',
+      message:
+        'signedUrls.maxTtlSeconds exceeds the SigV4 presigned-URL limit; the limit is used instead',
       configuredSeconds: configured,
       appliedSeconds: resolved.signedUrls.maxTtlSeconds,
     })
@@ -223,7 +271,7 @@ export class BymaxStorageModule {
     if (useFactory) {
       return {
         provide: BYMAX_STORAGE_OPTIONS,
-        useFactory: async (...args: unknown[]) => resolveAsyncOptions(await useFactory(...args)),
+        useFactory: (...args: unknown[]) => resolveProducedOptions(() => useFactory(...args)),
         inject: [...(asyncOptions.inject ?? [])],
       }
     }
@@ -231,13 +279,11 @@ export class BymaxStorageModule {
     if (factoryToken) {
       return {
         provide: BYMAX_STORAGE_OPTIONS,
-        useFactory: async (factory: BymaxStorageModuleOptionsFactory) =>
-          resolveAsyncOptions(await factory.createStorageOptions()),
+        useFactory: (factory: BymaxStorageModuleOptionsFactory) =>
+          resolveProducedOptions(() => factory.createStorageOptions()),
         inject: [factoryToken],
       }
     }
-    throw new Error(
-      'BymaxStorageModule.forRootAsync requires useFactory, useClass, or useExisting',
-    )
+    throw new Error('BymaxStorageModule.forRootAsync requires useFactory, useClass, or useExisting')
   }
 }

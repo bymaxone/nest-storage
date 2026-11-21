@@ -55,6 +55,25 @@ describe('StorageException', () => {
     expect(body.error.message).toBe('A specific message')
   })
 
+  it('should keep a given cause beside the response and never in it', () => {
+    const cause = new Error('SENTINEL-CAUSE')
+
+    const exception = new StorageException(
+      'STORAGE_INVALID_CONFIG',
+      undefined,
+      undefined,
+      undefined,
+      cause,
+    )
+
+    expect(exception.cause).toBe(cause)
+    expect(JSON.stringify(exception.getResponse())).not.toContain('SENTINEL-CAUSE')
+  })
+
+  it('should carry no cause when none is given', () => {
+    expect(new StorageException('STORAGE_INVALID_CONFIG').cause).toBeUndefined()
+  })
+
   it('should omit the details key when none is provided', () => {
     // Details-absent branch of the body spread.
     const body = new StorageException('STORAGE_KEY_INVALID').getResponse() as StorageBody

@@ -23,7 +23,12 @@ describe('providerRecipes.awsS3', () => {
 
   it('forwards a session token only when provided', () => {
     // Present → forwarded; absent → omitted.
-    const withToken = providerRecipes.awsS3({ region: 'us-east-1', bucket: 'b', ...CREDS, sessionToken: 'tok' })
+    const withToken = providerRecipes.awsS3({
+      region: 'us-east-1',
+      bucket: 'b',
+      ...CREDS,
+      sessionToken: 'tok',
+    })
     expect(withToken.credentials.sessionToken).toBe('tok')
     const without = providerRecipes.awsS3({ region: 'us-east-1', bucket: 'b', ...CREDS })
     expect(without.credentials.sessionToken).toBeUndefined()
@@ -81,7 +86,11 @@ describe('providerRecipes.backblazeB2', () => {
 describe('providerRecipes.minio', () => {
   it('uses path-style addressing and defaults the region', () => {
     // Absent region → 'us-east-1'; a trailing slash is trimmed from publicBaseUrl.
-    const config = providerRecipes.minio({ endpoint: 'http://localhost:9000/', bucket: 'b', ...CREDS })
+    const config = providerRecipes.minio({
+      endpoint: 'http://localhost:9000/',
+      bucket: 'b',
+      ...CREDS,
+    })
     expect(config.forcePathStyle).toBe(true)
     expect(config.region).toBe('us-east-1')
     expect(config.publicBaseUrl).toBe('http://localhost:9000/b')
@@ -90,7 +99,12 @@ describe('providerRecipes.minio', () => {
 
   it('honors an explicit region', () => {
     // A provided region overrides the default.
-    const config = providerRecipes.minio({ endpoint: 'http://localhost:9000', bucket: 'b', region: 'eu-1', ...CREDS })
+    const config = providerRecipes.minio({
+      endpoint: 'http://localhost:9000',
+      bucket: 'b',
+      region: 'eu-1',
+      ...CREDS,
+    })
     expect(config.region).toBe('eu-1')
     expect(config.publicBaseUrl).toBe('http://localhost:9000/b')
   })
@@ -117,8 +131,13 @@ describe('providerRecipes table', () => {
   it('gives every non-AWS recipe exactly the checksum opt-out pair, and AWS none', () => {
     // The shared opt-out table is `as const` too; compare the checksum keys whole, not one at a time.
     const checksumKeys = (config: object): Record<string, unknown> =>
-      Object.fromEntries(Object.entries(config).filter(([key]) => key.toLowerCase().includes('checksum')))
-    const optOut = { requestChecksumCalculation: 'WHEN_REQUIRED', responseChecksumValidation: 'WHEN_REQUIRED' }
+      Object.fromEntries(
+        Object.entries(config).filter(([key]) => key.toLowerCase().includes('checksum')),
+      )
+    const optOut = {
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
+    }
     const base = { region: 'r', bucket: 'b', ...CREDS }
     const r2 = { accountId: 'a', bucket: 'b', customDomain: 'https://c.example', ...CREDS }
     const mi = { endpoint: 'http://m:9000', bucket: 'b', ...CREDS }
@@ -126,7 +145,9 @@ describe('providerRecipes table', () => {
     expect(checksumKeys(providerRecipes.digitalOceanSpaces(base))).toStrictEqual(optOut)
     expect(checksumKeys(providerRecipes.wasabi(base))).toStrictEqual(optOut)
     expect(checksumKeys(providerRecipes.cloudflareR2(r2))).toStrictEqual(optOut)
-    expect(checksumKeys(providerRecipes.backblazeB2({ ...base, endpointHost: 'h' }))).toStrictEqual(optOut)
+    expect(checksumKeys(providerRecipes.backblazeB2({ ...base, endpointHost: 'h' }))).toStrictEqual(
+      optOut,
+    )
     expect(checksumKeys(providerRecipes.minio(mi))).toStrictEqual(optOut)
   })
 })
@@ -136,7 +157,9 @@ describe('providerRecipes determinism', () => {
     // Recipes are pure references — no hidden state between calls.
     const base = { region: 'us-east-1', bucket: 'b', ...CREDS }
     expect(providerRecipes.awsS3(base)).toEqual(providerRecipes.awsS3(base))
-    expect(providerRecipes.digitalOceanSpaces(base)).toEqual(providerRecipes.digitalOceanSpaces(base))
+    expect(providerRecipes.digitalOceanSpaces(base)).toEqual(
+      providerRecipes.digitalOceanSpaces(base),
+    )
     expect(providerRecipes.wasabi(base)).toEqual(providerRecipes.wasabi(base))
     const r2 = { accountId: 'abc', bucket: 'b', customDomain: 'https://cdn.example.com', ...CREDS }
     expect(providerRecipes.cloudflareR2(r2)).toEqual(providerRecipes.cloudflareR2(r2))

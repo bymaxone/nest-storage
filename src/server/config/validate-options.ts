@@ -184,22 +184,14 @@ function assertValidationKinds(validation: unknown): void {
   }
 }
 
-/** Whether `value` is an array whose every entry, holes included, is a string; a value that throws when read is not. */
+/** Whether `value` is an array whose every entry, holes included, is a string. A value that throws when read is the host's, and `forRoot` refuses it. */
 function isStringArray(value: unknown): boolean {
-  try {
-    return Array.isArray(value) && Array.from(value as unknown[]).every((entry) => typeof entry === 'string')
-  } catch {
-    return false
-  }
+  return Array.isArray(value) && Array.from(value as unknown[]).every((entry) => typeof entry === 'string')
 }
 
 /** Whether every entry is an object with a `validate` function, which is what the upload path calls; reads each entry once. */
 function isValidatorList(entries: unknown[]): boolean {
-  try {
-    return Array.from(entries).every((entry) => isObject(entry) && typeof entry.validate === 'function')
-  } catch {
-    return false
-  }
+  return Array.from(entries).every((entry) => isObject(entry) && typeof entry.validate === 'function')
 }
 
 /**
