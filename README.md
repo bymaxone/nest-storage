@@ -894,7 +894,7 @@ export class AppModule {}
 | --- | --- | --- | --- |
 | `bymax_storage_operations_total` | counter | `operation`, `outcome` | Operations that ended |
 | `bymax_storage_operation_duration_seconds` | histogram | `operation` | How long they took |
-| `bymax_storage_bytes_uploaded_total` | counter | none | Bytes of uploads that succeeded |
+| `bymax_storage_bytes_uploaded_total` | counter | none | Bytes that uploads that succeeded sent |
 | `bymax_storage_scans_total` | counter | `verdict` | File scans |
 
 The labels come from closed sets, so the number of series never grows with traffic and no key, bucket, prefix or
@@ -908,7 +908,7 @@ message is ever a label:
 - `verdict`: `clean`, `infected`, `unknown`, `timeout`, `error`.
 
 `exists()` is counted as `head`, `downloadBuffer()` as `download`, and the delete that removes an object a post-upload scan rejected as `delete`. A download is timed to the response, not to the
-last byte. A result returned from the idempotency cache counts as an upload but adds no bytes. The counters start
+last byte. A result returned from the idempotency cache counts as an upload but adds no bytes. The bytes are the ones the transfer sent: a stream without a declared `size` is counted too, and a `size` the stream did not reach is not; a failed upload adds none. The counters start
 with the module; the histogram starts when `StorageMetrics` registers.
 
 ### Readiness

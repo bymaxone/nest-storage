@@ -56,15 +56,16 @@ import { assertHeaderValues } from '../utils/header-value'
 import { guardIdleBody } from '../utils/idle-timeout'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { buildACL } from '../utils/header-utils'
-import {
-  destroyStream,
-  isBufferLike,
-  type UploadBody,
-} from '../utils/stream-utils'
+import { destroyStream, isBufferLike, type UploadBody } from '../utils/stream-utils'
 import { assertIntegerInput } from '../utils/numeric-input'
 import { callDetails, callerFields } from '../utils/call-details'
 import { toObjectMetadata } from '../utils/object-metadata'
-import { assertScannedSize, boundStreamSize, bufferStreamForScan, withBytesBody } from '../utils/upload-body'
+import {
+  assertScannedSize,
+  boundStreamSize,
+  bufferStreamForScan,
+  withBytesBody,
+} from '../utils/upload-body'
 import { guardDownloadBody } from '../utils/download-body'
 import { escapeForLog } from '../utils/log-value'
 import {
@@ -83,11 +84,13 @@ import {
   putObjectHeaders,
   validationInput,
   forwardProgress,
+  trackLoaded,
   normalizeScanBody,
 } from '../utils/upload-support'
 import { assertMaxBytes, readDownloadBody } from '../utils/download-buffer'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import { Observed, StorageObserver } from '../observability/storage-observer'
+import { rememberUploadedBytes, uploadedBytesOf } from '../utils/uploaded-bytes'
 import { uploadSingleShot, type UploadContext } from '../utils/upload-single-shot'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
 
@@ -139,7 +142,7 @@ export class StorageService {
   @Observed<UploadResult>('upload', {
     span: 'storage.upload',
     describe: (result) => ({ 'bymax.storage.multipart': String(result.multipart) }),
-    bytes: (result) => (result.fromIdempotencyCache ? undefined : result.size),
+    bytes: uploadedBytesOf,
   })
   async upload(options: UploadOptions): Promise<UploadResult> {
     try {
@@ -449,7 +452,10 @@ export class StorageService {
         context,
         options.abortSignal,
       )
-      return { stream, metadata: toObjectMetadata(response, this.keyResolver.stripPrefix(finalKey), bucket) }
+      return {
+        stream,
+        metadata: toObjectMetadata(response, this.keyResolver.stripPrefix(finalKey), bucket),
+      }
     } catch (err) {
       if (err instanceof StorageException) {
         throw err
@@ -585,6 +591,7 @@ export class StorageService {
       partSize: this.options.multipart.partSizeBytes,
       leavePartsOnError: true,
     })
+    const sent = trackLoaded(uploader)
     forwardProgress(uploader, options.onProgress)
     const abortUpload = (): void => {
       void uploader.abort()
@@ -593,15 +600,18 @@ export class StorageService {
     signal?.addEventListener('abort', abortUpload, { once: true })
     try {
       const response = await uploader.done()
-      return buildUploadResult(this.keyResolver, this.options, {
-        finalKey,
-        bucket,
-        etag: response.ETag,
-        versionId: response.VersionId,
-        size: options.size,
-        contentType: options.contentType,
-        multipart: true,
-      })
+      return rememberUploadedBytes(
+        buildUploadResult(this.keyResolver, this.options, {
+          finalKey,
+          bucket,
+          etag: response.ETag,
+          versionId: response.VersionId,
+          size: options.size,
+          contentType: options.contentType,
+          multipart: true,
+        }),
+        sent(),
+      )
     } catch (err) {
       return await this.failMultipart(err, finalKey, bucket, caller, {
         uploadId: uploader.uploadId,

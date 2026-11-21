@@ -22,6 +22,23 @@ export function normalizeScanBody(body: UploadBody): Buffer {
   return body as Buffer
 }
 
+/**
+ * Follows the bytes the uploader reports as sent, from its own progress events: a stream without a declared size
+ * has no other count, and a declared size says what the caller expected, not what the transfer reached.
+ *
+ * Register it before the caller's hook.
+ *
+ * @param uploader - The multipart uploader.
+ * @returns A function that reads the last count the uploader reported; `0` while it has reported none.
+ */
+export function trackLoaded(uploader: Upload): () => number {
+  let loaded = 0
+  uploader.on('httpUploadProgress', (event) => {
+    loaded = event.loaded ?? loaded
+  })
+  return () => loaded
+}
+
 /** Relays the uploader's progress events to the caller's callback, when there is one. */
 export function forwardProgress(uploader: Upload, onProgress: UploadOptions['onProgress']): void {
   if (!onProgress) return
@@ -31,7 +48,9 @@ export function forwardProgress(uploader: Upload, onProgress: UploadOptions['onP
 }
 
 /** Converts a `Uint8Array` body to a `Buffer` for SDK safety; passes others through. */
-export function normalizeSingleShotBody(body: UploadBody): NonNullable<PutObjectCommandInput['Body']> {
+export function normalizeSingleShotBody(
+  body: UploadBody,
+): NonNullable<PutObjectCommandInput['Body']> {
   if (isBufferLike(body)) {
     return Buffer.isBuffer(body) ? body : Buffer.from(body)
   }
