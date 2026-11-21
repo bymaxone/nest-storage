@@ -103,7 +103,10 @@ describe('header-utils', () => {
 
         expect(thrown).toBeInstanceOf(StorageException)
         expect((thrown as StorageException).getResponse()).toMatchObject({
-          error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'publicRead' } },
+          error: {
+            code: 'STORAGE_VALIDATION_FAILED',
+            details: { field: 'publicRead', reason: 'must be a boolean' },
+          },
         })
       },
     )
