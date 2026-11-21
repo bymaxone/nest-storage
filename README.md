@@ -107,8 +107,8 @@ All subpaths ship ESM **and** CommonJS with declarations for each format, so a
 
 | Subpath      | Required peers                                                                                                                                                                  |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.` (server) | `@nestjs/common ^11.0.16`, `@nestjs/core ^11.1.18`, `@aws-sdk/client-s3 ^3.700`, `@aws-sdk/lib-storage ^3.700`, `@aws-sdk/s3-request-presigner ^3.700`, `reflect-metadata ^0.2` |
-| `./observability` | `@bymax-one/nest-core >=1.6.15` (to be discovered), `prom-client ^15`; all optional |
+| `.` (server) | `@nestjs/common ^11.0.16`, `@nestjs/core ^11.1.18`, `@aws-sdk/client-s3 ^3.700`, `@aws-sdk/lib-storage ^3.700`, `@aws-sdk/s3-request-presigner ^3.700`, `reflect-metadata ^0.2`; optional: `@opentelemetry/api ^1.9` (the spans start only when it is installed) |
+| `./observability` | The peers of `.`, and `prom-client ^15` for the metrics; `@bymax-one/nest-core >=1.6.15` is how a host discovers the two classes. `prom-client` and `@bymax-one/nest-core` are optional for the package, needed only to use this subpath |
 | `./shared`   | None                                                                                                                                                                            |
 
 ---
@@ -912,12 +912,23 @@ message is ever a label:
 last byte. A result returned from the idempotency cache counts as an upload but adds no bytes. The bytes are the ones the transfer sent: a stream without a declared `size` is counted too, and a `size` the stream did not reach is not; a failed upload adds none. The counters start
 with the module; the histogram starts when `StorageMetrics` registers.
 
+`delete_many` reports how it ended as a call, not per key: `deleteMany()` returns the keys that failed instead of
+throwing, so a call in which every key failed is counted as `success`; read `failed` in its result for that. A `head`
+of a bucket that does not exist is answered 404 by the provider as it is for a missing object, and is counted as
+`not_found`.
+
+`StorageMetricsTally` is what the metrics read, and the library writes to it as it works: `operation(operation,
+outcome, seconds)` and `scan(verdict)` count, `bytesUploaded(bytes)` adds to the byte counter, `onDuration(listener)`
+hands the listener the duration of every operation that ends from then on, and `snapshot()` returns the counts so
+far as copies. A host that publishes its own metrics reads `snapshot()`.
+
 ### Readiness
 
 `StorageHealthIndicator` reports under the name `storage`. It asks `StorageService.checkBucket()` for one
 `HeadBucket` and answers `up` or `down` with no detail, so nothing about the bucket, the region or the endpoint
 leaves with it. The probe has its own deadline, the answer is kept, and checks that arrive
-while one is running share it. The probe is counted as `check_bucket`.
+while one is running share it. The probe is counted as `check_bucket`. The answer lags the bucket's real state by up to the 5 seconds it is kept plus the 2 seconds the probe may take,
+so a bucket that stops answering can still read `up` for up to 7 seconds.
 
 ### Spans
 
@@ -1173,7 +1184,14 @@ supply through it first: the guard below, then `keyPrefix`.
 `deleteMany` result all omit the prefix, so any of them can be passed straight back to `head`,
 `download`, `delete`, `copy` or a signed-URL call, which prepend it once. `UploadResult.publicUrl`
 is the one full value: it is a URL, and the prefix is part of the object's real path. Error
-`details` carry the real, prefixed key, because they describe what was sent to the provider.
+`details` carry the `key` you passed, without the prefix (see "What `details` repeats").
+
+**The fields of the results.** `UploadResult` holds `key`, `bucket`, `etag`, `contentType`, `publicUrl`, `multipart`
+and `fromIdempotencyCache`, and `size` and `versionId` when known (`versionId` only on a versioned bucket).
+`ObjectMetadata` (from `head` and `download`) holds `key`, `bucket`, `size`, `contentType`, `etag`, `lastModified`
+and `metadata` (the `x-amz-meta-*` pairs), and `cacheControl`, `contentDisposition`, `storageClass` and `versionId`
+when the provider reports them. A `ListedObject` holds `key`, `size`, `etag` and `lastModified`, and `storageClass`
+when reported.
 
 ### Exported types and constants
 

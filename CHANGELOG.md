@@ -23,6 +23,16 @@ note on each entry is the compatibility contract — read it, not the number.
   **Apply to a derived backend:** nothing to change. A hook that threw used to turn a stored upload into an error; it
   now leaves the result alone, so an application that relied on a throwing hook to fail an upload must fail it itself.
 
+- **An option that throws when it is read is refused with `STORAGE_INVALID_CONFIG`.** A getter or a Proxy of the
+  host's as the options object, a group or a validator, and a `then` that throws on the object a `useFactory` returns,
+  surfaced the host's own error from `forRoot` and `forRootAsync`. They now fail `STORAGE_INVALID_CONFIG`
+  (`reason: 'the options could not be read'`), the host's error is kept as the `cause` of the exception and none of
+  its text is in the response, and a whitelist or a validator list whose iterator throws is refused the same way instead
+  of as "must be an array of strings". `StorageException` takes an optional `cause`.
+
+  **Apply to a derived backend:** a factory that throws is now reported as `STORAGE_INVALID_CONFIG` with the
+  factory's error as the `cause`; read `cause` where you matched the raw error.
+
 - **A lone surrogate in a logged value is escaped.** `escapeForLog` left a lone surrogate (`\ud800`) as it was, and a
   logger writes it as an invalid character. It shows as `\ud800` now, like the other characters that cannot be shown;
   a well-formed pair, an emoji, stays readable.
