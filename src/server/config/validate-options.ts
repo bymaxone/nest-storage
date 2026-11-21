@@ -10,7 +10,7 @@ import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { MAX_TIMER_MS } from '../constants/timer.constants'
 import { isHeaderValue } from '../utils/header-value'
-import { isBoundedLength, MAX_OPTION_ARRAY_LENGTH } from './option-array-bound'
+import { isBoundedLength, MAX_OPTION_ARRAY_LENGTH, OVERSIZED_ARRAY } from './option-array-bound'
 
 const MIN_PART_SIZE_BYTES = 5 * 1024 * 1024
 /** S3's largest part. */
@@ -209,10 +209,10 @@ function assertValidationKinds(validation: unknown): void {
       'validation.customValidators must not be null; omit it to run no custom validator',
     )
   }
+  assertBoundedArray('customValidators', customValidators)
   if (customValidators !== undefined && !Array.isArray(customValidators)) {
     throw invalid('validation.customValidators must be an array')
   }
-  assertBoundedArray('customValidators', customValidators)
   if (customValidators !== undefined && !isValidatorList(customValidators as unknown[])) {
     throw invalid('validation.customValidators must hold objects with a validate function')
   }
@@ -220,7 +220,7 @@ function assertValidationKinds(validation: unknown): void {
 
 /** Refuses an array option with more entries than {@link MAX_OPTION_ARRAY_LENGTH}, or whose length is not a count, before any entry is read. */
 function assertBoundedArray(name: string, value: unknown): void {
-  if (Array.isArray(value) && !isBoundedLength(value.length)) {
+  if (value === OVERSIZED_ARRAY || (Array.isArray(value) && !isBoundedLength(value.length))) {
     throw invalid(`validation.${name} must hold at most ${String(MAX_OPTION_ARRAY_LENGTH)} entries`)
   }
 }

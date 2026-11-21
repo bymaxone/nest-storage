@@ -368,6 +368,20 @@ describe.each(['mimeWhitelist', 'customValidators'])('validation.%s length', (na
     },
   )
 
+  it('refuses at boot an array that reports a length over the bound on its first read, and does not read it again', () => {
+    let lengthReads = 0
+    const lying = new Proxy([] as string[], {
+      get: (target, key): unknown => {
+        if (key !== 'length') return Reflect.get(target, key) as unknown
+        lengthReads += 1
+        return lengthReads === 1 ? 1_000_000_000 : 0
+      },
+    })
+
+    expect(refusedAtBoot({ ...valid, validation: { [name]: lying } })).toBe(tooMany)
+    expect(lengthReads).toBe(1)
+  })
+
   it('accepts an array of exactly 1000 entries', () => {
     const entries =
       name === 'mimeWhitelist'

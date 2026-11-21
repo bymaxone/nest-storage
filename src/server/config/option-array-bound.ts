@@ -9,6 +9,13 @@
 export const MAX_OPTION_ARRAY_LENGTH = 1000
 
 /**
+ * What the copy of the options holds in place of an array that is longer than the bound, or whose length is
+ * not a count: the array itself is never kept, so validation cannot read its length a second time and get
+ * another answer. Validation refuses it by name.
+ */
+export const OVERSIZED_ARRAY: object = Object.freeze({})
+
+/**
  * Whether `length` is a count an option array may have.
  *
  * @param length - The `length` an array reports, which a Proxy of an array may set to anything.
