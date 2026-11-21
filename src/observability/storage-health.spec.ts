@@ -3,6 +3,7 @@
  * the answer for a few seconds, shares a probe that is running, and lets a caller's abort end its own wait only.
  * @layer observability
  */
+import { getEventListeners } from 'node:events'
 import type { StorageService } from '@bymax-one/nest-storage'
 import {
   HEALTH_INDICATOR_METADATA,
@@ -160,5 +161,51 @@ describe('StorageHealthIndicator', () => {
     await expect(indicatorOver(checkBucket).check(signal)).resolves.toEqual({ status: 'up' })
 
     expect(removed).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+
+  it('leaves no abort listener on a long-lived signal, however many checks it was given to', async () => {
+    jest.useFakeTimers({ now: 1_000_000 })
+    const checkBucket = jest.fn().mockResolvedValue(undefined)
+    const indicator = indicatorOver(checkBucket)
+    const host = new AbortController()
+
+    for (let round = 0; round < 25; round += 1) {
+      jest.setSystemTime(1_000_000 + round * (STORAGE_HEALTH_CACHE_MS + 1))
+      await indicator.check(host.signal)
+    }
+    expect(checkBucket).toHaveBeenCalledTimes(25)
+    expect(getEventListeners(host.signal, 'abort')).toHaveLength(0)
+
+    let finish: () => void = () => undefined
+    checkBucket.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+    )
+    jest.setSystemTime(2_000_000)
+    const sharing = Array.from({ length: 25 }, () => indicator.check(host.signal))
+    expect(getEventListeners(host.signal, 'abort')).toHaveLength(25)
+    finish()
+    await Promise.all(sharing)
+    expect(getEventListeners(host.signal, 'abort')).toHaveLength(0)
+  })
+
+  it('leaves no listener on a signal that aborts while the probe runs', async () => {
+    let finish: () => void = () => undefined
+    const checkBucket = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const gone = new AbortController()
+    const waiting = indicatorOver(checkBucket).check(gone.signal)
+
+    gone.abort()
+    await expect(waiting).resolves.toEqual({ status: 'down' })
+
+    expect(getEventListeners(gone.signal, 'abort')).toHaveLength(0)
+    finish()
   })
 })

@@ -89,6 +89,7 @@ export class StorageHealthIndicator implements HealthIndicator {
     if (signal.aborted) return Promise.resolve('down')
     return new Promise((resolve) => {
       const stop = (): void => {
+        signal.removeEventListener('abort', stop)
         resolve('down')
       }
       signal.addEventListener('abort', stop)
