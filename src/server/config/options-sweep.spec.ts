@@ -191,4 +191,49 @@ describe('the options read under an Nth-trap sweep', () => {
     expect((refused as StorageException).code).toBe(STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG)
     expect((refused as StorageException).cause).toBe(hostile)
   })
+
+  it('refuses a StorageException that the host throws as it refuses any host error, and keeps it as the cause', async () => {
+    const host = new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG,
+      500,
+      { sentinel: 'HOST-TEXT' },
+      'HOST-TEXT',
+    )
+    const fromGetter = {
+      ...fullOptions(),
+      get endpoint(): string {
+        throw host
+      },
+    }
+
+    const sync = ((): unknown => {
+      try {
+        BymaxStorageModule.forRoot(fromGetter as never)
+      } catch (error) {
+        return error
+      }
+      return undefined
+    })()
+    const async_ = await Test.createTestingModule({
+      imports: [
+        BymaxStorageModule.forRootAsync({
+          useFactory: () => {
+            throw host
+          },
+        }),
+      ],
+    })
+      .compile()
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+
+    for (const refused of [sync, async_]) {
+      expect(refused).not.toBe(host)
+      expect(refused).toBeInstanceOf(StorageException)
+      expect((refused as StorageException).cause).toBe(host)
+      expect(JSON.stringify((refused as StorageException).getResponse())).not.toContain('HOST-TEXT')
+    }
+  })
 })

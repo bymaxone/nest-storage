@@ -20,10 +20,30 @@ const MAX_QUEUE_SIZE = 1000
 /** What a region is called by AWS and by every S3-compatible provider this library documents (`auto`, `nyc3`, `eu-central-003`). */
 const REGION_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/
 
+/** The refusals this module made, told apart from a `StorageException` that host code throws. */
+const OWN_REFUSALS = new WeakSet()
+
+/**
+ * Whether `error` is a refusal that {@link validateOptions} itself made. A `WeakSet` lookup runs no trap, so a
+ * Proxy of the host's is simply not one, and a `StorageException` the host threw is not one either.
+ *
+ * @param error - Whatever was thrown.
+ * @returns `true` for a refusal made here.
+ */
+export function isOwnRefusal(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && OWN_REFUSALS.has(error)
+}
+
 function invalid(reason: string): StorageException {
-  return new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG, HttpStatus.INTERNAL_SERVER_ERROR, {
-    reason,
-  })
+  const refusal = new StorageException(
+    STORAGE_ERROR_CODES.STORAGE_INVALID_CONFIG,
+    HttpStatus.INTERNAL_SERVER_ERROR,
+    {
+      reason,
+    },
+  )
+  OWN_REFUSALS.add(refusal)
+  return refusal
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -120,7 +140,12 @@ function assertBoundedInteger(
   if (!isObject(section)) return
   const value = section[key]
   if (value === undefined || value === null) return
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < range.min || value > range.max) {
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < range.min ||
+    value > range.max
+  ) {
     throw invalid(
       `${group}.${key} must be an integer ${range.words ?? `from ${String(range.min)} to ${String(range.max)}`}`,
     )
@@ -148,7 +173,11 @@ function assertScanner(scanner: unknown): void {
   if (mode !== undefined && mode !== null && mode !== 'pre-upload' && mode !== 'post-upload') {
     throw invalid("scanner.mode must be 'pre-upload' or 'post-upload'")
   }
-  if (rejectOnUnknown !== undefined && rejectOnUnknown !== null && typeof rejectOnUnknown !== 'boolean') {
+  if (
+    rejectOnUnknown !== undefined &&
+    rejectOnUnknown !== null &&
+    typeof rejectOnUnknown !== 'boolean'
+  ) {
     throw invalid('scanner.rejectOnUnknown must be a boolean')
   }
 }
@@ -174,7 +203,9 @@ function assertValidationKinds(validation: unknown): void {
     throw invalid('validation.mimeWhitelist must be an array of strings')
   }
   if (customValidators === null) {
-    throw invalid('validation.customValidators must not be null; omit it to run no custom validator')
+    throw invalid(
+      'validation.customValidators must not be null; omit it to run no custom validator',
+    )
   }
   if (customValidators !== undefined && !Array.isArray(customValidators)) {
     throw invalid('validation.customValidators must be an array')
@@ -186,12 +217,17 @@ function assertValidationKinds(validation: unknown): void {
 
 /** Whether `value` is an array whose every entry, holes included, is a string. A value that throws when read is the host's, and `forRoot` refuses it. */
 function isStringArray(value: unknown): boolean {
-  return Array.isArray(value) && Array.from(value as unknown[]).every((entry) => typeof entry === 'string')
+  return (
+    Array.isArray(value) &&
+    Array.from(value as unknown[]).every((entry) => typeof entry === 'string')
+  )
 }
 
 /** Whether every entry is an object with a `validate` function, which is what the upload path calls; reads each entry once. */
 function isValidatorList(entries: unknown[]): boolean {
-  return Array.from(entries).every((entry) => isObject(entry) && typeof entry.validate === 'function')
+  return Array.from(entries).every(
+    (entry) => isObject(entry) && typeof entry.validate === 'function',
+  )
 }
 
 /**
@@ -297,7 +333,11 @@ export function validateOptions(options: unknown): void {
   if (!isNonEmptyString(options.bucket)) {
     throw invalid('options.bucket must be a non-empty string')
   }
-  if (options.keyPrefix !== undefined && options.keyPrefix !== null && typeof options.keyPrefix !== 'string') {
+  if (
+    options.keyPrefix !== undefined &&
+    options.keyPrefix !== null &&
+    typeof options.keyPrefix !== 'string'
+  ) {
     throw invalid('options.keyPrefix must be a string')
   }
   if (!isObject(options.credentials)) {
