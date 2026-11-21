@@ -47,7 +47,7 @@ note on each entry is the compatibility contract — read it, not the number.
   that relied on the key, the endpoint or the region in these lines reads them from the call or the configuration.
   A quote or a backslash in a logged value is no longer escaped by the library, since the logger escapes it when it
   serialises the field; control, bidirectional and format characters still show as escapes.
-  The `cleanupFailure` field of `STORAGE_SCAN_CLEANUP_FAILED` is masked, cut and escaped like `err`.
+  The `cleanupFailure` field of `STORAGE_SCAN_CLEANUP_FAILED` is the code of a `StorageException`; any other failure is masked, cut and escaped like `err`.
 
 ### Fixed
 
