@@ -45,6 +45,7 @@ export class StorageMetricsTally {
 
   /** `bytes` of an object reached the provider; anything that is not a positive finite number is ignored. */
   bytesUploaded(bytes: number | undefined): void {
+    // Stryker disable next-line EqualityOperator: `bytes >= 0` adds a zero to the count, which changes nothing (equivalent).
     if (typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0)
       this.#bytesUploaded += bytes
   }
