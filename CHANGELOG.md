@@ -13,6 +13,32 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A signed upload URL is signed for the content type the whitelist approved.** `getUploadUrl` and
+  `getMultipartUploadUrls` read `contentType` from the request several times, once for the whitelist check and again
+  for the signature, so a request whose `contentType` getter answered `text/plain` first and `text/html` afterwards
+  passed the whitelist and was signed for the second. Each field is now read once and the copy is what is checked and
+  signed.
+
+  **Apply to a derived backend:** nothing to change; a request that answered differently on each read is now signed for
+  the first answer.
+
+- **An option array that lies about its length can no longer stall the start.** An array of `validation.mimeWhitelist`
+  or `validation.customValidators` whose `length` answered a small number and then a very large one kept the copy of
+  the options busy for seconds before the refusal. The length is read once, the copy takes at most that many entries,
+  and an array over the 1000-entry bound is refused without being walked.
+
+  **Apply to a derived backend:** nothing to change.
+
+### Changed
+
+- **The README names the checks on the options.** The paragraphs on the boolean flags, the 1000-entry bound and the
+  `STORAGE_INVALID_CONFIG` refusal of an option that cannot be read, with the exception's `cause`, are in the
+  configuration section, and a spec holds them to the code.
+
+  **Apply to a derived backend:** nothing to change; only the text was missing.
+
 ## [1.1.20] - 2026-11-21
 
 ### Fixed
