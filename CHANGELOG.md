@@ -15,10 +15,10 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Fixed
 
-- **A throwing `onProgress` no longer fails an upload that stored its object.** The hook was called in the upload's own
-  `try` block, so a hook that threw made `upload()` reject with `STORAGE_PROVIDER_ERROR` after `PutObject` had
-  succeeded, and an async hook that rejected was an unhandled rejection that ends the Node process. Both the single-shot
-  call and the multipart listener now ignore what the hook throws or rejects with.
+- **A throwing `onProgress` no longer fails an upload that stored its object.** On the single-shot path the hook was
+  called in the upload's own `try` block, so a hook that threw made `upload()` reject with `STORAGE_PROVIDER_ERROR`
+  after `PutObject` had succeeded; on the multipart path a throw reached the uploader. An async hook that rejected was
+  an unhandled rejection that ends the Node process. Both paths now ignore what the hook throws or rejects with.
 
   **Apply to a derived backend:** nothing to change. A hook that threw used to turn a stored upload into an error; it
   now leaves the result alone, so an application that relied on a throwing hook to fail an upload must fail it itself.
