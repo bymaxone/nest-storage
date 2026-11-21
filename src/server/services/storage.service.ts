@@ -53,7 +53,7 @@ import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 import { failureError } from '../utils/provider-failure-log'
 import { toListResult } from '../utils/list-result'
 import { assertHeaderValues, copyMetadata } from '../utils/header-value'
-import { bodyOfRequest, copyRequest } from '../utils/read-once'
+import { copyRequest } from '../utils/read-once'
 import { guardIdleBody } from '../utils/idle-timeout'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { buildACL } from '../utils/header-utils'
@@ -146,15 +146,14 @@ export class StorageService {
     bytes: uploadedBytesOf,
   })
   async upload(request: UploadOptions): Promise<UploadResult> {
-    let options: UploadOptions | undefined
+    // Filled as the fields are read: a field that throws leaves the ones read before it here, the body included.
+    const copy: Partial<UploadOptions> = {}
     try {
       // One read of each field of the caller's request; a field that throws when read is the library's refusal.
-      options = copyRequest(request)
+      const options = copyRequest(request, copy)
       return await this.uploadOwningBody(options)
     } catch (err) {
-      // The copy holds the body when it could be made; otherwise the caller's own field is read, if it can be.
-      const body = options === undefined ? bodyOfRequest(request) : options.body
-      destroyStream(body as NodeJS.ReadableStream)
+      destroyStream(copy.body as NodeJS.ReadableStream)
       throw err
     }
   }

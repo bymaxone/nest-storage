@@ -43,16 +43,20 @@ export function readOnce<T extends object, K extends keyof T>(
 }
 
 /**
- * Copies the own enumerable fields of a caller's request into a plain object, reading each once.
+ * Copies the own enumerable fields of a caller's request into `into`, reading each once and storing each as it is
+ * read, so what was read before a field that throws is still in `into` for the caller to release.
  *
  * @param request - The caller's request.
- * @returns A plain copy of its own enumerable fields.
+ * @param into - Where the fields are stored as they are read; a fresh object by default.
+ * @returns `into`, holding a plain copy of the request's own enumerable fields.
  * @throws StorageException `STORAGE_VALIDATION_FAILED` when reading a field throws; the error that was thrown is
  *   the `cause` and none of its text is in the response.
  */
-export function copyRequest<T extends object>(request: T): T {
+export function copyRequest<T extends object>(request: T, into: Partial<T> = {}): T {
   try {
-    return { ...request }
+    for (const key of Object.keys(request) as (keyof T & string)[]) {
+      into[key] = request[key]
+    }
   } catch (error) {
     throw new StorageException(
       STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED,
@@ -62,19 +66,5 @@ export function copyRequest<T extends object>(request: T): T {
       error,
     )
   }
-}
-
-/**
- * The `body` of a caller's request, or `undefined` when reading it throws: it is read to release a stream the
- * caller handed over, and a field that throws is the very case that makes the request unreadable.
- *
- * @param request - The caller's request.
- * @returns Whatever `request.body` holds, or `undefined`.
- */
-export function bodyOfRequest(request: { body?: unknown }): unknown {
-  try {
-    return request.body
-  } catch {
-    return undefined
-  }
+  return into as T
 }

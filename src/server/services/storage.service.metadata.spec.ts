@@ -161,6 +161,36 @@ describe('StorageService — upload metadata', () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  it('destroys the stream the body getter answered when it was read, not one it answers on a later read', async () => {
+    // The body is read once; a getter that answers another stream afterwards must not be the one released.
+    const send = jest.fn<Promise<unknown>, [unknown]>()
+    const service = await serviceWith(send)
+    const first = new Readable({ read() {} })
+    const second = new Readable({ read() {} })
+    let reads = 0
+    const request = { key: 'a', contentType: 'text/plain' }
+    Object.defineProperty(request, 'body', {
+      enumerable: true,
+      get: () => {
+        reads += 1
+        return reads === 1 ? first : second
+      },
+    })
+    Object.defineProperty(request, 'metadata', {
+      enumerable: true,
+      get: () => {
+        throw new Error('SENTINEL metadata getter ran')
+      },
+    })
+
+    await expect(service.upload(request as never)).rejects.toMatchObject({
+      response: { error: { code: 'STORAGE_VALIDATION_FAILED' } },
+    })
+    expect(first.destroyed).toBe(true)
+    expect(second.destroyed).toBe(false)
+    expect(reads).toBe(1)
+  })
+
   it('releases nothing and still refuses when the body field itself throws when read', async () => {
     const send = jest.fn<Promise<unknown>, [unknown]>()
     const service = await serviceWith(send)

@@ -4,7 +4,7 @@
  * @layer server/utils
  */
 import { StorageException } from '../errors/storage-exception'
-import { bodyOfRequest, copyRequest, readOnce } from './read-once'
+import { copyRequest, readOnce } from './read-once'
 
 describe('readOnce', () => {
   it('reads each named field once and copies what it read', () => {
@@ -96,17 +96,18 @@ describe('copyRequest', () => {
     expect((thrown as StorageException).cause).toBe(failure)
     expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
   })
-})
 
-describe('bodyOfRequest', () => {
-  it('returns the body of a request, and undefined when reading it throws', () => {
-    const throwing = {
-      get body(): string {
-        throw new Error('body getter ran')
+  it('leaves the fields read before one that throws in the object it fills', () => {
+    const into: { a?: string; c?: string } = {}
+    const request = {
+      a: 'first',
+      get b(): string {
+        throw new Error('field getter ran')
       },
+      c: 'never read',
     }
 
-    expect(bodyOfRequest({ body: 'x' })).toBe('x')
-    expect(bodyOfRequest(throwing)).toBeUndefined()
+    expect(() => copyRequest(request, into)).toThrow()
+    expect(into).toStrictEqual({ a: 'first' })
   })
 })
