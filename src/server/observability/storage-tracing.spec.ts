@@ -50,7 +50,7 @@ async function loaded(): Promise<StorageTracing> {
 }
 
 describe('StorageSpanAttributes', () => {
-  it('names the four keys the library states, so a host value cannot become an attribute', () => {
+  it('names the three keys the library states, so a host value cannot become an attribute', () => {
     const allowed: StorageSpanAttributes = {
       'bymax.storage.outcome': 'success',
       'bymax.storage.multipart': 'false',
