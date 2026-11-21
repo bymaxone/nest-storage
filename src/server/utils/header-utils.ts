@@ -4,6 +4,8 @@
  * encryption (with a `'NONE'` sentinel that omits the header), and the ACL flag.
  * @layer server/utils
  */
+import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { StorageException } from '../errors/storage-exception'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
 
@@ -85,10 +87,18 @@ export function buildSSE(
  * @param perCall - The per-call public-read flag, if any.
  * @param defaultValue - The module default.
  * @returns `'public-read'` when public access is requested, otherwise `undefined`.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when the per-call flag is set and is not a boolean:
+ *   `'false'` is truthy, so it would publish the object.
  */
 export function buildACL(
   perCall: UploadOptions['publicRead'],
   defaultValue: boolean,
 ): 'public-read' | undefined {
+  if (perCall !== undefined && typeof perCall !== 'boolean') {
+    throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
+      field: 'publicRead',
+      reason: 'must be a boolean',
+    })
+  }
   return (perCall ?? defaultValue) ? 'public-read' : undefined
 }

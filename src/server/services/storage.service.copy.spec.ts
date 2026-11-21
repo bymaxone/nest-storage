@@ -128,6 +128,18 @@ describe('StorageService.copy', () => {
     expect(input.CacheControl).toBe('no-store')
   })
 
+  it('refuses a publicRead that is not a boolean, and sends nothing', async () => {
+    // `'false'` is truthy: it would copy the object as public-read.
+    const { service, send } = makeService()
+
+    await expect(
+      service.copy({ sourceKey: 'a', destinationKey: 'b', publicRead: 'false' as never }),
+    ).rejects.toMatchObject({
+      response: { error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'publicRead' } } },
+    })
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it('returns an empty etag when CopyObjectResult is absent', async () => {
     // A provider omitting CopyObjectResult yields an empty ETag rather than throwing.
     const { service, send } = makeService()

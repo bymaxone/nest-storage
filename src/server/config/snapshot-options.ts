@@ -13,6 +13,7 @@ import {
   SIGNED_URL_KEYS,
   VALIDATION_KEYS,
 } from './option-keys'
+import { isBoundedLength } from './option-array-bound'
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -40,10 +41,13 @@ function pickGroup(value: unknown, keys: readonly string[]): unknown {
  * The array copied once, so a hole becomes `undefined` (which validation refuses as a value that is not a
  * string) and a later change to the caller's array is not seen. A value that is not an array is kept as it is.
  * An array whose iterator throws is not caught here: `forRoot` refuses it with the library's code and keeps
- * the host's error as the cause.
+ * the host's error as the cause. An array longer than the bound, or whose length is not a count, is kept as it
+ * is and not walked, for validation to refuse.
  */
 function copyArray(value: unknown): unknown {
-  return Array.isArray(value) ? Array.from(value as unknown[]) : value
+  return Array.isArray(value) && isBoundedLength(value.length)
+    ? Array.from(value as unknown[])
+    : value
 }
 
 /** The groups and their key lists; the arrays of the `validation` group are copied once more, below. */

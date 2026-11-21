@@ -313,3 +313,67 @@ describe('options.credentials', () => {
     },
   )
 })
+
+describe.each(['defaultPublicRead', 'forcePathStyle'])('options.%s', (name) => {
+  it.each([['false'], ['true'], [0], [1], [null], [{}], [[]], [SENTINEL]])(
+    'refuses %p, which is not a boolean, so a truthy string cannot make every upload public',
+    (value) => {
+      const result = refusal({ ...valid, [name]: value })
+
+      expect(result.reason).toBe(`options.${name} must be a boolean`)
+      expect(result.response).not.toContain('SENTINEL')
+    },
+  )
+
+  it.each([[undefined], [true], [false]])('accepts %p', (value) => {
+    accepts({ [name]: value })
+  })
+})
+
+/** The `details.reason` `forRoot` refuses with, which goes through the copy of the options first. */
+function refusedAtBoot(options: unknown): string {
+  try {
+    BymaxStorageModule.forRoot(options as BymaxStorageModuleOptions)
+  } catch (error) {
+    return ((error as StorageException).getResponse() as { error: { details: { reason: string } } })
+      .error.details.reason
+  }
+  throw new Error('expected forRoot to throw')
+}
+
+describe.each(['mimeWhitelist', 'customValidators'])('validation.%s length', (name) => {
+  const tooMany = `validation.${name} must hold at most 1000 entries`
+
+  it.each([[1001], [4294967295]])(
+    'refuses a sparse array of length %p before reading an entry, at boot',
+    (length) => {
+      const result = refusedAtBoot({
+        ...valid,
+        validation: { [name]: new Array<string>(length) },
+      })
+
+      expect(result).toBe(tooMany)
+    },
+  )
+
+  it.each([[-1], [1.5], [Number.NaN], [Number.POSITIVE_INFINITY]])(
+    'refuses an array whose length reads %p, which is not a count',
+    (length) => {
+      const lying = new Proxy([], {
+        get: (target, key): unknown =>
+          key === 'length' ? length : (Reflect.get(target, key) as unknown),
+      })
+
+      expect(refusal({ ...valid, validation: { [name]: lying } }).reason).toBe(tooMany)
+    },
+  )
+
+  it('accepts an array of exactly 1000 entries', () => {
+    const entries =
+      name === 'mimeWhitelist'
+        ? Array.from({ length: 1000 }, () => 'image/png')
+        : Array.from({ length: 1000 }, () => ({ validate: () => undefined }))
+
+    accepts({ validation: { [name]: entries } })
+  })
+})

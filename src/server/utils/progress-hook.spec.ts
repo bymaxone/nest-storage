@@ -10,7 +10,17 @@ import type { Upload } from '@aws-sdk/lib-storage'
 import { BymaxStorageModule } from '../bymax-storage.module'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { StorageService } from '../services/storage.service'
+import { applyDefaults } from '../config/apply-defaults'
+import type { KeyResolverService } from '../services/key-resolver.service'
 import { emitProgress, forwardProgress } from './upload-support'
+import { uploadSingleShot } from './upload-single-shot'
+
+const OPTIONS = {
+  endpoint: 'https://s3.example.com',
+  region: 'us-east-1',
+  bucket: 'b',
+  credentials: { accessKeyId: 'k', secretAccessKey: 's' },
+}
 
 const THROWING = (): void => {
   throw new Error('host hook')
@@ -81,6 +91,35 @@ describe('upload with a throwing onProgress', () => {
     const result = await moduleRef
       .get(StorageService)
       .upload({ key: 'a', body: Buffer.from('x'), contentType: 'text/plain', onProgress: THROWING })
+
+    expect(result).toMatchObject({ key: 'a', etag: '"e"', multipart: false })
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves with the stored result when onProgress throws on a later read, after the object is stored', async () => {
+    const send = jest.fn().mockResolvedValue({ ETag: '"e"' })
+    let reads = 0
+    const request = { key: 'a', body: Buffer.from('x'), contentType: 'text/plain' }
+    Object.defineProperty(request, 'onProgress', {
+      enumerable: true,
+      get: () => {
+        reads += 1
+        if (reads > 1) throw new Error('second read')
+        return jest.fn()
+      },
+    })
+
+    const result = await uploadSingleShot(
+      {
+        s3Provider: { getClient: () => ({ send }) } as unknown as S3ClientProvider,
+        keyResolver: { stripPrefix: (key: string) => key } as unknown as KeyResolverService,
+        options: applyDefaults(OPTIONS),
+      },
+      request,
+      'a',
+      'b',
+      {},
+    )
 
     expect(result).toMatchObject({ key: 'a', etag: '"e"', multipart: false })
     expect(send).toHaveBeenCalledTimes(1)

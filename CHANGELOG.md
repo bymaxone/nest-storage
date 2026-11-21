@@ -52,6 +52,24 @@ note on each entry is the compatibility contract — read it, not the number.
 
   **Apply to a derived backend:** nothing to change; only the text was wrong.
 
+### Changed
+
+- **`defaultPublicRead` and `forcePathStyle` must be booleans, and so must a per-call `publicRead`.** A string from an
+  environment variable, `'false'`, is truthy: it passed the `??` default and made every upload `public-read`. A value
+  of another kind for either option is now refused at boot with `STORAGE_INVALID_CONFIG`, and a per-call `publicRead`
+  that is set and is not a boolean fails that call with `STORAGE_VALIDATION_FAILED` (`details.field: 'publicRead'`);
+  `null` is refused like any other non-boolean, and an absent value still takes the default.
+
+  **Apply to a derived backend:** a host that passes `process.env.X` straight into either option now gets a boot
+  refusal; compare it to `'true'` and pass the boolean.
+
+- **`validation.mimeWhitelist` and `validation.customValidators` hold at most 1000 entries.** A longer array, or an
+  array whose reported length is not a count, is refused at boot with `STORAGE_INVALID_CONFIG` before any entry is
+  read, so a sparse array of billions of holes no longer stalls the start.
+
+  **Apply to a derived backend:** nothing to change unless a list holds more than 1000 entries; a whitelist that long
+  can use a wildcard instead.
+
 ## [1.1.19] - 2026-11-20
 
 ### Added

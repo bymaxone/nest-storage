@@ -10,6 +10,7 @@ import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { MAX_TIMER_MS } from '../constants/timer.constants'
 import { isHeaderValue } from '../utils/header-value'
+import { isBoundedLength, MAX_OPTION_ARRAY_LENGTH } from './option-array-bound'
 
 const MIN_PART_SIZE_BYTES = 5 * 1024 * 1024
 /** S3's largest part. */
@@ -199,6 +200,7 @@ function assertValidationKinds(validation: unknown): void {
   if (mimeWhitelist === null) {
     throw invalid('validation.mimeWhitelist must not be null; omit it to allow every type')
   }
+  assertBoundedArray('mimeWhitelist', mimeWhitelist)
   if (mimeWhitelist !== undefined && !isStringArray(mimeWhitelist)) {
     throw invalid('validation.mimeWhitelist must be an array of strings')
   }
@@ -210,8 +212,16 @@ function assertValidationKinds(validation: unknown): void {
   if (customValidators !== undefined && !Array.isArray(customValidators)) {
     throw invalid('validation.customValidators must be an array')
   }
+  assertBoundedArray('customValidators', customValidators)
   if (customValidators !== undefined && !isValidatorList(customValidators as unknown[])) {
     throw invalid('validation.customValidators must hold objects with a validate function')
+  }
+}
+
+/** Refuses an array option with more entries than {@link MAX_OPTION_ARRAY_LENGTH}, or whose length is not a count, before any entry is read. */
+function assertBoundedArray(name: string, value: unknown): void {
+  if (Array.isArray(value) && !isBoundedLength(value.length)) {
+    throw invalid(`validation.${name} must hold at most ${String(MAX_OPTION_ARRAY_LENGTH)} entries`)
   }
 }
 
@@ -290,6 +300,11 @@ function assertLimitsAndEncryption(options: Record<string, unknown>): void {
   assertTimerMs(options, 'bodyIdleTimeoutMs', 0)
   if (options.serverSideEncryption === 'aws:kms' && !options.kmsKeyId) {
     throw invalid('kmsKeyId is required when serverSideEncryption === "aws:kms"')
+  }
+  for (const name of ['defaultPublicRead', 'forcePathStyle'] as const) {
+    if (options[name] !== undefined && typeof options[name] !== 'boolean') {
+      throw invalid(`options.${name} must be a boolean`)
+    }
   }
   for (const name of ['defaultCacheControl', 'kmsKeyId'] as const) {
     if (options[name] !== undefined && !isHeaderValue(options[name])) {
