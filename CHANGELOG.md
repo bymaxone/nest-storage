@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.19] - 2026-11-20
+
 ### Added
 
 - **An optional `./observability` subpath and a span seam.** `StorageMetrics` publishes
@@ -45,6 +47,7 @@ note on each entry is the compatibility contract — read it, not the number.
   that relied on the key, the endpoint or the region in these lines reads them from the call or the configuration.
   A quote or a backslash in a logged value is no longer escaped by the library, since the logger escapes it when it
   serialises the field; control, bidirectional and format characters still show as escapes.
+  The `cleanupFailure` field of `STORAGE_SCAN_CLEANUP_FAILED` is the code of a `StorageException`; any other failure is masked, cut and escaped like `err`.
 
 ### Fixed
 
@@ -1179,4 +1182,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.16]: https://github.com/bymaxone/nest-storage/compare/v1.1.15...v1.1.16
 [1.1.17]: https://github.com/bymaxone/nest-storage/compare/v1.1.16...v1.1.17
 [1.1.18]: https://github.com/bymaxone/nest-storage/compare/v1.1.17...v1.1.18
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.18...HEAD
+[1.1.19]: https://github.com/bymaxone/nest-storage/compare/v1.1.18...v1.1.19
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.19...HEAD
