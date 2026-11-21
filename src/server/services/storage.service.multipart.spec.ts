@@ -4,6 +4,8 @@
  * the abort-to-error mapping can be exercised without real network I/O.
  * @layer server/services
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
@@ -115,6 +117,18 @@ beforeEach(() => {
 })
 
 describe('StorageService — multipart upload', () => {
+  it('has its README name the leavePartsOnError value it passes, and not the opposite one', async () => {
+    // The README once said `false` while the service passes `true` and aborts the upload itself.
+    const { service } = makeService()
+    installUploader(() => Promise.resolve({ ETag: '"m"' }))
+    await service.upload(uploadOf())
+    const passed = uploaderOptions().leavePartsOnError === true
+    const readme = readFileSync(join(__dirname, '../../../README.md'), 'utf8')
+
+    expect(readme).toContain(`leavePartsOnError: ${String(passed)}`)
+    expect(readme).not.toContain(`leavePartsOnError: ${String(!passed)}`)
+  })
+
   it('uses multipart for a stream of unknown size and reports multipart true', async () => {
     // A stream without a declared size forces the multipart path.
     const { service, resolved } = makeService()

@@ -58,8 +58,8 @@ minimal.
 
 ## 🔥 Features
 
-- ✅ **Multipart upload** — `@aws-sdk/lib-storage` with automatic abort on failure
-  (`leavePartsOnError: false`), progress events, and a configurable threshold and part size
+- ✅ **Multipart upload** — `@aws-sdk/lib-storage` with an abort on failure that the library runs
+  itself, progress events, and a configurable threshold and part size
 - ✅ **Content validation** — MIME allowlist with wildcards (`image/*`) and a size limit, then any
   number of `IUploadValidator`s, all refused before a byte is stored
 - ✅ **Virus scanning hook** — `IFileScanner` pre-upload or post-upload, for ClamAV, AWS Macie or
@@ -356,7 +356,7 @@ part number on a multipart upload. A single-shot upload reports once, when it en
 as each part is sent.
 A hook that throws, or an async one that rejects, is ignored: the upload still resolves with its result and the process is not ended.
 
-Uploads are automatically routed to multipart when `size >= multipart.thresholdBytes` (default 5 MiB). A `Readable` without a `size` always uses multipart. Multipart aborts automatically on failure (`leavePartsOnError: false`).
+Uploads are automatically routed to multipart when `size >= multipart.thresholdBytes` (default 5 MiB). A `Readable` without a `size` always uses multipart. A failed multipart upload is aborted by the library, which tells the SDK to leave the parts (`leavePartsOnError: true`) and runs `AbortMultipartUpload` itself, so an abort that fails cannot replace the error that caused it; the outcome (`completed` or `failed`) is in the error's `details.abort`.
 
 **What `body` may be.** A `Buffer`, a `Uint8Array`, an `ArrayBuffer`, a string or a Node `Readable`. Anything else (a `Blob`, an array of chunks, a plain object) fails with `STORAGE_VALIDATION_FAILED` (`details.field: 'body'`) before any request; it used to reach the upload as if it were a stream and fail as `STORAGE_MULTIPART_ABORTED` (500).
 

@@ -39,6 +39,20 @@ note on each entry is the compatibility contract — read it, not the number.
 
   **Apply to a derived backend:** nothing to change; a log rule that matched the raw character reads the escape.
 
+- **A very large sum of uploaded bytes no longer fails the metrics scrape.** `bymax_storage_bytes_uploaded_total` is
+  the sum of every object's size, and two finite sizes can add up past the largest number, to `Infinity`, which a
+  counter refuses: the whole `/metrics` answer then failed. The count in the tally now stops at the largest finite
+  number.
+
+  **Apply to a derived backend:** nothing to change; a scrape that failed on that sum now answers.
+
+- **The README names what the multipart path does on a failure.** It said the SDK aborts the upload
+  (`leavePartsOnError: false`); the library passes `true` and sends `AbortMultipartUpload` itself, so a failing abort
+  cannot replace the error that caused it, and the outcome is in `details.abort`. A test now holds the README to the
+  value the code passes.
+
+  **Apply to a derived backend:** nothing to change; only the text was wrong.
+
 ## [1.1.19] - 2026-11-20
 
 ### Added
