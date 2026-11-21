@@ -5,6 +5,7 @@
  */
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
+import type { StorageOutcome } from './storage-operations'
 import { StorageTracing, type StorageSpanAttributes } from './storage-tracing'
 
 interface FakeSpan {
@@ -49,20 +50,30 @@ async function loaded(): Promise<StorageTracing> {
   return tracing
 }
 
-describe('StorageSpanAttributes', () => {
-  it('names the three keys the library states, so a host value cannot become an attribute', () => {
-    const allowed: StorageSpanAttributes = {
-      'bymax.storage.outcome': 'success',
-      'bymax.storage.multipart': 'false',
-      'bymax.storage.scan_mode': 'pre-upload',
-    }
-    // @ts-expect-error a key outside the union is refused at compile time
-    const key: StorageSpanAttributes = { 'bymax.storage.key': 'tenant/secret.txt' }
-    // @ts-expect-error a value outside a key's own values is refused at compile time
-    const value: StorageSpanAttributes = { 'bymax.storage.outcome': 'tenant/secret.txt' }
+/** `true` only when each of `A` and `B` is assignable to the other, so a widened or a narrowed type fails to compile. */
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 
-    expect(Object.keys(allowed)).toHaveLength(3)
-    expect([key, value]).toHaveLength(2)
+describe('StorageSpanAttributes', () => {
+  it('names the three keys the library states, each with its own values, so a host value cannot become an attribute', () => {
+    // A key or a value outside these types, or a widening to `Record<string, string>`, makes a line below fail to compile.
+    const keys: Same<
+      keyof StorageSpanAttributes,
+      'bymax.storage.outcome' | 'bymax.storage.multipart' | 'bymax.storage.scan_mode'
+    > = true
+    const outcomes: Same<
+      StorageSpanAttributes['bymax.storage.outcome'],
+      StorageOutcome | undefined
+    > = true
+    const multipart: Same<
+      StorageSpanAttributes['bymax.storage.multipart'],
+      'true' | 'false' | undefined
+    > = true
+    const modes: Same<
+      StorageSpanAttributes['bymax.storage.scan_mode'],
+      'pre-upload' | 'post-upload' | undefined
+    > = true
+
+    expect([keys, outcomes, multipart, modes]).toEqual([true, true, true, true])
   })
 })
 
