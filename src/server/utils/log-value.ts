@@ -10,9 +10,10 @@ import { describeError } from './describe-error'
  * category rather than by list: control characters (`Cc`, which covers DEL and the C1 range), format
  * characters (`Cf`: the bidirectional marks, embeddings and overrides that can make a viewer show a
  * key as other text, the zero-width and invisible characters, the byte order mark and the tag
- * characters) and the line and paragraph separators (`Zl`, `Zp`).
+ * characters), the line and paragraph separators (`Zl`, `Zp`) and a lone surrogate (`Cs`), which a logger
+ * would write as an invalid character.
  */
-const LEFT_LITERAL_BY_JSON = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu
+const LEFT_LITERAL_BY_JSON = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu
 
 /** The short escapes JSON uses for the C0 controls that have one. */
 const SHORT_ESCAPES: Readonly<Record<string, string>> = {
