@@ -35,7 +35,7 @@ note on each entry is the compatibility contract — read it, not the number.
 
 - **The README names the checks on the options.** The paragraphs on the boolean flags, the 1000-entry bound and the
   `STORAGE_INVALID_CONFIG` refusal of an option that cannot be read, with the exception's `cause`, are in the
-  configuration section, and a spec holds them to the code.
+  configuration section.
 
   **Apply to a derived backend:** nothing to change; only the text was missing.
 
