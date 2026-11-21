@@ -91,7 +91,7 @@ export class StorageHealthIndicator implements HealthIndicator {
       const stop = (): void => {
         resolve('down')
       }
-      signal.addEventListener('abort', stop, { once: true })
+      signal.addEventListener('abort', stop)
       void probe.then((status) => {
         signal.removeEventListener('abort', stop)
         resolve(status)
