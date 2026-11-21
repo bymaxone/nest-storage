@@ -275,7 +275,7 @@ describe('forRoot reads each option once', () => {
       validation: { mimeWhitelist: unknown[] }
     }
 
-    expect(copy.validation.mimeWhitelist).toEqual(['image/png', 'image/jpeg'])
+    expect(copy.validation.mimeWhitelist).toStrictEqual(['image/png', 'image/jpeg'])
     // The entry at the reported length is never asked for: a Proxy that throws there cannot refuse a good list.
     expect(entriesRead).toEqual(['0', '1'])
   })
@@ -295,6 +295,6 @@ describe('forRoot reads each option once', () => {
       validation: { mimeWhitelist: unknown[] }
     }
 
-    expect(copy.validation.mimeWhitelist).toEqual(['image/png', 'image/jpeg'])
+    expect(copy.validation.mimeWhitelist).toStrictEqual(['image/png', 'image/jpeg'])
   })
 })

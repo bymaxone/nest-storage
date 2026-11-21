@@ -284,6 +284,26 @@ describe('SignedUrlService', () => {
       expect(mockedGetSignedUrl).not.toHaveBeenCalled()
     })
 
+    it('signs the metadata values it checked, even when a value answers differently on a later read', async () => {
+      // A value that is plain text on the first read and a header-splitting line afterwards must not pass the check and be signed.
+      const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
+      let reads = 0
+      const metadata: Record<string, string> = {}
+      Object.defineProperty(metadata, 'owner', {
+        enumerable: true,
+        get: () => {
+          reads += 1
+          return reads === 1 ? 'alice' : 'alice\r\nx-amz-acl: public-read'
+        },
+      })
+
+      const result = await service.getUploadUrl({ key: KEY, contentType: 'image/png', metadata })
+
+      const input = (mockedGetSignedUrl.mock.calls[0]?.[1] as PutObjectCommand).input
+      expect(input.Metadata).toStrictEqual({ owner: 'alice' })
+      expect(result.requiredHeaders['x-amz-meta-owner']).toBe('alice')
+    })
+
     it('forwards Metadata when provided', async () => {
       // metadata must be forwarded to the PutObject command
       const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
