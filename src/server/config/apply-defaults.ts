@@ -101,7 +101,8 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
   const publicBaseUrl =
     options.publicBaseUrl ?? `${trimTrailingSlashes(options.endpoint)}/${options.bucket}`
 
-  const credentials = { ...options.credentials }
+  // No prototype: a key planted on `Object.prototype` must not read as a credential that was never given.
+  const credentials = Object.assign(Object.create(null) as typeof options.credentials, options.credentials)
   const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
 
   const resolved: Omit<ResolvedBymaxStorageOptions, 'credentials'> = {

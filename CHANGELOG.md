@@ -17,6 +17,13 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Fixed
 
+- **A key planted on `Object.prototype` is no longer read as an option or a request field.** An ordinary read of a
+  plain object that lacks a key finds that key on `Object.prototype`, so a planted `defaultPublicRead`, `validation`,
+  `mimeWhitelist`, `maxSizeBytes`, `bucket`, `credentials`, `accessKeyId` or `secretAccessKey` was resolved as a module
+  option, and a planted `publicRead` or `bucket` was read as a field of an upload, a presigned upload or a multipart
+  upload. A value found only on the root prototype is now left out, the copies the module and the services read from
+  have no prototype, and a field a class supplies on its own prototype (a getter) is still read.
+
 - **An empty or unreadable iterator no longer turns a whitelist into an empty one.** The option arrays
   (`validation.mimeWhitelist`, `validation.customValidators`) were copied by their iterator, so an array of a subclass
   whose iterator yielded nothing copied to `[]`, and an empty whitelist allows every type. They are now copied by

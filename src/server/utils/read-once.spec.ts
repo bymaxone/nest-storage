@@ -4,7 +4,7 @@
  * @layer server/utils
  */
 import { StorageException } from '../errors/storage-exception'
-import { copyRequest, readOnce } from './read-once'
+import { copyRequest, readField, readOnce } from './read-once'
 
 describe('readOnce', () => {
   it('reads each named field once and copies what it read', () => {
@@ -34,7 +34,7 @@ describe('readOnce', () => {
 
     const copy = readOnce(request, ['a'])
 
-    expect(copy).toStrictEqual({})
+    expect({ ...copy }).toStrictEqual({})
     expect('c' in copy).toBe(false)
   })
 
@@ -77,7 +77,7 @@ describe('copyRequest', () => {
 
     const copy = copyRequest(request)
 
-    expect(copy).toStrictEqual({ a: 'first', b: 2 })
+    expect({ ...copy }).toStrictEqual({ a: 'first', b: 2 })
     expect(reads).toBe(1)
   })
 
@@ -114,6 +114,70 @@ describe('copyRequest', () => {
     }
 
     expect(() => copyRequest(request, into)).toThrow()
-    expect(into).toStrictEqual({ a: 'first' })
+    expect({ ...into }).toStrictEqual({ a: 'first' })
+  })
+})
+
+describe('a key planted on Object.prototype', () => {
+  const planted = ['publicRead', 'bucket', 'mimeWhitelist', 'accessKeyId'] as const
+
+  beforeEach(() => {
+    for (const key of planted) {
+      Object.defineProperty(Object.prototype, key, {
+        value: 'PLANTED',
+        configurable: true,
+        writable: true,
+        enumerable: false,
+      })
+    }
+  })
+
+  afterEach(() => {
+    for (const key of planted) Reflect.deleteProperty(Object.prototype, key)
+  })
+
+  it('is not read as a field of a plain request, by readOnce or readField', () => {
+    const request = { key: 'k' }
+
+    expect(readField(request, 'publicRead')).toBeUndefined()
+    expect({ ...readOnce(request as Record<string, unknown>, ['key', ...planted]) }).toStrictEqual({
+      key: 'k',
+    })
+  })
+
+  it('is not read from the copy, which has no prototype', () => {
+    const copy: Record<string, unknown> = readOnce({ key: 'k' }, ['key'])
+    const filled: Record<string, unknown> = copyRequest({ key: 'k' })
+
+    expect(Object.getPrototypeOf(copy)).toBeNull()
+    expect(Object.getPrototypeOf(filled)).toBeNull()
+    expect(copy.publicRead).toBeUndefined()
+    expect(filled.publicRead).toBeUndefined()
+  })
+
+  it('is read when the request owns it, even as undefined or as a different value', () => {
+    expect(readField({ publicRead: false }, 'publicRead')).toBe(false)
+    const bare: object = Object.create(null, { bucket: { value: 'mine' } }) as object
+
+    expect(readField(bare, 'bucket')).toBe('mine')
+  })
+
+  it('does not hide a field a class supplies on its own prototype, or one an own getter answers', () => {
+    class Options {
+      get bucket(): string {
+        return ['from', 'class'].join('-')
+      }
+    }
+    const withGetter = {
+      get publicRead(): boolean {
+        return true
+      },
+    }
+
+    const derived: object = Object.create(new Options()) as object
+
+    expect(readField(new Options(), 'bucket')).toBe('from-class')
+    expect(readField(withGetter, 'publicRead')).toBe(true)
+    expect(readField(derived, 'bucket')).toBe('from-class')
   })
 })

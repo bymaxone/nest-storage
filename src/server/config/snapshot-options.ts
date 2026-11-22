@@ -13,17 +13,18 @@ import {
   SIGNED_URL_KEYS,
   VALIDATION_KEYS,
 } from './option-keys'
+import { readField } from '../utils/read-once'
 import { isBoundedLength, OVERSIZED_ARRAY } from './option-array-bound'
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-/** Copies the listed keys of `source` that are not `undefined`, reading each one once. */
+/** Copies the listed keys of `source` that are not `undefined` into an object with no prototype, reading each one once; a key that only the root prototype supplies is left out. */
 function pick(source: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
-  const copy: Record<string, unknown> = {}
+  const copy: Record<string, unknown> = Object.create(null) as Record<string, unknown>
   for (const key of keys) {
-    const value = source[key]
+    const value = readField(source, key)
     if (value !== undefined) copy[key] = value
   }
   return copy

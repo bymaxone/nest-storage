@@ -53,7 +53,7 @@ import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 import { failureError } from '../utils/provider-failure-log'
 import { toListResult } from '../utils/list-result'
 import { assertHeaderValues, copyMetadata } from '../utils/header-value'
-import { copyRequest } from '../utils/read-once'
+import { copyRequest, withFields } from '../utils/read-once'
 import { guardIdleBody } from '../utils/idle-timeout'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { buildACL } from '../utils/header-utils'
@@ -147,7 +147,7 @@ export class StorageService {
   })
   async upload(request: UploadOptions): Promise<UploadResult> {
     // Filled as the fields are read: a field that throws leaves the ones read before it here, the body included.
-    const copy: Partial<UploadOptions> = {}
+    const copy: Partial<UploadOptions> = Object.create(null) as Partial<UploadOptions>
     try {
       // One read of each field of the caller's request; a field that throws when read is the library's refusal.
       const options = copyRequest(request, copy)
@@ -232,7 +232,7 @@ export class StorageService {
     )
     assertScannedSize(scanned, options.size, this.options.multipart.thresholdBytes, context)
     const body = boundStreamSize(scanned, options.size, this.options)
-    const validatedOptions = { ...options, body }
+    const validatedOptions = withFields(options, { body })
 
     // Pre-upload scan: runs before the S3 PutObject.
     await abortable(this.runPreUploadScan(body, finalKey, bucket, options), signal, context)
