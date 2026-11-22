@@ -12,6 +12,7 @@ import type {
   DownloadBufferOptions,
   DownloadOptions,
 } from '../interfaces/download-options.interface'
+import type { LifecycleBucketOptions } from '../interfaces/lifecycle-options.interface'
 import type { ListOptions } from '../interfaces/list-options.interface'
 import { readOnce } from './read-once'
 
@@ -54,6 +55,16 @@ const COPY_KEYS = keysOf<CopyOptions>()([
   'cacheControl',
 ])
 const DELETE_MANY_KEYS = keysOf<DeleteManyOptions>()(['bucket'])
+const LIFECYCLE_BUCKET_KEYS = keysOf<LifecycleBucketOptions>()(['bucket'])
+const LIFECYCLE_RULE_KEYS = ['id', 'prefix', 'expirationDays', 'abortIncompleteMultipartDays'] as const
+
+/** The fields of a lifecycle rule as a caller may pass them, whichever of the two rule shapes it is. */
+export interface LooseLifecycleRule {
+  id?: unknown
+  prefix?: unknown
+  expirationDays?: unknown
+  abortIncompleteMultipartDays?: unknown
+}
 
 /** One read of the optional per-call bucket and abort signal; absent options read as no fields. */
 export function readBucketScoped(options?: BucketScopedOptions): BucketScopedOptions {
@@ -83,4 +94,17 @@ export function readCopy(request: CopyOptions): CopyOptions {
 /** One read of the optional per-call bucket of a bulk delete. */
 export function readDeleteMany(options?: DeleteManyOptions): DeleteManyOptions {
   return readOnce<DeleteManyOptions, 'bucket'>(options ?? {}, DELETE_MANY_KEYS)
+}
+
+/** One read of the optional per-call bucket of a lifecycle call. */
+export function readLifecycleBucket(options?: LifecycleBucketOptions): LifecycleBucketOptions {
+  return readOnce<LifecycleBucketOptions, 'bucket'>(options ?? {}, LIFECYCLE_BUCKET_KEYS)
+}
+
+/** One read of the fields of a lifecycle rule, of either shape. */
+export function readLifecycleRule(rule: unknown): LooseLifecycleRule {
+  return readOnce<LooseLifecycleRule, keyof LooseLifecycleRule>(
+    rule ?? {},
+    LIFECYCLE_RULE_KEYS,
+  )
 }

@@ -20,6 +20,7 @@ import { BymaxStorageModule } from '../bymax-storage.module'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import { S3ClientProvider } from '../providers/s3-client.provider'
+import { BucketLifecycleService } from './bucket-lifecycle.service'
 import { SignedUrlService } from './signed-url.service'
 import { StorageService } from './storage.service'
 
@@ -54,6 +55,7 @@ async function resolve(options: Record<string, unknown>): Promise<ResolvedBymaxS
 async function services(extra: Record<string, unknown> = {}): Promise<{
   storage: StorageService
   signed: SignedUrlService
+  lifecycle: BucketLifecycleService
   send: jest.Mock<Promise<unknown>, [unknown]>
 }> {
   const send = jest
@@ -69,7 +71,12 @@ async function services(extra: Record<string, unknown> = {}): Promise<{
       getClientOrNull: () => null,
     })
     .compile()
-  return { storage: moduleRef.get(StorageService), signed: moduleRef.get(SignedUrlService), send }
+  return {
+    storage: moduleRef.get(StorageService),
+    signed: moduleRef.get(SignedUrlService),
+    lifecycle: moduleRef.get(BucketLifecycleService),
+    send,
+  }
 }
 
 describe('a key planted on Object.prototype', () => {
@@ -298,6 +305,56 @@ describe('a key planted on Object.prototype', () => {
 
         expect((send.mock.calls[0]?.[0] as { input: { Bucket: string } }).input.Bucket).toBe('mine')
         expect((send.mock.calls[1]?.[0] as CopyObjectCommand).input.ACL).toBe('public-read')
+      })
+    })
+
+    describe('on what a host supplies', () => {
+      it('does not read a validator that only the prototype makes one, or one that only it makes pass', async () => {
+        unplant = plant({ validate: () => ({ ok: true }), ok: true })
+
+        // An entry without its own `validate` is refused at boot, not taken for the planted one.
+        await expect(
+          resolve({ ...BASE, validation: { customValidators: [{ name: 'v' }] } }),
+        ).rejects.toThrow()
+
+        // A result without its own `ok` is not ok.
+        const { storage } = await services({
+          validation: { customValidators: [{ name: 'v', validate: () => ({}) }] },
+        })
+        await expect(
+          storage.upload({ key: 'a', body: Buffer.from('x'), contentType: 'text/plain' }),
+        ).rejects.toMatchObject({ response: { error: { code: 'STORAGE_VALIDATION_FAILED' } } })
+      })
+
+      it('does not read a scan status that only the prototype supplies', async () => {
+        unplant = plant({ status: 'clean' })
+        const { storage, send } = await services({
+          scanner: { impl: { scan: () => Promise.resolve({}) } },
+        })
+
+        await expect(
+          storage.upload({ key: 'a', body: Buffer.from('x'), contentType: 'text/plain' }),
+        ).rejects.toMatchObject({ response: { error: { code: 'STORAGE_SCAN_INCONCLUSIVE' } } })
+        expect(send).not.toHaveBeenCalled()
+      })
+
+      it('does not read a lifecycle rule field or a bucket that only the prototype supplies', async () => {
+        unplant = plant({ abortIncompleteMultipartDays: 3, bucket: 'evil-bucket' })
+        const { lifecycle, send } = await services()
+        send.mockResolvedValue({ Rules: [] })
+
+        await lifecycle.upsert({ id: 'r', prefix: 'tmp/', expirationDays: 7 })
+        await lifecycle.get()
+        await lifecycle.remove('r')
+
+        const inputs = send.mock.calls.map(
+          (call) => (call[0] as { input: Record<string, unknown> }).input,
+        )
+        expect(inputs.every((input) => input.Bucket === 'configured-bucket')).toBe(true)
+        const written = inputs.find((input) => 'LifecycleConfiguration' in input) as {
+          LifecycleConfiguration: { Rules: { Expiration?: { Days: number } }[] }
+        }
+        expect(written.LifecycleConfiguration.Rules[0]?.Expiration).toStrictEqual({ Days: 7 })
       })
     })
 

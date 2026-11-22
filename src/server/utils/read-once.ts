@@ -40,6 +40,17 @@ export function readField(source: object, key: string): unknown {
 }
 
 /**
+ * {@link readField} for a value a host returned, which may be `undefined` or `null` (read as no field).
+ *
+ * @param source - What the host returned.
+ * @param key - The field to read.
+ * @returns The field's value, or `undefined`.
+ */
+export function readOptionalField(source: unknown, key: string): unknown {
+  return source === undefined || source === null ? undefined : readField(source, key)
+}
+
+/**
  * Copies the named fields of `request` into a prototype-less object, reading each field exactly once.
  *
  * @param request - The caller's request, whatever its fields are.

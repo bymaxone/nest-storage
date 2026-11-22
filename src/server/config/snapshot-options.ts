@@ -61,18 +61,22 @@ function copyArray(value: unknown): unknown {
  * A custom validator copied once: its `name` and `validate` are read a single time, and `validate` is bound to the
  * validator, so a getter that answers differently on a later read has no later read, and the call still has the
  * validator as `this`.
- * An entry that is not an object, or whose `validate` is not a function, is kept as it is, for validation to
- * refuse.
+ * An entry that is not an object is kept as it is, and one whose `validate` is not a function keeps what it
+ * holds as its own `validate`, for validation to refuse.
  */
 function copyValidator(entry: unknown): unknown {
   if (!isObject(entry)) return entry
-  const { name, validate } = entry
-  return typeof validate === 'function'
-    ? {
-        ...(name === undefined ? {} : { name }),
-        validate: (validate as (...args: unknown[]) => unknown).bind(entry),
-      }
-    : entry
+  const name = readField(entry, 'name') as string | undefined
+  const validate = readField(entry, 'validate')
+  return {
+    ...(name === undefined ? {} : { name }),
+    // An own `validate` even when it is not a function, so validation refuses what the entry holds and not a
+    // `validate` that only the root prototype supplies.
+    validate:
+      typeof validate === 'function'
+        ? (validate as (...args: unknown[]) => unknown).bind(entry)
+        : validate,
+  }
 }
 
 /** The groups and their key lists; the arrays of the `validation` group are copied once more, below. */

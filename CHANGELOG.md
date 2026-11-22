@@ -22,7 +22,8 @@ note on each entry is the compatibility contract — read it, not the number.
   `publicRead` or `bucket` was read as if the caller had set it, and a copy could be sent `public-read` and a delete or
   a listing could be sent to another bucket. A value found only on the root prototype is now left out, the copies the
   module and the services read from have no prototype, and a field a class supplies on its own prototype (a getter) is
-  still read.
+  still read. The same holds for what a host hands back: a custom validator, the `ok` of its result and the `status` of
+  a scan result, and the fields of a lifecycle rule.
 
 - **An empty or unreadable iterator no longer turns a whitelist into an empty one.** The option arrays
   (`validation.mimeWhitelist`, `validation.customValidators`) were copied by their iterator, so an array of a subclass
