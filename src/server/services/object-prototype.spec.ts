@@ -8,6 +8,7 @@
 jest.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: jest.fn() }))
 
 import type {
+  CopyObjectCommand,
   CreateMultipartUploadCommand,
   PutObjectCommand,
   S3Client,
@@ -55,7 +56,9 @@ async function services(): Promise<{
   signed: SignedUrlService
   send: jest.Mock<Promise<unknown>, [unknown]>
 }> {
-  const send = jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue({ ETag: '"e"', UploadId: 'u' })
+  const send = jest
+    .fn<Promise<unknown>, [unknown]>()
+    .mockResolvedValue({ ETag: '"e"', UploadId: 'u' })
   const moduleRef = await Test.createTestingModule({ imports: [BymaxStorageModule.forRoot(BASE)] })
     .overrideProvider(S3ClientProvider)
     .useValue({
@@ -121,15 +124,18 @@ describe('a key planted on Object.prototype', () => {
       await expect(resolve(withoutCredentials)).rejects.toThrow()
     })
 
-    it.each(['accessKeyId', 'secretAccessKey'])('does not supply %s to the credentials', async (key) => {
-      unplant = plant({ [key]: 'EVIL' })
+    it.each(['accessKeyId', 'secretAccessKey'])(
+      'does not supply %s to the credentials',
+      async (key) => {
+        unplant = plant({ [key]: 'EVIL' })
 
-      const resolved = await resolve({ ...BASE, credentials: {} })
+        const resolved = await resolve({ ...BASE, credentials: {} })
 
-      expect(resolved.hasCredentials).toBe(false)
-      expect(resolved.credentials.accessKeyId).not.toBe('EVIL')
-      expect(resolved.credentials.secretAccessKey).not.toBe('EVIL')
-    })
+        expect(resolved.hasCredentials).toBe(false)
+        expect(resolved.credentials.accessKeyId).not.toBe('EVIL')
+        expect(resolved.credentials.secretAccessKey).not.toBe('EVIL')
+      },
+    )
 
     it('still reads an option a class instance supplies on its own prototype', async () => {
       class Configured {
@@ -189,13 +195,77 @@ describe('a key planted on Object.prototype', () => {
       expect(create.input.Bucket).toBe('configured-bucket')
     })
 
+    describe('on a method that takes options', () => {
+      /** The input of the command the call sent, whether or not the call resolved. */
+      async function sentBy<T extends object = Record<string, unknown>>(
+        call: (storage: StorageService) => unknown,
+      ): Promise<T> {
+        unplant = plant({
+          publicRead: true,
+          bucket: 'evil-bucket',
+          sourceBucket: 'evil-bucket',
+          destinationBucket: 'evil-bucket',
+        })
+        const { storage, send } = await services()
+        await Promise.resolve(call(storage)).catch(() => undefined)
+        return (send.mock.calls[0]?.[0] as { input: T }).input
+      }
+
+      it.each([
+        ['head', (s: StorageService) => s.head('a')],
+        ['exists', (s: StorageService) => s.exists('a')],
+        ['delete', (s: StorageService) => s.delete('a')],
+        ['deleteMany', (s: StorageService) => s.deleteMany(['a'])],
+        ['checkBucket', (s: StorageService) => s.checkBucket()],
+        ['list', (s: StorageService) => s.list({})],
+        ['download', (s: StorageService) => s.download({ key: 'a' })],
+        ['downloadBuffer', (s: StorageService) => s.downloadBuffer({ key: 'a' })],
+      ])('%s uses the configured bucket', async (_name, call) => {
+        const input = await sentBy(call)
+
+        expect(input.Bucket).toBe('configured-bucket')
+      })
+
+      it('getPublicUrl uses the configured bucket', async () => {
+        unplant = plant({ bucket: 'evil-bucket' })
+        const { storage } = await services()
+
+        expect(storage.getPublicUrl('a')).not.toContain('evil-bucket')
+      })
+
+      it('copy uses the configured buckets and does not publish', async () => {
+        const input = await sentBy<CopyObjectCommand['input']>((s) =>
+          s.copy({ sourceKey: 'a', destinationKey: 'b' }),
+        )
+
+        expect(input.Bucket).toBe('configured-bucket')
+        expect(input.CopySource).toContain('configured-bucket')
+        expect(input.CopySource).not.toContain('evil-bucket')
+        expect(input.ACL).toBeUndefined()
+      })
+
+      it('still reads a field the caller set, and a per-call bucket', async () => {
+        unplant = plant({ bucket: 'evil-bucket' })
+        const { storage, send } = await services()
+
+        await storage.head('a', { bucket: 'mine' }).catch(() => undefined)
+        await storage
+          .copy({ sourceKey: 'a', destinationKey: 'b', publicRead: true })
+          .catch(() => undefined)
+
+        expect((send.mock.calls[0]?.[0] as { input: { Bucket: string } }).input.Bucket).toBe('mine')
+        expect((send.mock.calls[1]?.[0] as CopyObjectCommand).input.ACL).toBe('public-read')
+      })
+    })
+
     it('does not move a presigned download', async () => {
       unplant = plant({ bucket: 'evil-bucket' })
       const { signed } = await services()
 
       await signed.getDownloadUrl({ key: 'a' })
 
-      const input = (jest.mocked(getSignedUrl).mock.calls[0]?.[1] as { input: { Bucket?: string } }).input
+      const input = (jest.mocked(getSignedUrl).mock.calls[0]?.[1] as { input: { Bucket?: string } })
+        .input
       expect(input.Bucket).toBe('configured-bucket')
     })
   })

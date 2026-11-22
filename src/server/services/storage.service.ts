@@ -54,6 +54,15 @@ import { failureError } from '../utils/provider-failure-log'
 import { toListResult } from '../utils/list-result'
 import { assertHeaderValues, copyMetadata } from '../utils/header-value'
 import { copyRequest, withFields } from '../utils/read-once'
+import {
+  readBucketScoped,
+  readCopy,
+  readDeleteMany,
+  readDownload,
+  readDownloadBuffer,
+  readList,
+  type BucketScopedOptions,
+} from '../utils/request-fields'
 import { guardIdleBody } from '../utils/idle-timeout'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { buildACL } from '../utils/header-utils'
@@ -94,13 +103,6 @@ import { Observed, StorageObserver } from '../observability/storage-observer'
 import { rememberUploadedBytes, uploadedBytesOf } from '../utils/uploaded-bytes'
 import { uploadSingleShot, type UploadContext } from '../utils/upload-single-shot'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
-
-/** Per-call options that only need to override the target bucket. */
-interface BucketScopedOptions {
-  bucket?: string
-  /** Ends the call when it aborts, rejecting `STORAGE_REQUEST_ABORTED`; an aborted signal makes no request. */
-  abortSignal?: AbortSignal
-}
 
 /** S3's hard cap on the number of keys returned by one `ListObjectsV2` request. */
 const MAX_LIST_KEYS = 1000
@@ -341,27 +343,28 @@ export class StorageService {
    * Returns metadata for an object without downloading its body.
    *
    * @param key - The raw object key (normalized internally).
-   * @param options - Optional per-call bucket override.
+   * @param scoped - Optional per-call bucket override.
    * @returns The object metadata.
    * @throws StorageException `STORAGE_OBJECT_NOT_FOUND` when the key is absent.
    */
   @Observed('head')
-  async head(key: string, options?: BucketScopedOptions): Promise<ObjectMetadata> {
+  async head(key: string, scoped?: BucketScopedOptions): Promise<ObjectMetadata> {
+    const options = readBucketScoped(scoped)
     this.assertConfigured()
     const finalKey = this.keyResolver.normalize(key)
-    const bucket = this.resolveBucket(options?.bucket)
-    const context = callDetails('head', { key, bucket: options?.bucket })
-    throwIfAborted(options?.abortSignal, context)
+    const bucket = this.resolveBucket(options.bucket)
+    const context = callDetails('head', { key, bucket: options.bucket })
+    throwIfAborted(options.abortSignal, context)
     try {
       const response = await this.s3Provider
         .getClient()
         .send(
           new HeadObjectCommand({ Bucket: bucket, Key: finalKey }),
-          sendOptions(options?.abortSignal),
+          sendOptions(options.abortSignal),
         )
       return toObjectMetadata(response, this.keyResolver.stripPrefix(finalKey), bucket)
     } catch (err) {
-      throw failureOrAbort(options?.abortSignal, context, mapAwsError(err, context))
+      throw failureOrAbort(options.abortSignal, context, mapAwsError(err, context))
     }
   }
 
@@ -404,12 +407,13 @@ export class StorageService {
    * — public delivery depends on the bucket allowing anonymous reads or a CDN.
    *
    * @param key - The raw object key.
-   * @param options - Optional per-call bucket override.
+   * @param scoped - Optional per-call bucket override.
    * @returns The public URL.
    */
-  getPublicUrl(key: string, options?: BucketScopedOptions): string {
+  getPublicUrl(key: string, scoped?: BucketScopedOptions): string {
+    const options = readBucketScoped(scoped)
     const finalKey = this.keyResolver.normalize(key)
-    const bucket = this.resolveBucket(options?.bucket)
+    const bucket = this.resolveBucket(options.bucket)
     return buildPublicUrl(this.options, finalKey, bucket)
   }
 
@@ -418,14 +422,15 @@ export class StorageService {
    * `for await` or `.pipe()`. `range` / `ifNoneMatch` / `ifMatch` are forwarded as
    * conditional/partial GET headers.
    *
-   * @param options - The download request.
+   * @param request - The download request.
    * @returns The object stream and its metadata.
    * @throws StorageException `STORAGE_OBJECT_NOT_FOUND` when the body is absent.
    */
   @Observed('download')
   async download(
-    options: DownloadOptions,
+    request: DownloadOptions,
   ): Promise<{ stream: NodeJS.ReadableStream; metadata: ObjectMetadata }> {
+    const options = readDownload(request)
     this.assertConfigured()
     assertHeaderValues({
       range: options.range,
@@ -475,14 +480,15 @@ export class StorageService {
    * Reads an object fully into memory through the same idle-guarded stream as {@link download}.
    * Without `maxBytes` the whole object is held, however large; use {@link download} for large ones.
    *
-   * @param options - The download request; `maxBytes` is the most bytes to hold.
+   * @param request - The download request; `maxBytes` is the most bytes to hold.
    * @returns The object buffer and its metadata.
    * @throws StorageException `STORAGE_SIZE_EXCEEDED` past `maxBytes`, by `Content-Length` or by
    *   bytes; `STORAGE_VALIDATION_FAILED` for a `maxBytes` that is not an integer of at least 1.
    */
   async downloadBuffer(
-    options: DownloadBufferOptions,
+    request: DownloadBufferOptions,
   ): Promise<{ buffer: Buffer; metadata: ObjectMetadata }> {
+    const options = readDownloadBuffer(request)
     assertMaxBytes(options.maxBytes)
     const { stream, metadata } = await this.download(options)
     const buffer = await readDownloadBody(
@@ -500,24 +506,25 @@ export class StorageService {
    * warning), not an error. Any other failure is propagated.
    *
    * @param key - The raw object key.
-   * @param options - Optional per-call bucket override.
+   * @param scoped - Optional per-call bucket override.
    */
   @Observed('delete')
-  async delete(key: string, options?: BucketScopedOptions): Promise<void> {
+  async delete(key: string, scoped?: BucketScopedOptions): Promise<void> {
+    const options = readBucketScoped(scoped)
     this.assertConfigured()
     const finalKey = this.keyResolver.normalize(key)
-    const bucket = this.resolveBucket(options?.bucket)
-    const context = callDetails('delete', { key, bucket: options?.bucket })
-    throwIfAborted(options?.abortSignal, context)
+    const bucket = this.resolveBucket(options.bucket)
+    const context = callDetails('delete', { key, bucket: options.bucket })
+    throwIfAborted(options.abortSignal, context)
     try {
       await this.s3Provider
         .getClient()
         .send(
           new DeleteObjectCommand({ Bucket: bucket, Key: finalKey }),
-          sendOptions(options?.abortSignal),
+          sendOptions(options.abortSignal),
         )
     } catch (err) {
-      const mapped = failureOrAbort(options?.abortSignal, context, mapAwsError(err, context))
+      const mapped = failureOrAbort(options.abortSignal, context, mapAwsError(err, context))
       if (mapped.code !== STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND) {
         throw mapped
       }
@@ -535,24 +542,25 @@ export class StorageService {
    * is reachable with these credentials and otherwise rejects with a typed code. Nothing in the
    * module calls it on its own, so booting costs no request. Needs `s3:ListBucket`.
    *
-   * @param options - Optional per-call bucket override.
+   * @param scoped - Optional per-call bucket override.
    * @throws StorageException `STORAGE_BUCKET_NOT_FOUND` (404), `STORAGE_BUCKET_ACCESS_DENIED` (403,
    *   which a provider also answers for a bucket the caller cannot see), `STORAGE_BUCKET_REGION_MISMATCH`
    *   (301), `STORAGE_TIMEOUT`, or `STORAGE_PROVIDER_ERROR`; `STORAGE_NOT_CONFIGURED` and
    *   `STORAGE_BUCKET_UNDEFINED` before any request.
    */
   @Observed('check_bucket')
-  async checkBucket(options?: BucketScopedOptions): Promise<void> {
+  async checkBucket(scoped?: BucketScopedOptions): Promise<void> {
+    const options = readBucketScoped(scoped)
     this.assertConfigured()
-    const bucket = this.resolveBucket(options?.bucket)
-    const context = callDetails('checkBucket', { bucket: options?.bucket })
-    throwIfAborted(options?.abortSignal, context)
+    const bucket = this.resolveBucket(options.bucket)
+    const context = callDetails('checkBucket', { bucket: options.bucket })
+    throwIfAborted(options.abortSignal, context)
     try {
       await this.s3Provider
         .getClient()
-        .send(new HeadBucketCommand({ Bucket: bucket }), sendOptions(options?.abortSignal))
+        .send(new HeadBucketCommand({ Bucket: bucket }), sendOptions(options.abortSignal))
     } catch (err) {
-      throw failureOrAbort(options?.abortSignal, context, mapBucketCheckError(err, context))
+      throw failureOrAbort(options.abortSignal, context, mapBucketCheckError(err, context))
     }
   }
 
@@ -677,12 +685,13 @@ export class StorageService {
    * to the caller's `prefix`, caps `maxKeys` at the S3 hard limit of 1000, threads
    * the continuation token, and strips the global prefix from every returned key.
    *
-   * @param options - The listing request.
+   * @param request - The listing request.
    * @returns One page of objects plus `commonPrefixes`, truncation, and the next token.
    * @throws StorageException mapped from any AWS failure.
    */
   @Observed('list')
-  async list(options: ListOptions): Promise<ListResult> {
+  async list(request: ListOptions): Promise<ListResult> {
+    const options = readList(request)
     this.assertConfigured()
     const bucket = this.resolveBucket(options.bucket)
     assertIntegerInput(options.maxKeys, 'maxKeys', 1)
@@ -713,12 +722,13 @@ export class StorageService {
    * Server-side copy of an object (no bytes flow through the app). Supports both
    * same-bucket and cross-bucket copies and preserves the source metadata.
    *
-   * @param options - Source/destination keys and buckets plus copy overrides.
+   * @param request - Source/destination keys and buckets plus copy overrides.
    * @returns The new object's ETag.
    * @throws StorageException mapped from any AWS failure.
    */
   @Observed('copy')
-  async copy(options: CopyOptions): Promise<{ etag: string }> {
+  async copy(request: CopyOptions): Promise<{ etag: string }> {
+    const options = readCopy(request)
     this.assertConfigured()
     assertHeaderValues({ cacheControl: options.cacheControl })
     const sourceKey = this.keyResolver.normalize(options.sourceKey)
@@ -757,16 +767,17 @@ export class StorageService {
    * the global prefix.
    *
    * @param keys - The raw object keys to delete.
-   * @param options - Optional per-call bucket override.
+   * @param scoped - Optional per-call bucket override.
    * @returns The deleted keys and the per-key failures.
    */
   @Observed('delete_many')
-  async deleteMany(keys: string[], options?: DeleteManyOptions): Promise<DeleteManyResult> {
+  async deleteMany(keys: string[], scoped?: DeleteManyOptions): Promise<DeleteManyResult> {
+    const options = readDeleteMany(scoped)
     this.assertConfigured()
     if (keys.length === 0) {
       return { deleted: [], failed: [] }
     }
-    const bucket = this.resolveBucket(options?.bucket)
+    const bucket = this.resolveBucket(options.bucket)
     const normalized = keys.map((key) => this.keyResolver.normalize(key))
     const deleted: string[] = []
     const failed: FailedDeletion[] = []
