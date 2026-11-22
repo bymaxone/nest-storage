@@ -29,9 +29,8 @@ import {
  */
 export function withBytesBody(options: UploadOptions): UploadOptions {
   const body = toUploadBody(options.body)
-  return isBufferLike(body)
-    ? withFields(options, { body, size: body.byteLength })
-    : withFields(options, { body })
+  // A body that is not bytes is returned as it was given: `toUploadBody` hands back the same stream.
+  return isBufferLike(body) ? withFields(options, { body, size: body.byteLength }) : options
 }
 
 /**

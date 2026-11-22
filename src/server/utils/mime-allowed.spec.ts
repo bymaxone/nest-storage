@@ -55,6 +55,18 @@ describe('assertMimeAllowed', () => {
     expect(details).toStrictEqual({ contentType: 'text/html' })
   })
 
+  it.each<unknown>([123, undefined, null, {}, ['text/html']])(
+    'refuses %j, which is not a string, as a type outside the whitelist and repeats nothing of it',
+    (contentType) => {
+      const { code, details } = refusal(() => {
+        assertMimeAllowed(['image/png'], contentType as string)
+      })
+
+      expect(code).toBe('STORAGE_MIME_NOT_ALLOWED')
+      expect(details).toStrictEqual({})
+    },
+  )
+
   it('shows the media type without the blanks around it', () => {
     const { details } = refusal(() => {
       assertMimeAllowed(['image/png'], ' text/html \t; charset=utf-8')

@@ -408,9 +408,9 @@ describe('SignedUrlService', () => {
       expect(result.requiredHeaders).not.toHaveProperty('x-amz-acl')
     })
 
-    it('lists no x-amz-meta-<key> entry in requiredHeaders: the pairs are in the signed query', async () => {
-      // The presigner hoists each x-amz-meta-* into the query string, and a provider refuses a client that
-      // sends the same pair as a header too.
+    it('sends the metadata on the command and lists no x-amz-meta-<key> entry in requiredHeaders', async () => {
+      // The real presigner hoists each x-amz-meta-* into the query string (measured on 3.1171), and a provider
+      // refuses a client that sends the same pair as a header too; the presigner is mocked here.
       const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
 
       const result = await service.getUploadUrl({

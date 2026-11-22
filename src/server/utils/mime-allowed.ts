@@ -24,10 +24,14 @@ export function assertMimeAllowed(
   if (!whitelist || whitelist.length === 0 || mimeMatches(contentType, whitelist)) {
     return
   }
-  // The media type alone: the parameters after `;` are the caller's and may carry more than a type.
+  // Nothing of a value that is not one well-formed type is repeated; for that, the media type alone is shown: the
+  // parameters after `;` are the caller's and may carry more than a type.
+  if (!isSingleMediaType(contentType)) {
+    throw new StorageException(STORAGE_ERROR_CODES.STORAGE_MIME_NOT_ALLOWED, undefined, {})
+  }
   const end = contentType.indexOf(';')
   const mediaType = (end === -1 ? contentType : contentType.slice(0, end)).trim()
   throw new StorageException(STORAGE_ERROR_CODES.STORAGE_MIME_NOT_ALLOWED, undefined, {
-    ...(isSingleMediaType(contentType) ? { contentType: mediaType } : {}),
+    contentType: mediaType,
   })
 }
