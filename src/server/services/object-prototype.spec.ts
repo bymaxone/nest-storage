@@ -51,7 +51,7 @@ async function resolve(options: Record<string, unknown>): Promise<ResolvedBymaxS
   return moduleRef.get<ResolvedBymaxStorageOptions>(BYMAX_STORAGE_OPTIONS)
 }
 
-async function services(): Promise<{
+async function services(extra: Record<string, unknown> = {}): Promise<{
   storage: StorageService
   signed: SignedUrlService
   send: jest.Mock<Promise<unknown>, [unknown]>
@@ -59,7 +59,9 @@ async function services(): Promise<{
   const send = jest
     .fn<Promise<unknown>, [unknown]>()
     .mockResolvedValue({ ETag: '"e"', UploadId: 'u' })
-  const moduleRef = await Test.createTestingModule({ imports: [BymaxStorageModule.forRoot(BASE)] })
+  const moduleRef = await Test.createTestingModule({
+    imports: [BymaxStorageModule.forRoot({ ...BASE, ...extra })],
+  })
     .overrideProvider(S3ClientProvider)
     .useValue({
       isConfigured: () => true,
@@ -136,6 +138,47 @@ describe('a key planted on Object.prototype', () => {
         expect(resolved.credentials.secretAccessKey).not.toBe('EVIL')
       },
     )
+
+    it('does not apply a planted validation key to a group that does not set it, in the services', async () => {
+      // `maxSizeBytes: 1` would refuse every upload; `mimeWhitelist: ['image/png']` every type but one.
+      unplant = plant({ maxSizeBytes: 1, mimeWhitelist: ['image/png'] })
+      const { storage, send } = await services({ validation: { customValidators: [] } })
+
+      await storage.upload({
+        key: 'a',
+        body: Buffer.from('twelve bytes'),
+        contentType: 'text/plain',
+      })
+
+      expect(send).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not apply a planted scanner, cdnBaseUrl or encryption key to options that do not set them', async () => {
+      const scan = jest.fn().mockResolvedValue({ status: 'clean' })
+      unplant = plant({
+        scanner: { impl: { scan } },
+        cdnBaseUrl: 'https://evil.example',
+        serverSideEncryption: 'aws:kms',
+        kmsKeyId: 'evil-key',
+      })
+      const { storage, send } = await services()
+
+      await storage.upload({ key: 'a', body: Buffer.from('x'), contentType: 'text/plain' })
+
+      const input = (send.mock.calls[0]?.[0] as PutObjectCommand).input
+      expect(scan).not.toHaveBeenCalled()
+      expect(input.ServerSideEncryption).toBeUndefined()
+      expect(input.SSEKMSKeyId).toBeUndefined()
+      expect(storage.getPublicUrl('a')).not.toContain('evil.example')
+    })
+
+    it('does not mark storage configured on credential keys that only the prototype supplies', async () => {
+      unplant = plant({ accessKeyId: 'EVIL', secretAccessKey: 'EVIL' })
+
+      const resolved = await resolve({ ...BASE, credentials: {} })
+
+      expect(resolved.hasCredentials).toBe(false)
+    })
 
     it('still reads an option a class instance supplies on its own prototype', async () => {
       class Configured {

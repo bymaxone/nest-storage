@@ -3,6 +3,7 @@
  * getter that answers differently on a later read has no later read to answer.
  * @layer server/utils
  */
+import { runInNewContext } from 'node:vm'
 import { StorageException } from '../errors/storage-exception'
 import { copyRequest, readField, readOnce } from './read-once'
 
@@ -179,5 +180,55 @@ describe('a key planted on Object.prototype', () => {
     expect(readField(new Options(), 'bucket')).toBe('from-class')
     expect(readField(withGetter, 'publicRead')).toBe(true)
     expect(readField(derived, 'bucket')).toBe('from-class')
+  })
+
+  it('still ignores a planted key when the constructor of the root was overwritten', () => {
+    Object.defineProperty(Object.prototype, 'constructor', {
+      value: function Replaced() {
+        return undefined
+      },
+      configurable: true,
+      writable: true,
+    })
+    try {
+      expect(readField({ key: 'k' }, 'publicRead')).toBeUndefined()
+      expect(readField({ publicRead: false }, 'publicRead')).toBe(false)
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'constructor')
+    }
+  })
+
+  it('still ignores a planted key when the methods of the root were replaced', () => {
+    const own = Object.getOwnPropertyDescriptor(Object.prototype, 'hasOwnProperty')
+    Object.defineProperty(Object.prototype, 'hasOwnProperty', {
+      value: () => true,
+      configurable: true,
+    })
+    try {
+      expect(readField({ key: 'k' }, 'publicRead')).toBeUndefined()
+      expect(readField({ publicRead: false }, 'publicRead')).toBe(false)
+    } finally {
+      if (own) Object.defineProperty(Object.prototype, 'hasOwnProperty', own)
+    }
+  })
+
+  it('ignores a key planted on the root of another realm, and still reads what its objects own', () => {
+    const foreign = runInNewContext(
+      'Object.defineProperty(Object.prototype, "publicRead", { value: true, configurable: true }); ({ key: "k", bucket: "mine" })',
+    ) as object
+
+    expect(Object.getPrototypeOf(foreign)).not.toBe(Object.prototype)
+    expect(readField(foreign, 'publicRead')).toBeUndefined()
+    expect(readField(foreign, 'bucket')).toBe('mine')
+    expect({
+      ...readOnce(foreign as Record<string, unknown>, ['key', 'publicRead']),
+    }).toStrictEqual({ key: 'k' })
+  })
+
+  it('does not read a field supplied only by a parent that has no prototype, the one trade-off of the rule', () => {
+    const parent = Object.create(null, { bucket: { value: 'from-parent' } }) as object
+    const child: object = Object.create(parent) as object
+
+    expect(readField(child, 'bucket')).toBeUndefined()
   })
 })

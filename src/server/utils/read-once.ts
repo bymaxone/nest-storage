@@ -9,13 +9,21 @@
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
 
+// Taken when the module loads, so that replacing `Object.prototype.hasOwnProperty` (or any property of the root
+// prototype) later changes nothing here: finding where a field lives reads no property of the root.
+const hasOwn = Object.hasOwn
+const getPrototypeOf = Object.getPrototypeOf as (value: object) => object | null
+
 /**
  * Reads one field of a caller's object, leaving out a value that only the realm's root prototype supplies.
  *
  * A key planted on `Object.prototype` is found by an ordinary read of any plain object that lacks it, so a
  * field the caller never set could arrive as the planter's value. A field the object owns, or one a class
  * supplies on its own prototype (a getter, for instance), is still read; a field found only on the last
- * prototype of the chain, which has no prototype of its own, is not.
+ * prototype of the chain, which has no prototype of its own, is not. That is decided by the shape of the chain and
+ * not by comparing with this realm's `Object.prototype`, so it holds for an object of another realm and for a root
+ * whose `constructor` was overwritten. The trade-off: a field supplied only by a host's own `Object.create(null)`
+ * parent object is not read either, because it cannot be told from a planted root.
  *
  * @param source - The caller's object.
  * @param key - The field to read.
@@ -23,11 +31,11 @@ import { StorageException } from '../errors/storage-exception'
  */
 export function readField(source: object, key: string): unknown {
   let holder: object | null = source
-  while (holder !== null && !Object.prototype.hasOwnProperty.call(holder, key)) {
-    holder = Object.getPrototypeOf(holder) as object | null
+  while (holder !== null && !hasOwn(holder, key)) {
+    holder = getPrototypeOf(holder)
   }
   if (holder === null) return undefined
-  if (holder !== source && Object.getPrototypeOf(holder) === null) return undefined
+  if (holder !== source && getPrototypeOf(holder) === null) return undefined
   return (source as Record<string, unknown>)[key]
 }
 

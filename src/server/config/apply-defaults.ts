@@ -26,6 +26,7 @@ import {
   VALIDATION_KEYS,
   type NamesEveryKey,
 } from './option-keys'
+import { readField } from '../utils/read-once'
 import { MAX_SIGNED_URL_TTL_SECONDS } from '../../shared/constants/default-ttls.constants'
 
 /**
@@ -38,9 +39,10 @@ function definedOnly<T extends object, const K extends readonly (keyof T)[]>(
   group: T | undefined,
   keys: K & NamesEveryKey<T, K>,
 ): Partial<T> {
-  const picked: Partial<T> = {}
+  // No prototype: a key planted on `Object.prototype` must not read as a value of a group that never set it.
+  const picked = Object.create(null) as Partial<T>
   for (const key of keys) {
-    const value = group?.[key]
+    const value = group === undefined ? undefined : (readField(group, key as string) as T[keyof T] | undefined)
     if (value !== undefined && value !== null) picked[key] = value
   }
   return picked
@@ -95,14 +97,13 @@ function attachCredentials(
  * @returns The fully-resolved options with every defaulted field present.
  */
 export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymaxStorageOptions {
-  const hasCredentials =
-    Boolean(options.credentials.accessKeyId) && Boolean(options.credentials.secretAccessKey)
+  // No prototype: a key planted on `Object.prototype` must not read as a credential that was never given.
+  const credentials = Object.assign(Object.create(null) as typeof options.credentials, options.credentials)
+  const hasCredentials = Boolean(credentials.accessKeyId) && Boolean(credentials.secretAccessKey)
 
   const publicBaseUrl =
     options.publicBaseUrl ?? `${trimTrailingSlashes(options.endpoint)}/${options.bucket}`
 
-  // No prototype: a key planted on `Object.prototype` must not read as a credential that was never given.
-  const credentials = Object.assign(Object.create(null) as typeof options.credentials, options.credentials)
   const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
 
   const resolved: Omit<ResolvedBymaxStorageOptions, 'credentials'> = {
@@ -136,7 +137,10 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     hasCredentials,
   }
 
-  attachCredentials(resolved, credentials)
+  // No prototype either: the services read the optional fields (`validation`, `scanner`, `cdnBaseUrl`, ...) off this
+  // object when they were not configured, and a key planted on `Object.prototype` must not answer for them.
+  const bare = Object.assign(Object.create(null) as typeof resolved, resolved)
+  attachCredentials(bare, credentials)
 
-  return resolved as ResolvedBymaxStorageOptions
+  return bare as ResolvedBymaxStorageOptions
 }
