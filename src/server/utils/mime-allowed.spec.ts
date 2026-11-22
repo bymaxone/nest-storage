@@ -55,6 +55,14 @@ describe('assertMimeAllowed', () => {
     expect(details).toStrictEqual({ contentType: 'text/html' })
   })
 
+  it('shows the media type without the blanks around it', () => {
+    const { details } = refusal(() => {
+      assertMimeAllowed(['image/png'], ' text/html \t; charset=utf-8')
+    })
+
+    expect(details).toStrictEqual({ contentType: 'text/html' })
+  })
+
   it.each(['text/plain\r\nX-Injected: 1', 'text/plain\u0000', 'text/plain; name=café'])(
     'refuses %j without repeating it',
     (contentType) => {

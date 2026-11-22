@@ -243,7 +243,7 @@ describe('copyMetadata', () => {
       expect((thrown as StorageException).cause).toBe(failure)
       expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
       expect((thrown as StorageException).getResponse()).toMatchObject({
-        error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'metadata' } },
+        error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'metadata', reason: 'could not be read' } },
       })
     },
   )

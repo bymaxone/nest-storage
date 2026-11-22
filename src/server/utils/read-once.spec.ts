@@ -56,7 +56,10 @@ describe('readOnce', () => {
     expect((thrown as StorageException).cause).toBe(failure)
     expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
     expect((thrown as StorageException).getResponse()).toMatchObject({
-      error: { code: 'STORAGE_VALIDATION_FAILED' },
+      error: {
+        code: 'STORAGE_VALIDATION_FAILED',
+        details: { reason: 'the request could not be read' },
+      },
     })
   })
 })
@@ -95,6 +98,9 @@ describe('copyRequest', () => {
     expect(thrown).toBeInstanceOf(StorageException)
     expect((thrown as StorageException).cause).toBe(failure)
     expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
+    expect((thrown as StorageException).getResponse()).toMatchObject({
+      error: { details: { reason: 'the request could not be read' } },
+    })
   })
 
   it('leaves the fields read before one that throws in the object it fills', () => {
