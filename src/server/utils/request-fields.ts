@@ -14,6 +14,7 @@ import type {
 } from '../interfaces/download-options.interface'
 import type { LifecycleBucketOptions } from '../interfaces/lifecycle-options.interface'
 import type { ListOptions } from '../interfaces/list-options.interface'
+import type { UploadOptions } from '../interfaces/upload-options.interface'
 import { readOnce } from './read-once'
 
 /** Per-call options that only need to override the target bucket. */
@@ -55,8 +56,30 @@ const COPY_KEYS = keysOf<CopyOptions>()([
   'cacheControl',
 ])
 const DELETE_MANY_KEYS = keysOf<DeleteManyOptions>()(['bucket'])
+// `body` first: it is the field a failed read must still let the caller release.
+export const UPLOAD_KEYS = keysOf<UploadOptions>()([
+  'body',
+  'key',
+  'contentType',
+  'bucket',
+  'size',
+  'cacheControl',
+  'contentDisposition',
+  'publicRead',
+  'serverSideEncryption',
+  'kmsKeyId',
+  'metadata',
+  'idempotencyKey',
+  'abortSignal',
+  'onProgress',
+])
 const LIFECYCLE_BUCKET_KEYS = keysOf<LifecycleBucketOptions>()(['bucket'])
-const LIFECYCLE_RULE_KEYS = ['id', 'prefix', 'expirationDays', 'abortIncompleteMultipartDays'] as const
+const LIFECYCLE_RULE_KEYS = [
+  'id',
+  'prefix',
+  'expirationDays',
+  'abortIncompleteMultipartDays',
+] as const
 
 /** The fields of a lifecycle rule as a caller may pass them, whichever of the two rule shapes it is. */
 export interface LooseLifecycleRule {
@@ -103,8 +126,5 @@ export function readLifecycleBucket(options?: LifecycleBucketOptions): Lifecycle
 
 /** One read of the fields of a lifecycle rule, of either shape. */
 export function readLifecycleRule(rule: unknown): LooseLifecycleRule {
-  return readOnce<LooseLifecycleRule, keyof LooseLifecycleRule>(
-    rule ?? {},
-    LIFECYCLE_RULE_KEYS,
-  )
+  return readOnce<LooseLifecycleRule, keyof LooseLifecycleRule>(rule ?? {}, LIFECYCLE_RULE_KEYS)
 }

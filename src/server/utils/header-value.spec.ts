@@ -247,4 +247,24 @@ describe('copyMetadata', () => {
       })
     },
   )
+
+  it('tells a Map from an object of pairs even when Object.prototype.toString was replaced after the module loaded', () => {
+    const original = Object.prototype.toString
+    Object.defineProperty(Object.prototype, 'toString', {
+      value: () => '[object Object]',
+      configurable: true,
+      writable: true,
+    })
+    try {
+      expect(() => {
+        assertMetadata(new Map([['a', 'b']]) as never)
+      }).toThrow(StorageException)
+    } finally {
+      Object.defineProperty(Object.prototype, 'toString', {
+        value: original,
+        configurable: true,
+        writable: true,
+      })
+    }
+  })
 })

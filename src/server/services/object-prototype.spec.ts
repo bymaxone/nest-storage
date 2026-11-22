@@ -326,6 +326,48 @@ describe('a key planted on Object.prototype', () => {
         ).rejects.toMatchObject({ response: { error: { code: 'STORAGE_VALIDATION_FAILED' } } })
       })
 
+      it('does not take a scan that only the prototype supplies for a scanner', async () => {
+        unplant = plant({ scan: () => Promise.resolve({ status: 'clean' }) })
+
+        await expect(resolve({ ...BASE, scanner: { impl: {} } })).rejects.toThrow()
+      })
+
+      it.each([undefined, null])(
+        'refuses a validator that answers %s with the library error',
+        async (answer) => {
+          const { storage, send } = await services({
+            validation: { customValidators: [{ name: 'v', validate: () => answer }] },
+          })
+
+          await expect(
+            storage.upload({ key: 'a', body: Buffer.from('x'), contentType: 'text/plain' }),
+          ).rejects.toMatchObject({ response: { error: { code: 'STORAGE_VALIDATION_FAILED' } } })
+          expect(send).not.toHaveBeenCalled()
+        },
+      )
+
+      it('reads a field of an upload that a class supplies, and one an inherited object supplies', async () => {
+        const { storage, send } = await services()
+        class Request {
+          readonly key = 'a'
+          readonly body = Buffer.from('x')
+          get contentType(): string {
+            return ['text', 'plain'].join('/')
+          }
+        }
+        const inherited: Record<string, unknown> = Object.create({
+          cacheControl: 'no-store',
+        }) as Record<string, unknown>
+        Object.assign(inherited, { key: 'b', body: Buffer.from('y'), contentType: 'text/plain' })
+
+        await storage.upload(new Request())
+        await storage.upload(inherited as never)
+
+        const inputs = send.mock.calls.map((call) => (call[0] as PutObjectCommand).input)
+        expect(inputs[0]).toMatchObject({ ContentType: 'text/plain' })
+        expect(inputs[1]).toMatchObject({ CacheControl: 'no-store' })
+      })
+
       it('does not read a scan status that only the prototype supplies', async () => {
         unplant = plant({ status: 'clean' })
         const { storage, send } = await services({

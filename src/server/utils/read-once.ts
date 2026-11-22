@@ -55,7 +55,9 @@ export function readOptionalField(source: unknown, key: string): unknown {
  *
  * @param request - The caller's request, whatever its fields are.
  * @param keys - The fields to read.
- * @returns An object with no prototype holding the named fields that are set; a field that is `undefined` is left out.
+ * @param into - Where the fields are stored as they are read, so what was read before a field that throws is still
+ *   there for the caller to release; a fresh prototype-less object by default.
+ * @returns `into`: the named fields that are set; a field that is `undefined` is left out.
  * @throws StorageException `STORAGE_VALIDATION_FAILED` when reading a field throws; the error that was thrown is
  *   the `cause` and none of its text is in the response.
  * @example
@@ -64,8 +66,9 @@ export function readOptionalField(source: unknown, key: string): unknown {
 export function readOnce<T extends object, K extends keyof T>(
   request: T,
   keys: readonly K[],
+  into: Partial<Pick<T, K>> = Object.create(null) as Partial<Pick<T, K>>,
 ): Pick<T, K> {
-  const copy = Object.create(null) as Pick<T, K>
+  const copy = into as Pick<T, K>
   try {
     for (const key of keys) {
       const value = readField(request, key as string)
@@ -84,37 +87,10 @@ export function readOnce<T extends object, K extends keyof T>(
 }
 
 /**
- * Copies the own enumerable fields of a caller's request into `into`, reading each once and storing each as it is
- * read, so what was read before a field that throws is still in `into` for the caller to release.
- *
- * @param request - The caller's request.
- * @param into - Where the fields are stored as they are read; a fresh object by default.
- * @returns `into`, holding a copy of the request's own enumerable fields.
- * @throws StorageException `STORAGE_VALIDATION_FAILED` when reading a field throws; the error that was thrown is
- *   the `cause` and none of its text is in the response.
- */
-export function copyRequest<T extends object>(request: T, into: Partial<T> = Object.create(null) as Partial<T>): T {
-  try {
-    for (const key of Object.keys(request) as (keyof T & string)[]) {
-      into[key] = request[key]
-    }
-  } catch (error) {
-    throw new StorageException(
-      STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED,
-      undefined,
-      { reason: 'the request could not be read' },
-      undefined,
-      error,
-    )
-  }
-  return into as T
-}
-
-/**
  * A copy of `request` with `fields` set over it, still without a prototype: a spread into an object literal
  * would give the copy `Object.prototype` again, and with it any key planted there.
  *
- * @param request - A request as {@link readOnce} or {@link copyRequest} returned it.
+ * @param request - A request as {@link readOnce} returned it.
  * @param fields - The fields to set over the copy.
  * @returns A new object with no prototype holding the fields of `request` and then `fields`.
  */

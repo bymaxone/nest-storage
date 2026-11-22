@@ -52,8 +52,48 @@ describe('snapshotOptions', () => {
       signedUrls: { maxTtlSeconds: 90 },
       multipart: { queueSize: 2 },
       validation: { maxSizeBytes: 5, mimeWhitelist: ['a/b'] },
-      scanner: { impl: scanner, mode: 'post-upload' },
+      scanner: { impl: { scan: expect.any(Function) as unknown }, mode: 'post-upload' },
     })
+  })
+
+  it('keeps a scanner implementation that is not an object, for validation to refuse', () => {
+    expect(snapshotOptions({ ...base, scanner: { impl: 'x' } })).toMatchObject({ scanner: { impl: 'x' } })
+  })
+
+  it('copies the scanner implementation once: scan is read once and bound, and a planted scan is not one', () => {
+    let reads = 0
+    const impl = {
+      get scan(): IFileScanner['scan'] {
+        reads += 1
+        return function (this: unknown) {
+          return Promise.resolve({ status: 'clean', engine: String(this === impl) })
+        }
+      },
+    }
+    const planted = Object.defineProperty(Object.prototype, 'scan', {
+      value: () => Promise.resolve({ status: 'clean' }),
+      configurable: true,
+      writable: true,
+    })
+    try {
+      const copied = snapshotOptions({ ...base, scanner: { impl } }) as {
+        scanner: { impl: IFileScanner }
+      }
+      const withoutOwn = snapshotOptions({ ...base, scanner: { impl: {} } }) as {
+        scanner: { impl: { scan?: unknown } }
+      }
+
+      expect(reads).toBe(1)
+      expect(Object.hasOwn(withoutOwn.scanner.impl, 'scan')).toBe(true)
+      expect(withoutOwn.scanner.impl.scan).toBeUndefined()
+      return copied.scanner.impl
+        .scan({ mode: 'pre-upload', key: 'k', bucket: 'b', contentType: 'text/plain' })
+        .then((result) => {
+          expect(result.engine).toBe('true')
+        })
+    } finally {
+      Reflect.deleteProperty(planted, 'scan')
+    }
   })
 
   it('keeps a value that is not an object where an object is expected, for validation to refuse', () => {

@@ -83,7 +83,10 @@ describe('BymaxStorageModule.forRootAsync', () => {
     expect(await exposed[0]?.validate({ key: 'k', contentType: 'text/plain' })).toStrictEqual({
       ok: true,
     })
-    expect(moduleRef.get(BYMAX_STORAGE_FILE_SCANNER)).toBe(scanner)
+    // The module hands out a copy of the scanner implementation too: its `scan` is bound to the implementation.
+    const exposedScanner = moduleRef.get<IFileScanner>(BYMAX_STORAGE_FILE_SCANNER)
+    const scanInput = { mode: 'pre-upload', key: 'k', bucket: 'b', contentType: 'text/plain' } as const
+    expect(await exposedScanner.scan(scanInput)).toStrictEqual(await scanner.scan(scanInput))
     await moduleRef.close()
   })
 

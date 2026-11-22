@@ -5,7 +5,7 @@
  */
 import { runInNewContext } from 'node:vm'
 import { StorageException } from '../errors/storage-exception'
-import { copyRequest, readField, readOnce } from './read-once'
+import { readField, readOnce } from './read-once'
 
 describe('readOnce', () => {
   it('reads each named field once and copies what it read', () => {
@@ -65,45 +65,7 @@ describe('readOnce', () => {
   })
 })
 
-describe('copyRequest', () => {
-  it('copies the own enumerable fields once, so a later read of the original changes nothing', () => {
-    let reads = 0
-    const request = {
-      get a(): string {
-        reads += 1
-        return reads === 1 ? 'first' : 'later'
-      },
-      b: 2,
-    }
-
-    const copy = copyRequest(request)
-
-    expect({ ...copy }).toStrictEqual({ a: 'first', b: 2 })
-    expect(reads).toBe(1)
-  })
-
-  it('wraps an error thrown by a field, with the error as the cause and none of its text in the response', () => {
-    const failure = new Error('SENTINEL field getter ran')
-    const request = {
-      get a(): string {
-        throw failure
-      },
-    }
-    let thrown: unknown
-    try {
-      copyRequest(request)
-    } catch (error) {
-      thrown = error
-    }
-
-    expect(thrown).toBeInstanceOf(StorageException)
-    expect((thrown as StorageException).cause).toBe(failure)
-    expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
-    expect((thrown as StorageException).getResponse()).toMatchObject({
-      error: { details: { reason: 'the request could not be read' } },
-    })
-  })
-
+describe('readOnce into an object the caller passes', () => {
   it('leaves the fields read before one that throws in the object it fills', () => {
     const into: { a?: string; c?: string } = {}
     const request = {
@@ -114,8 +76,21 @@ describe('copyRequest', () => {
       c: 'never read',
     }
 
-    expect(() => copyRequest(request, into)).toThrow()
+    expect(() => readOnce(request, ['a', 'b', 'c'], into)).toThrow()
     expect({ ...into }).toStrictEqual({ a: 'first' })
+  })
+
+  it('reads a field a class supplies on its own prototype, once', () => {
+    let reads = 0
+    class Request {
+      get a(): string {
+        reads += 1
+        return 'from-class'
+      }
+    }
+
+    expect({ ...readOnce(new Request(), ['a']) }).toStrictEqual({ a: 'from-class' })
+    expect(reads).toBe(1)
   })
 })
 
@@ -148,12 +123,9 @@ describe('a key planted on Object.prototype', () => {
 
   it('is not read from the copy, which has no prototype', () => {
     const copy: Record<string, unknown> = readOnce({ key: 'k' }, ['key'])
-    const filled: Record<string, unknown> = copyRequest({ key: 'k' })
 
     expect(Object.getPrototypeOf(copy)).toBeNull()
-    expect(Object.getPrototypeOf(filled)).toBeNull()
     expect(copy.publicRead).toBeUndefined()
-    expect(filled.publicRead).toBeUndefined()
   })
 
   it('is read when the request owns it, even as undefined or as a different value', () => {

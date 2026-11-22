@@ -8,6 +8,11 @@
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
 
+// Taken when the module loads, so that replacing `Object.prototype.toString` later changes nothing here.
+const objectToString = Object.getOwnPropertyDescriptor(Object.prototype, 'toString')?.value as (
+  this: unknown,
+) => string
+
 /** RFC 9110 field-value characters this library accepts: tab, space and printable ASCII. */
 const HEADER_VALUE = /^[\t \x21-\x7E]*$/
 
@@ -92,7 +97,7 @@ function assertMetadataKind(metadata: unknown): void {
   // code when the value is a Proxy or has a `Symbol.toStringTag` getter.
   let tag: string
   try {
-    tag = Object.prototype.toString.call(metadata)
+    tag = Reflect.apply<unknown, [], string>(objectToString, metadata, [])
   } catch (error) {
     throw metadataUnreadable(error)
   }

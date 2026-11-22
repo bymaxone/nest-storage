@@ -53,7 +53,7 @@ import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 import { failureError } from '../utils/provider-failure-log'
 import { toListResult } from '../utils/list-result'
 import { assertHeaderValues, copyMetadata } from '../utils/header-value'
-import { copyRequest, withFields } from '../utils/read-once'
+import { readOnce, withFields } from '../utils/read-once'
 import {
   readBucketScoped,
   readCopy,
@@ -61,6 +61,7 @@ import {
   readDownload,
   readDownloadBuffer,
   readList,
+  UPLOAD_KEYS,
   type BucketScopedOptions,
 } from '../utils/request-fields'
 import { guardIdleBody } from '../utils/idle-timeout'
@@ -152,7 +153,7 @@ export class StorageService {
     const copy: Partial<UploadOptions> = Object.create(null) as Partial<UploadOptions>
     try {
       // One read of each field of the caller's request; a field that throws when read is the library's refusal.
-      const options = copyRequest(request, copy)
+      const options = readOnce(request, UPLOAD_KEYS, copy) as UploadOptions
       return await this.uploadOwningBody(options)
     } catch (err) {
       destroyStream(copy.body as NodeJS.ReadableStream)

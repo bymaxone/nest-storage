@@ -79,6 +79,20 @@ function copyValidator(entry: unknown): unknown {
   }
 }
 
+/**
+ * The scanner implementation copied once: its `scan` is read a single time, by the own-or-class lookup, and bound to
+ * the implementation, so a `scan` that only the root prototype supplies is not one and a later change to the
+ * caller's object is not seen. An implementation that is not an object is kept as it is; one without a function
+ * keeps what it holds as its own `scan`, for validation to refuse.
+ */
+function copyScanner(impl: unknown): unknown {
+  if (!isObject(impl)) return impl
+  const scan = readField(impl, 'scan')
+  return {
+    scan: typeof scan === 'function' ? (scan as (...args: unknown[]) => unknown).bind(impl) : scan,
+  }
+}
+
 /** The groups and their key lists; the arrays of the `validation` group are copied once more, below. */
 const GROUPS = {
   credentials: CREDENTIAL_KEYS,
@@ -101,6 +115,8 @@ export function snapshotOptions(options: unknown): unknown {
   for (const [group, keys] of Object.entries(GROUPS)) {
     if (group in copy) copy[group] = pickGroup(copy[group], keys)
   }
+  const scanner = copy.scanner
+  if (isObject(scanner) && 'impl' in scanner) scanner.impl = copyScanner(scanner.impl)
   const validation = copy.validation
   if (isObject(validation)) {
     for (const key of ['mimeWhitelist', 'customValidators']) {
