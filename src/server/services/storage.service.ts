@@ -105,6 +105,7 @@ import { Observed, StorageObserver } from '../observability/storage-observer'
 import { rememberUploadedBytes, uploadedBytesOf } from '../utils/uploaded-bytes'
 import { uploadSingleShot, type UploadContext } from '../utils/upload-single-shot'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
+import { assertCleanRoot } from '../utils/prototype-guard'
 
 /** S3's hard cap on the number of keys returned by one `ListObjectsV2` request. */
 const MAX_LIST_KEYS = 1000
@@ -150,6 +151,7 @@ export class StorageService {
     bytes: uploadedBytesOf,
   })
   async upload(request: UploadOptions): Promise<UploadResult> {
+    assertCleanRoot()
     // Filled as the fields are read: a field that throws leaves the ones read before it here, the body included.
     const copy: Partial<UploadOptions> = Object.create(null) as Partial<UploadOptions>
     try {
@@ -351,6 +353,7 @@ export class StorageService {
    */
   @Observed('head')
   async head(key: string, scoped?: BucketScopedOptions): Promise<ObjectMetadata> {
+    assertCleanRoot()
     const options = readBucketScoped(scoped)
     this.assertConfigured()
     const finalKey = this.keyResolver.normalize(key)
@@ -379,6 +382,7 @@ export class StorageService {
    * @returns `true` when the object exists, `false` otherwise.
    */
   async exists(key: string, options?: BucketScopedOptions): Promise<boolean> {
+    assertCleanRoot()
     try {
       await this.head(key, options)
       return true
@@ -414,6 +418,7 @@ export class StorageService {
    * @returns The public URL.
    */
   getPublicUrl(key: string, scoped?: BucketScopedOptions): string {
+    assertCleanRoot()
     const options = readBucketScoped(scoped)
     const finalKey = this.keyResolver.normalize(key)
     const bucket = this.resolveBucket(options.bucket)
@@ -433,6 +438,7 @@ export class StorageService {
   async download(
     request: DownloadOptions,
   ): Promise<{ stream: NodeJS.ReadableStream; metadata: ObjectMetadata }> {
+    assertCleanRoot()
     const options = readDownload(request)
     this.assertConfigured()
     assertHeaderValues({
@@ -491,6 +497,7 @@ export class StorageService {
   async downloadBuffer(
     request: DownloadBufferOptions,
   ): Promise<{ buffer: Buffer; metadata: ObjectMetadata }> {
+    assertCleanRoot()
     const options = readDownloadBuffer(request)
     assertMaxBytes(options.maxBytes)
     const { stream, metadata } = await this.download(options)
@@ -513,6 +520,7 @@ export class StorageService {
    */
   @Observed('delete')
   async delete(key: string, scoped?: BucketScopedOptions): Promise<void> {
+    assertCleanRoot()
     const options = readBucketScoped(scoped)
     this.assertConfigured()
     const finalKey = this.keyResolver.normalize(key)
@@ -553,6 +561,7 @@ export class StorageService {
    */
   @Observed('check_bucket')
   async checkBucket(scoped?: BucketScopedOptions): Promise<void> {
+    assertCleanRoot()
     const options = readBucketScoped(scoped)
     this.assertConfigured()
     const bucket = this.resolveBucket(options.bucket)
@@ -694,6 +703,7 @@ export class StorageService {
    */
   @Observed('list')
   async list(request: ListOptions): Promise<ListResult> {
+    assertCleanRoot()
     const options = readList(request)
     this.assertConfigured()
     const bucket = this.resolveBucket(options.bucket)
@@ -731,6 +741,7 @@ export class StorageService {
    */
   @Observed('copy')
   async copy(request: CopyOptions): Promise<{ etag: string }> {
+    assertCleanRoot()
     const options = readCopy(request)
     this.assertConfigured()
     assertHeaderValues({ cacheControl: options.cacheControl })
@@ -775,6 +786,7 @@ export class StorageService {
    */
   @Observed('delete_many')
   async deleteMany(keys: string[], scoped?: DeleteManyOptions): Promise<DeleteManyResult> {
+    assertCleanRoot()
     const options = readDeleteMany(scoped)
     this.assertConfigured()
     if (keys.length === 0) {

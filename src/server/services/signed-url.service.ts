@@ -31,6 +31,7 @@ import { callDetails, callerFields } from '../utils/call-details'
 import { clampTtl } from '../utils/ttl-clamp'
 import { assertMimeAllowed } from '../utils/mime-allowed'
 import { assertHeaderValues, assertMetadata, copyMetadata } from '../utils/header-value'
+import { assertCleanRoot } from '../utils/prototype-guard'
 
 /** S3 allows part numbers 1 to 10 000 in one multipart upload. */
 const MAX_MULTIPART_PARTS = 10_000
@@ -57,6 +58,7 @@ export class SignedUrlService {
    */
   @Observed('get_download_url', { span: 'storage.download_url' })
   async getDownloadUrl(request: SignedGetUrlOptions): Promise<SignedUrlResult> {
+    assertCleanRoot()
     this.assertConfigured()
     // One read of each field: the header check and the signature must see the same values.
     const options = readOnce(request, [
@@ -125,6 +127,7 @@ export class SignedUrlService {
    */
   @Observed('get_upload_url')
   async getUploadUrl(request: SignedPutUrlOptions): Promise<SignedUrlResult> {
+    assertCleanRoot()
     this.assertConfigured()
     // One read of each field: the whitelist check and the signature must see the same content type.
     const options = readOnce(request, [
@@ -207,6 +210,7 @@ export class SignedUrlService {
    */
   @Observed('get_multipart_upload_urls')
   async getMultipartUploadUrls(request: MultipartUploadUrlsOptions): Promise<MultipartUploadUrlsResult> {
+    assertCleanRoot()
     this.assertConfigured()
     // One read of each field: the whitelist check and the signature must see the same content type.
     const options = readOnce(request, ['key', 'bucket', 'contentType', 'parts', 'ttlSeconds'])

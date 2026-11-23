@@ -7,13 +7,32 @@ import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
  * Brotli-compressed bundle budgets in bytes (never gzip). The server entry
  * carries the full NestJS module surface; the AWS SDK is a peer dependency and
  * stays external, so the shipped bundle is library code only. The shared entry
- * is types and constants. Measured at maximum brotli quality. A ceiling is the measured size plus 30 B, and
+ * is types and constants. Both the ESM and the CJS build are measured, at maximum brotli quality. A ceiling is the measured size plus 30 B, and
  * the number is stated where it is changed.
  */
 const BUDGETS = [
-  { name: 'server (NestJS module + AWS SDK externals)', path: 'dist/server/index.mjs', brotli: 32_040 },
-  { name: 'observability (metrics contributor + readiness indicator)', path: 'dist/observability/index.mjs', brotli: 2_500 },
+  {
+    name: 'server (NestJS module + AWS SDK externals)',
+    path: 'dist/server/index.mjs',
+    brotli: 32_099,
+  },
+  {
+    name: 'server CJS (NestJS module + AWS SDK externals)',
+    path: 'dist/server/index.cjs',
+    brotli: 32_124,
+  },
+  {
+    name: 'observability (metrics contributor + readiness indicator)',
+    path: 'dist/observability/index.mjs',
+    brotli: 2_500,
+  },
+  {
+    name: 'observability CJS (metrics contributor + readiness indicator)',
+    path: 'dist/observability/index.cjs',
+    brotli: 2_500,
+  },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 3_500 },
+  { name: 'shared CJS (types + constants)', path: 'dist/shared/index.cjs', brotli: 3_500 },
 ]
 
 let failed = false

@@ -29,6 +29,7 @@ import { resolveBucket as resolveBucketInput } from '../utils/call-input'
 import { readLifecycleBucket, readLifecycleRule, type LooseLifecycleRule } from '../utils/request-fields'
 import { isNoLifecycleConfiguration, mapLifecycleError } from '../errors/lifecycle-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { assertCleanRoot } from '../utils/prototype-guard'
 
 /**
  * The rule-level `Prefix` that AWS deprecated in favour of `Filter`, read by key so the
@@ -98,6 +99,7 @@ export class BucketLifecycleService {
    */
   @Observed('lifecycle_get')
   async get(scoped?: LifecycleBucketOptions): Promise<BucketLifecycleRuleView[]> {
+    assertCleanRoot()
     const options = readLifecycleBucket(scoped)
     this.assertConfigured()
     const bucket = this.resolveBucket(options.bucket)
@@ -118,6 +120,7 @@ export class BucketLifecycleService {
    */
   @Observed('lifecycle_upsert')
   async upsert(input: LifecycleRuleInput, scoped?: LifecycleBucketOptions): Promise<void> {
+    assertCleanRoot()
     const options = readLifecycleBucket(scoped)
     this.assertConfigured()
     const owned = this.toRule(readLifecycleRule(input))
@@ -146,6 +149,7 @@ export class BucketLifecycleService {
    */
   @Observed('lifecycle_remove')
   async remove(id: string, scoped?: LifecycleBucketOptions): Promise<boolean> {
+    assertCleanRoot()
     const options = readLifecycleBucket(scoped)
     this.assertConfigured()
     this.assertRuleId(id)

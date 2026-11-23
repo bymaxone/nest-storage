@@ -6,6 +6,12 @@
  * @layer server/services
  */
 jest.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: jest.fn() }))
+// These rows prove the second layer: what the services read from a request and from the options ignores
+// a planted key. The guard that refuses first is covered by its own specs, so it is left out here.
+jest.mock('../utils/prototype-guard', () => ({
+  ...jest.requireActual<object>('../utils/prototype-guard'),
+  assertCleanRoot: jest.fn(),
+}))
 
 import type {
   CopyObjectCommand,

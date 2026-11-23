@@ -194,6 +194,25 @@ describe('assertCleanRoot', () => {
       ['ArrayBuffer.isView', () => swap(ArrayBuffer, 'isView', () => true)],
       ['the Set iterator prototype', () => swap(setIterator, 'next', () => ({ done: true }))],
       ['the Map iterator prototype', () => swap(mapIterator, 'next', () => ({ done: true }))],
+      [
+        'Buffer.prototype.subarray',
+        () => swap(Buffer.prototype as object, 'subarray', () => Buffer.alloc(0)),
+      ],
+      [
+        'the typed array prototype subarray',
+        () =>
+          swap(
+            Object.getPrototypeOf(Uint8Array.prototype) as object,
+            'subarray',
+            () => new Uint8Array(0),
+          ),
+      ],
+      [
+        'the typed array prototype length',
+        () => swapGetter(Object.getPrototypeOf(Uint8Array.prototype) as object, 'length', () => 0),
+      ],
+      ['the URL username getter', () => swapGetter(URL.prototype, 'username', () => '')],
+      ['the URL password getter', () => swapGetter(URL.prototype, 'password', () => '')],
       ['the Set binding', () => swapGlobal('Set', class Other {})],
       ['the Buffer binding', () => swapGlobal('Buffer', class Other {})],
     ]

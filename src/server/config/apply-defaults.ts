@@ -81,10 +81,12 @@ function attachCredentials(
   // what a diagnostic dump uses and which still prints a hidden data property.
   // Reads are unchanged — `options.credentials.accessKeyId` resolves as before.
   Object.defineProperty(resolved, 'credentials', {
+    // No prototype: a key planted on the root object prototype must not become a field of the descriptor.
+    __proto__: null,
     get: (): ResolvedBymaxStorageOptions['credentials'] => credentials,
     enumerable: false,
     configurable: false,
-  })
+  } as PropertyDescriptor)
 }
 
 /**

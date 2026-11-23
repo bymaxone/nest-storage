@@ -104,7 +104,11 @@ export function failureError(err: unknown): Error {
   const error = new Error(view.message)
   if (view.name !== undefined) error.name = view.name
   if (view.awsCode !== undefined)
-    Object.defineProperty(error, 'awsCode', { value: view.awsCode, enumerable: true })
+    Object.defineProperty(error, 'awsCode', {
+      __proto__: null,
+      value: view.awsCode,
+      enumerable: true,
+    } as PropertyDescriptor)
   return error
 }
 
