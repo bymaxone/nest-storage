@@ -27,15 +27,13 @@ note on each entry is the compatibility contract — read it, not the number.
 ### Fixed
 
 - **A key planted on `Object.prototype` can no longer reach the S3 client.** The AWS SDK reads every optional input
-  and configuration name off the object it is handed, so a name planted on the root prototype became a header
-  (`ACL`, `Grant*`, `ServerSideEncryption`, `Tagging`, `Metadata`), a signed query name, a credential
-  (`sessionToken`) or the request host (`endpointProvider`, `endpoint`). The library now refuses to build the client,
-  and refuses every attempt of every command (a retry included, a presigned URL included), while the root prototype
-  carries a string key outside the standard set, a symbol key, or a standard property whose descriptor changed since
-  load, and while a built-in the library calls (a `Reflect`, `Object`, `Array`, `String` or `RegExp` method, an iterator
-  prototype) has been replaced since load. The refusal is `STORAGE_VALIDATION_FAILED`, it carries counts only and names
-  no key or built-in, it reaches the caller unchanged (`exists()` rethrows it), and nothing is handed to the HTTP
-  handler. A replacement made before the library is imported is not seen. The client credentials are read from a null-prototype object that carries an own `sessionToken`.
+  and configuration name off the object it is handed, so a name planted on the root prototype could become a header,
+  a signed query name, a credential or the request host. The library now refuses to build the client, and refuses
+  every attempt of every command (a retry included, a presigned URL included), while the root prototype carries a
+  string or symbol key outside the standard set, a root property's descriptor has changed since load, or a built-in
+  the library calls has been replaced since load. The refusal is `STORAGE_VALIDATION_FAILED`, carries counts and a
+  fixed reason, names no key or built-in, reaches the caller unchanged (`exists()` rethrows it), and nothing is handed
+  to the HTTP handler. A replacement made before the library is imported is not seen.
 
   **Apply to a derived backend:** nothing to change. An application that adds a key to `Object.prototype` (a polyfill
   or a library that extends it) now fails at module start-up and on every storage call with
