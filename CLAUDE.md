@@ -80,7 +80,7 @@ pnpm typecheck           # TypeScript strict check (server + shared)
 pnpm lint                # ESLint (0 warnings expected)
 pnpm test:cov            # Unit tests with 100% line/branch coverage gate
 pnpm build               # tsup — produces dist/ with ESM + CJS + .d.ts for both subpaths
-pnpm size                # Brotli bundle budget check (server < 30 KB, observability < 2.5 KB, shared < 3.5 KB)
+pnpm size                # Brotli bundle budget check (the ceilings live in `scripts/check-size.mjs`)
 pnpm test:e2e            # E2E against real MinIO (Testcontainers — needs Docker)
 pnpm mutation            # Stryker mutation gate (break 95 — run manually pre-release)
 pnpm prepublishOnly      # Full release gate: clean + typecheck + lint + test:cov:all + build
@@ -126,7 +126,7 @@ Use context7 (`mcp__context7__resolve-library-id` + `mcp__context7__query-docs`)
 - `pnpm lint` — 0 errors, 0 warnings (no `eslint-disable` or `@ts-ignore`)
 - `pnpm test:cov` — all tests pass, 100% line/branch coverage on every implemented file
 - `pnpm build` — `dist/server/index.{mjs,cjs,d.ts}` and `dist/shared/index.{mjs,cjs,d.ts}` present
-- `pnpm size` — server < 30 KB brotli, shared < 3.5 KB brotli
+- `pnpm size` — every bundle within the ceiling in `scripts/check-size.mjs`
 - `/bymax-quality:code-review` — 0 CRITICAL, 0 HIGH
 - `/security-review` — 0 CRITICAL, 0 HIGH, 0 MEDIUM, 0 LOW
 
