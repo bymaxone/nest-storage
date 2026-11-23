@@ -238,16 +238,19 @@ describe('assertCleanRoot', () => {
     })
   })
 
-  it('accepts a host that tunes Buffer.poolSize after the library loaded', () => {
-    // poolSize is a documented setting, not a function any decision calls.
-    const original = Buffer.poolSize
+  it('accepts a host that tunes a documented setting of a captured global after the library loaded', () => {
+    // Settings, not functions any decision calls: the pool size and the stack trace depth.
+    const pool = Buffer.poolSize
+    const depth = Error.stackTraceLimit
     Buffer.poolSize = 1024
+    Error.stackTraceLimit = 5
     try {
       expect(() => {
         assertCleanRoot()
       }).not.toThrow()
     } finally {
-      Buffer.poolSize = original
+      Buffer.poolSize = pool
+      Error.stackTraceLimit = depth
     }
   })
 
