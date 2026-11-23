@@ -101,7 +101,7 @@ export class SignedUrlService {
    * every header listed in `requiredHeaders` verbatim — each one is part of the
    * URL signature, so an omitted header yields `SignatureDoesNotMatch`. The map
    * always carries `Content-Type` and additionally lists `x-amz-acl` when an ACL
-   * is signed and an `x-amz-meta-<key>` entry per metadata pair. The `Content-Type`
+   * is signed. The metadata pairs travel in the signed query string, so they are not listed. The `Content-Type`
    * is signed (`X-Amz-SignedHeaders` lists `content-type`), so a PUT that sends any
    * other type is refused by the provider and nothing is stored.
    *
@@ -174,10 +174,10 @@ export class SignedUrlService {
   }
 
   /**
-   * Builds the set of headers a client MUST send for a signed PUT, mirroring the
-   * headers folded into the SigV4 signature. Always includes `Content-Type`; adds
-   * `x-amz-acl` when an ACL is signed and an `x-amz-meta-<key>` entry (key
-   * lowercased to match SigV4 canonicalisation) for every metadata pair.
+   * Builds the set of headers a client MUST send for a signed PUT. Always includes `Content-Type`; adds
+   * `x-amz-acl` when an ACL is signed. The metadata pairs are not listed: the presigner puts each
+   * `x-amz-meta-<key>` in the signed query string, and a client that sent the same pair as a header too
+   * would be refused by the provider.
    */
   private buildPutRequiredHeaders(
     options: SignedPutUrlOptions,
@@ -186,11 +186,6 @@ export class SignedUrlService {
     const headers: Record<string, string> = { 'Content-Type': options.contentType }
     if (acl !== undefined) {
       headers['x-amz-acl'] = acl
-    }
-    if (options.metadata !== undefined) {
-      for (const [key, value] of Object.entries(options.metadata)) {
-        headers[`x-amz-meta-${key.toLowerCase()}`] = value
-      }
     }
     return headers
   }

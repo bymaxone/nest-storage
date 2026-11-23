@@ -13,6 +13,7 @@ import { peekFirstBytes } from '../utils/stream-utils'
 import { assertMimeAllowed } from '../utils/mime-allowed'
 import { assertHeaderValues, assertMetadata } from '../utils/header-value'
 import { assertIntegerInput } from '../utils/numeric-input'
+import { readOptionalField } from '../utils/read-once'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -112,10 +113,12 @@ export class ValidationService {
         ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
         readBytes,
       })
-      if (!result.ok) {
+      // Each field once, and not one that only the root prototype supplies: a result without `ok` is not an `ok`.
+      const ok = readOptionalField(result, 'ok')
+      if (!ok) {
         throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
           validator: validator.name,
-          reason: result.reason,
+          reason: readOptionalField(result, 'reason'),
         })
       }
     }

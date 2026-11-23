@@ -66,7 +66,7 @@ minimal.
   anything that answers `'clean' | 'infected' | 'unknown'`
 - ✅ **Idempotent retries** — a bounded in-memory LRU with a TTL returns the cached
   `UploadResult` for a repeated `idempotencyKey`
-- ✅ **Presigned GET / PUT / multipart** — the PUT signs the `Content-Type` (and ACL and metadata, when set) as required headers, so a PUT that sends another type is refused and stores nothing; multipart gets one signed URL per part, so a browser uploads directly
+- ✅ **Presigned GET / PUT / multipart** — the PUT signs the `Content-Type` (and the ACL and metadata, when set; the metadata pairs travel in the signed query string, so the client does not send them as headers), so a PUT that sends another type is refused and stores nothing; multipart gets one signed URL per part, so a browser uploads directly
 - ✅ **Streaming download, metadata without transfer, paginated listing, server-side copy, bulk delete**
   — `deleteMany` reports what failed instead of throwing away the successes
 - ✅ **Public URL composition** — `getPublicUrl` builds from `cdnBaseUrl` or `publicBaseUrl`; it
@@ -341,7 +341,7 @@ so a `contentType` it does not allow, a malformed one included, fails as `STORAG
 `metadata` key must also be a non-empty header name: letters, digits and the characters
 ``!#$%&'*+-.^_`|~``. To send a non-ASCII filename, percent-encode it as RFC 6266 `filename*`:
 `contentDisposition: "attachment; filename*=UTF-8''caf%C3%A9.pdf"`. Percent-encode non-ASCII
-`metadata` values yourself (`encodeURIComponent`) and decode them when you read them.
+`metadata` values yourself (`encodeURIComponent`) and decode them when you read them. `metadata` is an object of pairs: a `Map`, an array, a string or `null` fails with `STORAGE_VALIDATION_FAILED` before any request.
 
 ### Stream with Progress
 
@@ -816,7 +816,7 @@ BymaxStorageModule.forRootAsync({
 
 All errors are thrown as `StorageException extends HttpException`. The response body is `{ error: { code, message, details? } }`.
 
-**What `details` repeats.** Only what the caller supplied in the request that failed: the `key` (without the module's `keyPrefix`), the per-call `bucket`, the `prefix` of a `list()`, the `sourceKey` and `destKey` of a `copy()`, and the `contentType` of a refused upload (left out when it is not a valid header value). The others are strings of at most 1024 characters (S3's limit for a key) and are left out when longer or not a string. What the host set as configuration is never repeated: the module's `bucket` when the call did not name one, the `keyPrefix`, the `validation.mimeWhitelist` (a `STORAGE_MIME_NOT_ALLOWED` carries the refused `contentType` and not the list) and the `region`.
+**What `details` repeats.** Only what the caller supplied in the request that failed: the `key` (without the module's `keyPrefix`), the per-call `bucket`, the `prefix` of a `list()`, the `sourceKey` and `destKey` of a `copy()`, and the media type of a refused upload (`type/subtype` without its parameters, left out when the `contentType` is not a single well-formed type). The others are strings of at most 1024 characters (S3's limit for a key) and are left out when longer or not a string. What the host set as configuration is never repeated: the module's `bucket` when the call did not name one, the `keyPrefix`, the `validation.mimeWhitelist` (a `STORAGE_MIME_NOT_ALLOWED` carries the refused media type and not the list) and the `region`.
 
 | Code                             | HTTP | When                                                                                                                                                                                                               |
 | -------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

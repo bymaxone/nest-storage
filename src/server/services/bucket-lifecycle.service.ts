@@ -26,6 +26,7 @@ import { Observed, StorageObserver } from '../observability/storage-observer'
 import { StorageException } from '../errors/storage-exception'
 import { callDetails } from '../utils/call-details'
 import { resolveBucket as resolveBucketInput } from '../utils/call-input'
+import { readLifecycleBucket, readLifecycleRule, type LooseLifecycleRule } from '../utils/request-fields'
 import { isNoLifecycleConfiguration, mapLifecycleError } from '../errors/lifecycle-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -91,23 +92,24 @@ export class BucketLifecycleService {
    * to `keyPrefix` is returned exactly as stored, flagged `isOutsideKeyPrefix: true`;
    * everything else about a rule is returned as the provider stores it.
    *
-   * @param options - Optional per-call bucket override.
+   * @param scoped - Optional per-call bucket override.
    * @returns Every rule in the bucket.
    * @throws StorageException for missing configuration, an unsupported provider, or a provider error.
    */
   @Observed('lifecycle_get')
-  async get(options?: LifecycleBucketOptions): Promise<BucketLifecycleRuleView[]> {
+  async get(scoped?: LifecycleBucketOptions): Promise<BucketLifecycleRuleView[]> {
+    const options = readLifecycleBucket(scoped)
     this.assertConfigured()
-    const bucket = this.resolveBucket(options?.bucket)
-    return (await this.read(bucket, options?.bucket)).rules.map((rule) => this.toView(rule))
+    const bucket = this.resolveBucket(options.bucket)
+    return (await this.read(bucket, options.bucket)).rules.map((rule) => this.toView(rule))
   }
 
   /**
    * Adds the expiration or multipart-abort rule, or replaces the rule with the same id, and writes
    * the full set back. Rules with other ids are sent exactly as they were read.
    *
-   * @param rule - The rule id, key prefix and either `expirationDays` or `abortIncompleteMultipartDays`.
-   * @param options - Optional per-call bucket override.
+   * @param input - The rule id, key prefix and either `expirationDays` or `abortIncompleteMultipartDays`.
+   * @param scoped - Optional per-call bucket override.
    * @throws StorageException `STORAGE_LIFECYCLE_RULE_INVALID` for a bad id, prefix or day count, or an id
    *   that names a rule outside `keyPrefix`;
    *   `STORAGE_LIFECYCLE_UNSUPPORTED` / `STORAGE_LIFECYCLE_REJECTED` from the provider.
@@ -115,11 +117,12 @@ export class BucketLifecycleService {
    *   await lifecycle.upsert({ id: 'expire-tmp', prefix: 'expiring/', expirationDays: 7 })
    */
   @Observed('lifecycle_upsert')
-  async upsert(rule: LifecycleRuleInput, options?: LifecycleBucketOptions): Promise<void> {
+  async upsert(input: LifecycleRuleInput, scoped?: LifecycleBucketOptions): Promise<void> {
+    const options = readLifecycleBucket(scoped)
     this.assertConfigured()
-    const owned = this.toRule(rule)
-    const bucket = this.resolveBucket(options?.bucket)
-    const snapshot = await this.read(bucket, options?.bucket)
+    const owned = this.toRule(readLifecycleRule(input))
+    const bucket = this.resolveBucket(options.bucket)
+    const snapshot = await this.read(bucket, options.bucket)
     const index = snapshot.rules.findIndex((existing) => existing.ID === owned.ID)
     this.assertOwnable(snapshot.rules[index])
     const rules = [...snapshot.rules]
@@ -128,7 +131,7 @@ export class BucketLifecycleService {
     } else {
       rules[index] = owned
     }
-    await this.write(bucket, options?.bucket, rules, snapshot, 'upsert')
+    await this.write(bucket, options.bucket, rules, snapshot, 'upsert')
   }
 
   /**
@@ -136,24 +139,25 @@ export class BucketLifecycleService {
    * deleted, because S3 rejects a write with no rules. An unknown id changes nothing.
    *
    * @param id - The rule id.
-   * @param options - Optional per-call bucket override.
+   * @param scoped - Optional per-call bucket override.
    * @returns `true` when a rule was removed, `false` when no rule had that id.
    * @throws StorageException `STORAGE_LIFECYCLE_RULE_INVALID` for a bad id or an id that names a rule
    *   outside `keyPrefix`; a provider failure otherwise.
    */
   @Observed('lifecycle_remove')
-  async remove(id: string, options?: LifecycleBucketOptions): Promise<boolean> {
+  async remove(id: string, scoped?: LifecycleBucketOptions): Promise<boolean> {
+    const options = readLifecycleBucket(scoped)
     this.assertConfigured()
     this.assertRuleId(id)
-    const bucket = this.resolveBucket(options?.bucket)
-    const snapshot = await this.read(bucket, options?.bucket)
+    const bucket = this.resolveBucket(options.bucket)
+    const snapshot = await this.read(bucket, options.bucket)
     const target = snapshot.rules.find((existing) => existing.ID === id)
     if (target === undefined) {
       return false
     }
     this.assertOwnable(target)
     const rules = snapshot.rules.filter((existing) => existing.ID !== id)
-    await this.write(bucket, options?.bucket, rules, snapshot, 'remove')
+    await this.write(bucket, options.bucket, rules, snapshot, 'remove')
     return true
   }
 
@@ -266,12 +270,13 @@ export class BucketLifecycleService {
   }
 
   /** Validates the input and builds the rule, an expiration or a multipart-abort rule. */
-  private toRule(rule: LifecycleRuleInput): BucketLifecycleRule {
+  private toRule(rule: LooseLifecycleRule): BucketLifecycleRule {
     this.assertRuleId(rule.id)
+    const id = rule.id as string
     if (rule.abortIncompleteMultipartDays !== undefined) {
       assertDays('abortIncompleteMultipartDays', rule.abortIncompleteMultipartDays)
       // Untyped callers can pass both; the types already forbid it.
-      if ((rule as { expirationDays?: unknown }).expirationDays !== undefined) {
+      if (rule.expirationDays !== undefined) {
         throw ruleInvalid('Give exactly one of expirationDays and abortIncompleteMultipartDays')
       }
       if (typeof rule.prefix !== 'string') {
@@ -281,7 +286,7 @@ export class BucketLifecycleService {
       // no object); the key guard itself needs a non-empty key.
       const prefix = rule.prefix === '' ? this.keyResolver.getPrefix() : this.keyResolver.normalize(rule.prefix)
       return {
-        ID: rule.id,
+        ID: id,
         Status: 'Enabled',
         Filter: { Prefix: prefix },
         AbortIncompleteMultipartUpload: { DaysAfterInitiation: rule.abortIncompleteMultipartDays },
@@ -292,7 +297,7 @@ export class BucketLifecycleService {
     }
     assertDays('expirationDays', rule.expirationDays)
     return {
-      ID: rule.id,
+      ID: id,
       Status: 'Enabled',
       Filter: { Prefix: this.keyResolver.normalize(rule.prefix) },
       Expiration: { Days: rule.expirationDays },

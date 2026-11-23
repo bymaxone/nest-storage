@@ -119,8 +119,17 @@ describe('BymaxStorageModule', () => {
       ],
     }).compile()
 
-    expect(moduleRef.get(BYMAX_STORAGE_UPLOAD_VALIDATORS)).toEqual([validator])
-    expect(moduleRef.get(BYMAX_STORAGE_FILE_SCANNER)).toBe(scanner)
+    // The module hands out a copy of each validator: it keeps the name and runs the validator's own validate.
+    const exposed = moduleRef.get<IUploadValidator[]>(BYMAX_STORAGE_UPLOAD_VALIDATORS)
+    expect(exposed).toHaveLength(1)
+    expect(exposed[0]?.name).toBe('v')
+    expect(await exposed[0]?.validate({ key: 'k', contentType: 'text/plain' })).toStrictEqual({
+      ok: true,
+    })
+    // The module hands out a copy of the scanner implementation too: its `scan` is bound to the implementation.
+    const exposedScanner = moduleRef.get<IFileScanner>(BYMAX_STORAGE_FILE_SCANNER)
+    const scanInput = { mode: 'pre-upload', key: 'k', bucket: 'b', contentType: 'text/plain' } as const
+    expect(await exposedScanner.scan(scanInput)).toStrictEqual(await scanner.scan(scanInput))
 
     await moduleRef.close()
   })

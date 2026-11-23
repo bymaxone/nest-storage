@@ -6,6 +6,7 @@
  */
 import { BymaxStorageModule } from '../bymax-storage.module'
 import { validateOptions } from './validate-options'
+import { snapshotOptions } from './snapshot-options'
 import type { StorageException } from '../errors/storage-exception'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 
@@ -109,19 +110,28 @@ describe('validation.mimeWhitelist', () => {
         return Reflect.get(target, key, receiver) as unknown
       },
     })
-    const throwingIterator = ['image/png']
-    Object.defineProperty(throwingIterator, Symbol.iterator, {
-      value: () => {
-        throw new Error('SENTINEL iterator ran')
-      },
-    })
+    const refused = unreadable({ ...valid, validation: { mimeWhitelist: throwingIndex } })
 
-    for (const value of [throwingIndex, throwingIterator]) {
-      const refused = unreadable({ ...valid, validation: { mimeWhitelist: value } })
+    expect(refused.response).not.toContain('SENTINEL')
+    expect(refused.cause.message).toContain('SENTINEL')
+  })
 
-      expect(refused.response).not.toContain('SENTINEL')
-      expect(refused.cause.message).toContain('SENTINEL')
+  it('copies an array of a subclass with an empty iterator by its indexes, so the whitelist is not read as empty', () => {
+    // An empty whitelist allows every type; a copy that followed this iterator would turn ['image/png'] into [].
+    class Hollow extends Array<string> {
+      override [Symbol.iterator](): ArrayIterator<string> {
+        return [][Symbol.iterator]()
+      }
     }
+    const whitelist = new Hollow()
+    whitelist.push('image/png')
+
+    const copy = snapshotOptions({ ...valid, validation: { mimeWhitelist: whitelist } }) as {
+      validation: { mimeWhitelist: string[] }
+    }
+
+    expect(Array.from(whitelist)).toStrictEqual([])
+    expect(copy.validation.mimeWhitelist).toStrictEqual(['image/png'])
   })
 
   it.each([[[]], [['image/png', 'application/*']], [undefined]])('accepts %p', (value) => {
@@ -158,25 +168,17 @@ describe('validation.customValidators', () => {
     expect(result.response).not.toContain('SENTINEL')
   })
 
-  it('does not catch a list that throws when it is read, or an entry whose validate getter throws: forRoot refuses it as unreadable', () => {
-    const throwingIterator = [{ validate: () => undefined }]
-    Object.defineProperty(throwingIterator, Symbol.iterator, {
-      value: () => {
-        throw new Error('SENTINEL iterator ran')
-      },
-    })
+  it('does not catch an entry whose validate getter throws: forRoot refuses it as unreadable', () => {
     const throwingGetter = {
       get validate(): () => void {
         throw new Error('SENTINEL getter ran')
       },
     }
 
-    for (const value of [throwingIterator, [throwingGetter]]) {
-      const refused = unreadable({ ...valid, validation: { customValidators: value } })
+    const refused = unreadable({ ...valid, validation: { customValidators: [throwingGetter] } })
 
-      expect(refused.response).not.toContain('SENTINEL')
-      expect(refused.cause.message).toContain('SENTINEL')
-    }
+    expect(refused.response).not.toContain('SENTINEL')
+    expect(refused.cause.message).toContain('SENTINEL')
   })
 
   it('accepts a validator that is a class instance serving validate from its prototype', () => {
@@ -340,6 +342,27 @@ function refusedAtBoot(options: unknown): string {
   }
   throw new Error('expected forRoot to throw')
 }
+
+describe.each([
+  ['mimeWhitelist', ['image/png'], 'validation.mimeWhitelist must be an array of strings'],
+  [
+    'customValidators',
+    [{ validate: () => undefined }],
+    'validation.customValidators must hold objects with a validate function',
+  ],
+])('validation.%s copied by index', (name, good, reason) => {
+  it.each([
+    ['a hole', 1],
+    ['an undefined entry', 0],
+  ])('refuses at boot a list with %s, because the copy holds undefined there', (_label, kind) => {
+    // The copy reads every index up to the length, so a hole becomes undefined and cannot pass as an entry.
+    const list: unknown[] = [...good]
+    if (kind === 1) list.length = good.length + 1
+    else list.push(undefined)
+
+    expect(refusedAtBoot({ ...valid, validation: { [name]: list } })).toBe(reason)
+  })
+})
 
 describe.each(['mimeWhitelist', 'customValidators'])('validation.%s length', (name) => {
   const tooMany = `validation.${name} must hold at most 1000 entries`
