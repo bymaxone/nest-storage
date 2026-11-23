@@ -25,6 +25,8 @@ const STANDARD_NAMES = [
   '__proto__',
   'toLocaleString',
 ]
+/** The Buffer functions the library calls live. */
+const BUFFER_CALLS = ['from', 'alloc', 'concat', 'byteLength', 'isBuffer']
 const FIELDS = ['value', 'get', 'set', 'writable', 'enumerable', 'configurable']
 /** Global bindings compared by the value they resolve to. */
 const GLOBALS = [
@@ -144,7 +146,6 @@ function readBaseline(): void {
     Number.prototype,
     Math,
     JSON,
-    Buffer,
     ArrayBuffer,
     arrayIterator,
     getPrototype(arrayIterator),
@@ -155,6 +156,12 @@ function readBaseline(): void {
   let at = 0
   while (at < list.length) {
     captureAll(item(list, at))
+    at += 1
+  }
+  // Not the whole of Buffer: its pool size is a setting a host may tune, and no decision reads it.
+  at = 0
+  while (at < BUFFER_CALLS.length) {
+    capture(Buffer, item(BUFFER_CALLS, at))
     at += 1
   }
   at = 0

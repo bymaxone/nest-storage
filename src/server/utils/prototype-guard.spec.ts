@@ -238,6 +238,19 @@ describe('assertCleanRoot', () => {
     })
   })
 
+  it('accepts a host that tunes Buffer.poolSize after the library loaded', () => {
+    // poolSize is a documented setting, not a function any decision calls.
+    const original = Buffer.poolSize
+    Buffer.poolSize = 1024
+    try {
+      expect(() => {
+        assertCleanRoot()
+      }).not.toThrow()
+    } finally {
+      Buffer.poolSize = original
+    }
+  })
+
   it('refuses at every use when a built-in could not be read at load', async () => {
     // A guard that could not take its baseline cannot vouch for the runtime, so it fails closed.
     const original = Reflect.ownKeys
