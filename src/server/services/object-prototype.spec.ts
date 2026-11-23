@@ -48,7 +48,11 @@ function plant(values: Record<string, unknown>): () => void {
 async function resolve(options: Record<string, unknown>): Promise<ResolvedBymaxStorageOptions> {
   const moduleRef = await Test.createTestingModule({
     imports: [BymaxStorageModule.forRoot(options as unknown as BymaxStorageModuleOptions)],
-  }).compile()
+  })
+    // The client provider refuses a planted root before it builds a client; this spec reads the resolved options.
+    .overrideProvider(S3ClientProvider)
+    .useValue({ isConfigured: () => true, getClient: () => ({}), getClientOrNull: () => null })
+    .compile()
   return moduleRef.get<ResolvedBymaxStorageOptions>(BYMAX_STORAGE_OPTIONS)
 }
 
