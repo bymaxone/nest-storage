@@ -140,12 +140,15 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
 
 /** Refuses each attempt of each command while the root prototype is dirty; a retry is one more attempt. */
 function guardClient(client: S3Client): void {
-  const guard = (next: (args: unknown) => Promise<unknown>) => (args: unknown) => {
-    assertCleanRoot()
-    return next(args)
-  }
-  client.middlewareStack.addRelativeTo(
-    guard as unknown as Parameters<S3Client['middlewareStack']['addRelativeTo']>[0],
-    { name: 'rootPrototypeGuard', relation: 'after', toMiddleware: 'retryMiddleware' },
-  )
+  const guard =
+    <Args, Result>(next: (args: Args) => Promise<Result>) =>
+    (args: Args): Promise<Result> => {
+      assertCleanRoot()
+      return next(args)
+    }
+  client.middlewareStack.addRelativeTo(guard, {
+    name: 'rootPrototypeGuard',
+    relation: 'after',
+    toMiddleware: 'retryMiddleware',
+  })
 }
