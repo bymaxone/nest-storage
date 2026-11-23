@@ -39,13 +39,8 @@ import { FileScannerService } from './file-scanner.service'
 import { StorageException } from '../errors/storage-exception'
 import { resolveBucket as resolveBucketInput } from '../utils/call-input'
 import { mapAwsError } from '../errors/aws-error-mapper'
-import { mapMultipartError } from '../errors/multipart-error-mapper'
 import { describeCleanupFailure, withCleanupFailure } from '../errors/scan-cleanup-error'
-import {
-  abortFailureLogger,
-  closeMultipartUpload,
-  closeWhenCreated,
-} from '../utils/multipart-abort'
+import { failMultipartUpload } from '../utils/multipart-failure'
 import { deleteObjectsChunk } from '../utils/delete-objects'
 import { mapBucketCheckError } from '../errors/bucket-check-error-mapper'
 import { emit } from '../utils/log-event'
@@ -85,10 +80,8 @@ import {
   bindToSignal,
   CLEANUP_DEADLINE_MS,
   failureOrAbort,
-  requestAborted,
   sendOptions,
   throwIfAborted,
-  within,
 } from '../utils/abort-support'
 import { buildPublicUrl } from '../utils/public-url'
 import {
@@ -610,9 +603,10 @@ export class StorageService {
       Body: guardIdleBody(options.body, this.options.uploadIdleTimeoutMs),
     }
     const signal = options.abortSignal
-    const bound = signal ? bindToSignal(this.s3Provider.getClient(), signal) : undefined
+    const client = this.s3Provider.getClient()
+    const bound = signal ? bindToSignal(client, signal) : undefined
     const uploader = new Upload({
-      client: bound?.client ?? this.s3Provider.getClient(),
+      client: bound?.client ?? client,
       params,
       queueSize: this.options.multipart.queueSize,
       partSize: this.options.multipart.partSizeBytes,
@@ -640,56 +634,12 @@ export class StorageService {
         sent(),
       )
     } catch (err) {
-      return await this.failMultipart(err, finalKey, bucket, caller, {
-        uploadId: uploader.uploadId,
-        signal,
-        createdUploadId: bound?.createdUploadId,
-      })
+      const target = { finalKey, bucket, caller }
+      const state = { uploadId: uploader.uploadId, signal, createdUploadId: bound?.createdUploadId }
+      return await failMultipartUpload(client, this.logger, err, target, state)
     } finally {
       signal?.removeEventListener('abort', abortUpload)
     }
-  }
-
-  /**
-   * Aborts the multipart upload that failed, then throws the original failure with the outcome. Whether
-   * the failure is an abort is decided first: a signal that fires during the cleanup does not turn a
-   * real failure into one. An upload id the provider answered late is waited for, within the cleanup
-   * deadline, so that an abort during `CreateMultipartUpload` still aborts the upload it created.
-   */
-  private async failMultipart(
-    err: unknown,
-    finalKey: string,
-    bucket: string,
-    caller: Record<string, unknown>,
-    upload: {
-      uploadId: string | undefined
-      signal: AbortSignal | undefined
-      createdUploadId: (() => Promise<string | undefined>) | undefined
-    },
-  ): Promise<never> {
-    // Decided before the cleanup, which can take a while: a signal that fires during it must not turn
-    // a real failure into an abort.
-    const abortedBy = upload.signal?.aborted === true ? upload.signal : undefined
-    const client = this.s3Provider.getClient()
-    const lookup = abortedBy ? upload.createdUploadId?.() : undefined
-    let uploadId = upload.uploadId
-    // Stryker disable next-line ConditionalExpression: when the uploader already holds an id it is the one the create answered, so waiting for the created id again yields the same value (equivalent).
-    if (uploadId === undefined && lookup) {
-      uploadId = await within(lookup, CLEANUP_DEADLINE_MS)
-      // The caller does not wait longer, but an id that arrives later is still aborted.
-      if (uploadId === undefined) {
-        closeWhenCreated(client, bucket, finalKey, lookup, abortFailureLogger(this.logger))
-      }
-    }
-    const abort = await closeMultipartUpload(
-      client,
-      bucket,
-      finalKey,
-      uploadId,
-      abortFailureLogger(this.logger),
-    )
-    const context = { ...caller, op: 'upload-multipart', ...abort }
-    throw abortedBy ? requestAborted(abortedBy, context) : mapMultipartError(err, context)
   }
 
   /**
