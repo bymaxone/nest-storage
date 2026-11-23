@@ -85,4 +85,14 @@ describe('a planted root prototype key reaches the caller as the refusal', () =>
     await expect(storage.exists('k')).rejects.toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
     expect(requests).toBe(0)
   })
+
+  it('rejects deleteMany() instead of listing every key as failed', async () => {
+    // A batch delete reports per-key failures; the refusal is not one of them.
+    const storage = await setup()
+    plant()
+    await expect(storage.deleteMany(['a', 'b'])).rejects.toMatchObject({
+      code: 'STORAGE_VALIDATION_FAILED',
+    })
+    expect(requests).toBe(0)
+  })
 })
