@@ -49,6 +49,7 @@ import {
 import { deleteObjectsChunk } from '../utils/delete-objects'
 import { mapBucketCheckError } from '../errors/bucket-check-error-mapper'
 import { emit } from '../utils/log-event'
+import { isRootRefusal } from '../utils/prototype-guard'
 import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 import { failureError } from '../utils/provider-failure-log'
 import { toListResult } from '../utils/list-result'
@@ -378,8 +379,9 @@ export class StorageService {
         return false
       }
       if (
-        err instanceof StorageException &&
-        err.code === STORAGE_ERROR_CODES.STORAGE_REQUEST_ABORTED
+        isRootRefusal(err) ||
+        (err instanceof StorageException &&
+          err.code === STORAGE_ERROR_CODES.STORAGE_REQUEST_ABORTED)
       ) {
         throw err
       }
