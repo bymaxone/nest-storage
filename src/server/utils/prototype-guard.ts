@@ -41,6 +41,9 @@ const GLOBALS = [
   'Error',
   'TypeError',
   'Number',
+  'Math',
+  'JSON',
+  'encodeURIComponent',
   'Boolean',
   'Uint8Array',
   'ArrayBuffer',
@@ -57,6 +60,7 @@ const ownKeys = Reflect.ownKeys.bind(Reflect)
 const getDescriptor = Object.getOwnPropertyDescriptor.bind(Object)
 const getPrototype = Object.getPrototypeOf.bind(Object) as (target: unknown) => object
 const hasOwn = Object.hasOwn.bind(Object)
+const same = Object.is.bind(Object) as (left: unknown, right: unknown) => boolean
 const create = Object.create.bind(Object) as (prototype: null) => Record<string, unknown>
 const symbolFor = reflectGet(Symbol, 'for') as (key: string) => symbol
 const exemptSymbol = symbolFor('$$jest-protect-from-deletion')
@@ -136,10 +140,17 @@ function readBaseline(): void {
     WeakSet.prototype,
     Symbol,
     Symbol.prototype,
+    Number,
     Number.prototype,
+    Math,
+    JSON,
+    Buffer,
+    ArrayBuffer,
     arrayIterator,
     getPrototype(arrayIterator),
     getPrototype(''[Symbol.iterator]()),
+    getPrototype(new Map()[Symbol.iterator]()),
+    getPrototype(new Set()[Symbol.iterator]()),
   ]
   let at = 0
   while (at < list.length) {
@@ -163,7 +174,7 @@ function differs(entry: Entry): boolean {
   const now = fieldsOf(entry.target, entry.key)
   let at = 0
   while (at < now.length) {
-    if (now[at] !== entry.fields[at]) {
+    if (!same(now[at], entry.fields[at])) {
       return true
     }
     at += 1

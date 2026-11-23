@@ -140,6 +140,8 @@ describe('assertCleanRoot', () => {
 
   describe('built-ins replaced after the module loaded', () => {
     const iterator = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]())) as object
+    const setIterator = Object.getPrototypeOf(new Set()[Symbol.iterator]()) as object
+    const mapIterator = Object.getPrototypeOf(new Map()[Symbol.iterator]()) as object
     const replaced: [string, () => () => void][] = [
       ['Object.hasOwn', () => swap(Object, 'hasOwn', () => true)],
       [
@@ -179,6 +181,19 @@ describe('assertCleanRoot', () => {
         'Symbol.prototype description',
         () => swapGetter(Symbol.prototype, 'description', () => 'planted'),
       ],
+      ['Number.isInteger', () => swap(Number, 'isInteger', () => true)],
+      ['Number.isFinite', () => swap(Number, 'isFinite', () => true)],
+      ['Math.min', () => swap(Math, 'min', () => 0)],
+      ['JSON.stringify', () => swap(JSON, 'stringify', () => '')],
+      ['Buffer.byteLength', () => swap(Buffer, 'byteLength', () => 0)],
+      ['Buffer.concat', () => swap(Buffer, 'concat', () => Buffer.alloc(0))],
+      ['Buffer.isBuffer', () => swap(Buffer, 'isBuffer', () => true)],
+      ['Buffer.from', () => swap(Buffer, 'from', () => Buffer.alloc(0))],
+      ['Buffer.alloc', () => swap(Buffer, 'alloc', () => Buffer.alloc(0))],
+      ['encodeURIComponent', () => swapGlobal('encodeURIComponent', () => '')],
+      ['ArrayBuffer.isView', () => swap(ArrayBuffer, 'isView', () => true)],
+      ['the Set iterator prototype', () => swap(setIterator, 'next', () => ({ done: true }))],
+      ['the Map iterator prototype', () => swap(mapIterator, 'next', () => ({ done: true }))],
       ['the Set binding', () => swapGlobal('Set', class Other {})],
       ['the Buffer binding', () => swapGlobal('Buffer', class Other {})],
     ]

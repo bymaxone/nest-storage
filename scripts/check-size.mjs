@@ -11,7 +11,7 @@ import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
  * measured size plus 30 B, and the number is stated where it is changed.
  */
 const BUDGETS = [
-  { name: 'server (NestJS module + AWS SDK externals)', path: 'dist/server/index.mjs', brotli: 31_082 },
+  { name: 'server (NestJS module + AWS SDK externals)', path: 'dist/server/index.mjs', brotli: 31_119 },
   { name: 'observability (metrics contributor + readiness indicator)', path: 'dist/observability/index.mjs', brotli: 2_500 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 3_500 },
 ]

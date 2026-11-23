@@ -21,6 +21,7 @@ const LOAD_TIME_CALLS: Record<string, string> = {
   'Object.getOwnPropertyDescriptor.bind': 'descriptor snapshot and comparison',
   'Object.getPrototypeOf.bind': 'iterator prototypes at load',
   'Object.hasOwn.bind': 'own-field reads of a descriptor',
+  'Object.is.bind': 'a snapshot compare that treats NaN as equal to itself',
   'Object.create.bind': 'the null-prototype details of a refusal',
 }
 
