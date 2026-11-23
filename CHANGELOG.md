@@ -13,18 +13,41 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
-### Changed
-
-- **An upload source that is not a `Readable` is adapted when the idle guard is off.** With `uploadIdleTimeoutMs: 0` a
-  stream body was handed to the uploader as it was, even one that only has `pipe` and events (an old-style stream) and
-  is not a `Readable`; it is now adapted to a `Readable`, and a `Readable` still goes through as it is. A stream body
-  that throws when it is examined (a Proxy whose `getPrototypeOf` trap throws) fails with `STORAGE_VALIDATION_FAILED`
-  and the error as the `cause`.
-
-  **Apply to a derived backend:** nothing to change; an old-style stream body now reaches the uploader as a
-  `Readable`, the type its body option names.
+## [1.1.22] - 2026-11-21
 
 ### Fixed
+
+- **A key planted on `Object.prototype` is no longer read as an option or a request field.** An ordinary read of a
+  plain object that lacks a key finds that key on `Object.prototype`, so a planted option or request field such as
+  `publicRead` or `bucket` was read as if the caller had set it, and a copy could be sent `public-read` and a delete or
+  a listing could be sent to another bucket. A value found only on the root prototype is now left out, the copies the
+  module and the services read from have no prototype, and a field a class supplies on its own prototype (a getter) is
+  still read. The same holds for a custom validator, the `ok` of its result, the `status` of a scan result and the
+  fields of a lifecycle rule.
+
+- **An empty or unreadable iterator no longer turns a whitelist into an empty one.** The option arrays
+  (`validation.mimeWhitelist`, `validation.customValidators`) were copied by their iterator, so an array of a subclass
+  whose iterator yielded nothing copied to `[]`, and an empty whitelist allows every type. They are now copied by
+  index, and a custom validator is copied too, so a getter on it is read once.
+
+  **Apply to a derived backend:** the validators the module exposes under `BYMAX_STORAGE_UPLOAD_VALIDATORS` are copies
+  that keep the `name` and call the validator's own `validate`; code that compared them by identity with the objects it
+  configured compares them by `name` instead.
+
+- **The pairs of `metadata` are read once on upload.** An upload checked the pairs of the caller's `metadata` object and
+  sent that same object, reading each pair again for the request, so a value that answered differently on a later read
+  was sent as something that had not been checked. The pairs are copied once, as a signed PUT URL already did, and a
+  pair, a request field or the kind of the metadata that throws when read fails with `STORAGE_VALIDATION_FAILED` with
+  the error as the `cause`.
+
+  **Apply to a derived backend:** nothing to change.
+
+- **A signed PUT URL no longer lists the metadata pairs as required headers.** The presigner puts each
+  `x-amz-meta-<key>` in the signed query string, and a client that also sent the pair as a header was refused by the
+  provider (HTTP 400). `requiredHeaders` now holds `Content-Type`, and `x-amz-acl` when an ACL is signed.
+
+  **Apply to a derived backend:** a client that copies `requiredHeaders` onto its PUT needs no change; one that read
+  `x-amz-meta-*` entries from it reads the pairs from what it passed as `metadata`.
 
 - **A key planted on `Object.prototype` can no longer reach the S3 client.** The AWS SDK reads every optional input
   and configuration name off the object it is handed, so a name planted on the root prototype could become a header,
@@ -38,6 +61,30 @@ note on each entry is the compatibility contract — read it, not the number.
   **Apply to a derived backend:** nothing to change. An application that adds a key to `Object.prototype` (a polyfill
   or a library that extends it) now fails at module start-up and on every storage call with
   `STORAGE_VALIDATION_FAILED`; remove the extension.
+
+### Changed
+
+- **An upload source that is not a `Readable` is adapted when the idle guard is off.** With `uploadIdleTimeoutMs: 0` a
+  stream body was handed to the uploader as it was, even one that only has `pipe` and events (an old-style stream) and
+  is not a `Readable`; it is now adapted to a `Readable`, and a `Readable` still goes through as it is. A stream body
+  that throws when it is examined (a Proxy whose `getPrototypeOf` trap throws) fails with `STORAGE_VALIDATION_FAILED`
+  and the error as the `cause`.
+
+  **Apply to a derived backend:** nothing to change; an old-style stream body now reaches the uploader as a
+  `Readable`, the type its body option names.
+
+- **`metadata` that is a `Map` or any other value that is not an object of pairs is refused.** A `Map` has no own
+  entries, so its pairs were dropped without a word; it now fails with `STORAGE_VALIDATION_FAILED`
+  (`details.field: 'metadata'`) before any request, like a string, an array or `null`.
+
+  **Apply to a derived backend:** pass an object of header-safe strings.
+
+- **`STORAGE_MIME_NOT_ALLOWED` shows the media type alone.** `details.contentType` held the whole value the caller sent,
+  parameters included; it now holds the `type/subtype` without them, and nothing when the value is not a single
+  well-formed type.
+
+  **Apply to a derived backend:** a client that read parameters out of `details.contentType` reads them from the
+  request it sent.
 
 ## [1.1.21] - 2026-11-21
 
@@ -1314,4 +1361,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.19]: https://github.com/bymaxone/nest-storage/compare/v1.1.18...v1.1.19
 [1.1.20]: https://github.com/bymaxone/nest-storage/compare/v1.1.19...v1.1.20
 [1.1.21]: https://github.com/bymaxone/nest-storage/compare/v1.1.20...v1.1.21
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.21...HEAD
+[1.1.22]: https://github.com/bymaxone/nest-storage/compare/v1.1.21...v1.1.22
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.22...HEAD

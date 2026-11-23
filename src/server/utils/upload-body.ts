@@ -7,6 +7,7 @@ import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
 import { withExactSize, withSizeLimit } from './size-limit'
 import { pickUploadStrategy } from './upload-strategy'
+import { withFields } from './read-once'
 import { declaredSizeMismatch } from '../errors/size-limit-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
@@ -28,7 +29,8 @@ import {
  */
 export function withBytesBody(options: UploadOptions): UploadOptions {
   const body = toUploadBody(options.body)
-  return isBufferLike(body) ? { ...options, body, size: body.byteLength } : { ...options, body }
+  // A body that is not bytes is returned as it was given: `toUploadBody` hands back the same stream.
+  return isBufferLike(body) ? withFields(options, { body, size: body.byteLength }) : options
 }
 
 /**

@@ -7,8 +7,8 @@ import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
  * Brotli-compressed bundle budgets in bytes (never gzip). The server entry
  * carries the full NestJS module surface; the AWS SDK is a peer dependency and
  * stays external, so the shipped bundle is library code only. The shared entry
- * is types and constants. Measured at maximum brotli quality. A ceiling is the
- * measured size plus 30 B, and the number is stated where it is changed.
+ * is types and constants. Measured at maximum brotli quality. A ceiling is the measured size plus 30 B, and
+ * the number is stated where it is changed.
  */
 const BUDGETS = [
   { name: 'server (NestJS module + AWS SDK externals)', path: 'dist/server/index.mjs', brotli: 31_119 },

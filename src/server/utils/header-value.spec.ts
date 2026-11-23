@@ -3,7 +3,7 @@
  * error never repeats the offending value.
  * @layer server/utils
  */
-import type { StorageException } from '../errors/storage-exception'
+import { StorageException } from '../errors/storage-exception'
 import { assertHeaderValues, assertMetadata, copyMetadata, isHeaderValue } from './header-value'
 
 const VALUE_REASON = 'must be a string of tab, space and printable ASCII characters'
@@ -188,5 +188,83 @@ describe('copyMetadata', () => {
 
     expect(code).toBe('STORAGE_VALIDATION_FAILED')
     expect(details).toStrictEqual({ field: 'metadata', reason: KIND_REASON })
+  })
+
+  it('wraps an error thrown while a pair is read, with the error as the cause and none of its text in the response', () => {
+    const failure = new Error('SENTINEL pair getter ran')
+    const metadata: Record<string, string> = {}
+    Object.defineProperty(metadata, 'owner', {
+      enumerable: true,
+      get: () => {
+        throw failure
+      },
+    })
+    let thrown: unknown
+    try {
+      copyMetadata(metadata)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(StorageException)
+    expect((thrown as StorageException).cause).toBe(failure)
+    expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
+    expect((thrown as StorageException).getResponse()).toMatchObject({
+      error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'metadata' } },
+    })
+  })
+
+  it.each([
+    ['copyMetadata', (m: never) => copyMetadata(m)],
+    [
+      'assertMetadata',
+      (m: never) => {
+        assertMetadata(m)
+      },
+    ],
+  ])(
+    'wraps an error thrown while %s examines what the metadata is, with the error as the cause',
+    (_name, call) => {
+      // Reading the kind runs host code when the value has a Symbol.toStringTag getter or is a Proxy.
+      const failure = new Error('SENTINEL tag getter ran')
+      const metadata = {
+        get [Symbol.toStringTag](): string {
+          throw failure
+        },
+      }
+      let thrown: unknown
+      try {
+        call(metadata as never)
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(StorageException)
+      expect((thrown as StorageException).cause).toBe(failure)
+      expect(JSON.stringify((thrown as StorageException).getResponse())).not.toContain('SENTINEL')
+      expect((thrown as StorageException).getResponse()).toMatchObject({
+        error: { code: 'STORAGE_VALIDATION_FAILED', details: { field: 'metadata', reason: 'could not be read' } },
+      })
+    },
+  )
+
+  it('tells a Map from an object of pairs even when Object.prototype.toString was replaced after the module loaded', () => {
+    const original = Object.prototype.toString
+    Object.defineProperty(Object.prototype, 'toString', {
+      value: () => '[object Object]',
+      configurable: true,
+      writable: true,
+    })
+    try {
+      expect(() => {
+        assertMetadata(new Map([['a', 'b']]) as never)
+      }).toThrow(StorageException)
+    } finally {
+      Object.defineProperty(Object.prototype, 'toString', {
+        value: original,
+        configurable: true,
+        writable: true,
+      })
+    }
   })
 })

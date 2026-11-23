@@ -52,8 +52,48 @@ describe('snapshotOptions', () => {
       signedUrls: { maxTtlSeconds: 90 },
       multipart: { queueSize: 2 },
       validation: { maxSizeBytes: 5, mimeWhitelist: ['a/b'] },
-      scanner: { impl: scanner, mode: 'post-upload' },
+      scanner: { impl: { scan: expect.any(Function) as unknown }, mode: 'post-upload' },
     })
+  })
+
+  it('keeps a scanner implementation that is not an object, for validation to refuse', () => {
+    expect(snapshotOptions({ ...base, scanner: { impl: 'x' } })).toMatchObject({ scanner: { impl: 'x' } })
+  })
+
+  it('copies the scanner implementation once: scan is read once and bound, and a planted scan is not one', () => {
+    let reads = 0
+    const impl = {
+      get scan(): IFileScanner['scan'] {
+        reads += 1
+        return function (this: unknown) {
+          return Promise.resolve({ status: 'clean', engine: String(this === impl) })
+        }
+      },
+    }
+    const planted = Object.defineProperty(Object.prototype, 'scan', {
+      value: () => Promise.resolve({ status: 'clean' }),
+      configurable: true,
+      writable: true,
+    })
+    try {
+      const copied = snapshotOptions({ ...base, scanner: { impl } }) as {
+        scanner: { impl: IFileScanner }
+      }
+      const withoutOwn = snapshotOptions({ ...base, scanner: { impl: {} } }) as {
+        scanner: { impl: { scan?: unknown } }
+      }
+
+      expect(reads).toBe(1)
+      expect(Object.hasOwn(withoutOwn.scanner.impl, 'scan')).toBe(true)
+      expect(withoutOwn.scanner.impl.scan).toBeUndefined()
+      return copied.scanner.impl
+        .scan({ mode: 'pre-upload', key: 'k', bucket: 'b', contentType: 'text/plain' })
+        .then((result) => {
+          expect(result.engine).toBe('true')
+        })
+    } finally {
+      Reflect.deleteProperty(planted, 'scan')
+    }
   })
 
   it('keeps a value that is not an object where an object is expected, for validation to refuse', () => {
@@ -128,23 +168,64 @@ describe('snapshotOptions', () => {
       validation: object
     }
 
-    expect(snapshot.validation.customValidators).toEqual(validators)
+    expect(snapshot.validation.customValidators).toHaveLength(1)
     expect(snapshot.validation.customValidators).not.toBe(validators)
+    expect(snapshot.validation.customValidators[0]).not.toBe(validators[0])
+    expect(snapshot.validation.customValidators[0]).toMatchObject({ name: 'v' })
     expect(Object.keys(bare.validation)).toEqual(['maxSizeBytes'])
     expect(Object.keys(snapshotOptions(base) as object).sort()).toEqual(Object.keys(base).sort())
   })
 
-  it('lets the error of an array whose iterator throws propagate', () => {
-    const hostile = ['image/png']
-    Object.defineProperty(hostile, Symbol.iterator, {
-      value: () => {
-        throw new Error('iterator ran')
+  it('reads the name and validate of a custom validator once, and calls validate on the validator', async () => {
+    // A getter that answers a different function on a later read has no later read; `this` is still the validator.
+    let reads = 0
+    const validator = {
+      get name(): string {
+        return 'v'
       },
-    })
+      get validate(): (context: unknown) => Promise<{ ok: true; seen: unknown }> {
+        reads += 1
+        return reads === 1
+          ? function (this: unknown, context: unknown) {
+              return Promise.resolve({
+                ok: true as const,
+                seen: this === validator ? context : 'wrong this',
+              })
+            }
+          : () => Promise.resolve({ ok: true as const, seen: 'second read' })
+      },
+    }
 
-    expect(() => snapshotOptions({ ...base, validation: { mimeWhitelist: hostile } })).toThrow(
-      'iterator ran',
-    )
+    const copy = snapshotOptions({ ...base, validation: { customValidators: [validator] } }) as {
+      validation: {
+        customValidators: { validate: (context: unknown) => Promise<{ seen: unknown }> }[]
+      }
+    }
+
+    expect(await copy.validation.customValidators[0]?.validate('ctx')).toStrictEqual({
+      ok: true,
+      seen: 'ctx',
+    })
+    expect(reads).toBe(1)
+  })
+
+  it('keeps an entry that is not a validator as it is, for validation to refuse', () => {
+    const entries = ['text', { validate: 5 }, null]
+
+    const copy = snapshotOptions({ ...base, validation: { customValidators: entries } }) as {
+      validation: { customValidators: unknown[] }
+    }
+
+    expect(copy.validation.customValidators).toStrictEqual(entries)
+  })
+
+  it('copies a validator that has no name without adding one', () => {
+    const copy = snapshotOptions({
+      ...base,
+      validation: { customValidators: [{ validate: () => Promise.resolve({ ok: true }) }] },
+    }) as { validation: { customValidators: object[] } }
+
+    expect(Object.keys(copy.validation.customValidators[0] ?? {})).toStrictEqual(['validate'])
   })
 })
 
@@ -280,8 +361,9 @@ describe('forRoot reads each option once', () => {
     expect(entriesRead).toEqual(['0', '1'])
   })
 
-  it('copies the entries the array yields when it reports a longer length than it holds', () => {
-    // The first answer says 5; the entries run out after 2, so the copy ends there.
+  it('reads each index up to the length it reported, once, and leaves what the array does not hold as undefined', () => {
+    // The first answer says 5 but the array holds 2: an index it does not hold reads as undefined, which
+    // validation refuses as a value that is not a string.
     let lengthReads = 0
     const shrinking = new Proxy(['image/png', 'image/jpeg'], {
       get: (target, key): unknown => {
@@ -295,6 +377,13 @@ describe('forRoot reads each option once', () => {
       validation: { mimeWhitelist: unknown[] }
     }
 
-    expect(copy.validation.mimeWhitelist).toStrictEqual(['image/png', 'image/jpeg'])
+    expect(copy.validation.mimeWhitelist).toStrictEqual([
+      'image/png',
+      'image/jpeg',
+      undefined,
+      undefined,
+      undefined,
+    ])
+    expect(lengthReads).toBe(1)
   })
 })

@@ -6,20 +6,94 @@
  * @layer server/utils
  */
 
+import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { StorageException } from '../errors/storage-exception'
+
+// Taken when the module loads, so that replacing `Object.prototype.hasOwnProperty` (or any property of the root
+// prototype) later changes nothing here: finding where a field lives reads no property of the root.
+const hasOwn = Object.hasOwn
+const getPrototypeOf = Object.getPrototypeOf as (value: object) => object | null
+
 /**
- * Copies the named fields of `request` into a plain object, reading each field exactly once.
+ * Reads one field of a caller's object, leaving out a value that only the realm's root prototype supplies.
+ *
+ * A key planted on `Object.prototype` is found by an ordinary read of any plain object that lacks it, so a
+ * field the caller never set could arrive as the planter's value. A field the object owns, or one a class
+ * supplies on its own prototype (a getter, for instance), is still read; a field found only on the last
+ * prototype of the chain, which has no prototype of its own, is not. That is decided by the shape of the chain and
+ * not by comparing with this realm's `Object.prototype`, so it holds for an object of another realm and for a root
+ * whose `constructor` was overwritten. The trade-off: a field supplied only by a host's own `Object.create(null)`
+ * parent object is not read either, because it cannot be told from a planted root.
+ *
+ * @param source - The caller's object.
+ * @param key - The field to read.
+ * @returns The field's value, or `undefined` when it is not set or is supplied only by the root prototype.
+ */
+export function readField(source: object, key: string): unknown {
+  let holder: object | null = source
+  while (holder !== null && !hasOwn(holder, key)) {
+    holder = getPrototypeOf(holder)
+  }
+  if (holder === null) return undefined
+  if (holder !== source && getPrototypeOf(holder) === null) return undefined
+  return (source as Record<string, unknown>)[key]
+}
+
+/**
+ * {@link readField} for a value a host returned, which may be `undefined` or `null` (read as no field).
+ *
+ * @param source - What the host returned.
+ * @param key - The field to read.
+ * @returns The field's value, or `undefined`.
+ */
+export function readOptionalField(source: unknown, key: string): unknown {
+  return source === undefined || source === null ? undefined : readField(source, key)
+}
+
+/**
+ * Copies the named fields of `request` into a prototype-less object, reading each field exactly once.
  *
  * @param request - The caller's request, whatever its fields are.
  * @param keys - The fields to read.
- * @returns A plain object with the named fields; a field the request does not have is `undefined`.
+ * @param into - Where the fields are stored as they are read, so what was read before a field that throws is still
+ *   there for the caller to release; a fresh prototype-less object by default.
+ * @returns `into`: the named fields that are set; a field that is `undefined` is left out.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when reading a field throws; the error that was thrown is
+ *   the `cause` and none of its text is in the response.
  * @example
  *   const { contentType, metadata } = readOnce(request, ['contentType', 'metadata'])
  */
 export function readOnce<T extends object, K extends keyof T>(
   request: T,
   keys: readonly K[],
+  into: Partial<Pick<T, K>> = Object.create(null) as Partial<Pick<T, K>>,
 ): Pick<T, K> {
-  const copy = {} as Pick<T, K>
-  for (const key of keys) copy[key] = request[key]
+  const copy = into as Pick<T, K>
+  try {
+    for (const key of keys) {
+      const value = readField(request, key as string)
+      if (value !== undefined) copy[key] = value as T[K]
+    }
+  } catch (error) {
+    throw new StorageException(
+      STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED,
+      undefined,
+      { reason: 'the request could not be read' },
+      undefined,
+      error,
+    )
+  }
   return copy
+}
+
+/**
+ * A copy of `request` with `fields` set over it, still without a prototype: a spread into an object literal
+ * would give the copy `Object.prototype` again, and with it any key planted there.
+ *
+ * @param request - A request as {@link readOnce} returned it.
+ * @param fields - The fields to set over the copy.
+ * @returns A new object with no prototype holding the fields of `request` and then `fields`.
+ */
+export function withFields<T extends object>(request: T, fields: Partial<T>): T {
+  return Object.assign(Object.create(null) as T, request, fields)
 }

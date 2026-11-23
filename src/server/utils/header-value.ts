@@ -8,6 +8,11 @@
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
 
+// Taken when the module loads, so that replacing `Object.prototype.toString` later changes nothing here.
+const objectToString = Object.getOwnPropertyDescriptor(Object.prototype, 'toString')?.value as (
+  this: unknown,
+) => string
+
 /** RFC 9110 field-value characters this library accepts: tab, space and printable ASCII. */
 const HEADER_VALUE = /^[\t \x21-\x7E]*$/
 
@@ -87,9 +92,29 @@ export function assertMetadata(metadata: Readonly<Record<string, string>> | unde
  * @throws StorageException `STORAGE_VALIDATION_FAILED` with `details: { field: 'metadata', reason }`.
  */
 function assertMetadataKind(metadata: unknown): void {
-  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+  // The tag tells an object of pairs from a `Map`, a `Set`, an array or a string, in any realm; a `Map`
+  // has no own entries to read, so its pairs would be dropped without a word. Reading the tag runs host
+  // code when the value is a Proxy or has a `Symbol.toStringTag` getter.
+  let tag: string
+  try {
+    tag = Reflect.apply<unknown, [], string>(objectToString, metadata, [])
+  } catch (error) {
+    throw metadataUnreadable(error)
+  }
+  if (tag !== '[object Object]') {
     refuse('metadata', 'must be an object of header-safe strings')
   }
+}
+
+/** The refusal of metadata that throws when it is read: the library's code, the host's error as the cause. */
+function metadataUnreadable(cause: unknown): StorageException {
+  return new StorageException(
+    STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED,
+    undefined,
+    { field: 'metadata', reason: 'could not be read' },
+    undefined,
+    cause,
+  )
 }
 
 /**
@@ -98,9 +123,14 @@ function assertMetadataKind(metadata: unknown): void {
  *
  * @param metadata - The caller's metadata, which is not `undefined`.
  * @returns A plain copy of its own enumerable pairs.
- * @throws StorageException `STORAGE_VALIDATION_FAILED` when it is not an object of pairs.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when it is not an object of pairs, or when reading a
+ *   pair throws; the error that was thrown is the `cause`.
  */
 export function copyMetadata(metadata: Readonly<Record<string, string>>): Record<string, string> {
   assertMetadataKind(metadata)
-  return { ...metadata }
+  try {
+    return { ...metadata }
+  } catch (error) {
+    throw metadataUnreadable(error)
+  }
 }

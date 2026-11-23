@@ -16,6 +16,7 @@ import { cutText } from '../utils/cut-text'
 import { emit } from '../utils/log-event'
 import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 import { failureError } from '../utils/provider-failure-log'
+import { readOptionalField } from '../utils/read-once'
 import { StorageObserver } from '../observability/storage-observer'
 
 /** What the log line holds when the details cannot be turned into text. */
@@ -156,10 +157,11 @@ export class FileScannerService {
     caller: Record<string, unknown>,
   ): Promise<FileScanResult> {
     const result = await this.scanLogged(scanner, input, caller)
-    const status = result?.status
-    const engine = scannerLabel(result?.engine)
-    const threat = scannerLabel(result?.threat)
-    const details = scannerDetailsForLog(result?.details)
+    // Each field of what the scanner answered is its own: a key only the root prototype supplies is not a field.
+    const status = readOptionalField(result, 'status')
+    const engine = scannerLabel(readOptionalField(result, 'engine'))
+    const threat = scannerLabel(readOptionalField(result, 'threat'))
+    const details = scannerDetailsForLog(readOptionalField(result, 'details') as Record<string, unknown> | undefined)
 
     if (status === 'clean') {
       return result as FileScanResult
