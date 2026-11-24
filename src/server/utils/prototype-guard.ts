@@ -68,6 +68,11 @@ const getDescriptor = Object.getOwnPropertyDescriptor.bind(Object)
 const getPrototype = Object.getPrototypeOf.bind(Object) as (target: unknown) => object
 const hasOwn = Object.hasOwn.bind(Object)
 const same = Object.is.bind(Object) as (left: unknown, right: unknown) => boolean
+const defineOwn = Object.defineProperty.bind(Object) as (
+  target: object,
+  key: PropertyKey,
+  descriptor: PropertyDescriptor,
+) => unknown
 const create = Object.create.bind(Object) as (prototype: null) => Record<string, unknown>
 const symbolFor = reflectGet(Symbol, 'for') as (key: string) => symbol
 const exemptSymbol = symbolFor('$$jest-protect-from-deletion')
@@ -111,6 +116,22 @@ export function markHandled(work: PromiseLike<unknown>): void {
   } catch {
     // Not a native promise: its own `then` is the host's, and it is not called here.
   }
+}
+
+/**
+ * Marks a promise this library built as handled, after giving it an own constructor, so the species lookup
+ * of `then` does not read the one on the prototype, which a host may have made throw: that would leave this
+ * very rejection unhandled.
+ *
+ * @param own - A native promise built by this library.
+ */
+export function markOwnHandled(own: Promise<unknown>): void {
+  try {
+    defineOwn(own, 'constructor', { value: INTRINSIC_PROMISE, configurable: true, writable: true })
+  } catch {
+    // Frozen: the lookup below decides.
+  }
+  markHandled(own)
 }
 
 /**
@@ -163,6 +184,56 @@ export function rejectedWith<T>(reason: unknown): Promise<T> {
     const settle: (reason: unknown) => void = reject
     settle(reason)
   })
+}
+
+/**
+ * Hands the outcome of `work` to two callbacks without a live `then` lookup. A native promise, a subclass
+ * included, is followed with the `then` captured at load, so a `Promise.prototype.then` replaced after load
+ * never answers for it, which `await` would let it do for any promise whose constructor is not the engine's.
+ * A native promise that cannot be followed that way is refused, and a thenable that is not a promise is
+ * followed through its own `then`, which is the host's; any other value is the answer itself.
+ *
+ * @param work - The promise or thenable to follow.
+ * @param onValue - Receives what it fulfilled with.
+ * @param onError - Receives what it rejected with, or the refusal.
+ */
+export function follow<T>(
+  work: PromiseLike<T>,
+  onValue: (value: T) => void,
+  onError: (reason: unknown) => void,
+): void {
+  try {
+    apply(intrinsicThen as () => unknown, work, [onValue, onError])
+    return
+  } catch {
+    // Either not a native promise, or one whose species threw: told apart below.
+  }
+  if (work instanceof INTRINSIC_PROMISE) {
+    onError(refusal(0, 1))
+    return
+  }
+  const candidate: unknown = work
+  const kind = typeof candidate
+  let then: unknown
+  try {
+    then =
+      candidate !== null && (kind === 'object' || kind === 'function')
+        ? reflectGet(candidate as object, 'then')
+        : undefined
+  } catch (error) {
+    onError(error)
+    return
+  }
+  if (typeof then !== 'function') {
+    // Not a thenable: the value is the answer, as a resolution would take it.
+    onValue(work as T)
+    return
+  }
+  try {
+    apply(then as () => unknown, work, [onValue, onError])
+  } catch (error) {
+    onError(error)
+  }
 }
 
 /** The refusals this module raised, so a caller can tell one from an ordinary validation error. */

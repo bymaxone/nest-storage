@@ -8,7 +8,14 @@
  * host replaced can run between the check and the await.
  * @layer server/utils
  */
-import { assertCleanRoot, boxed, INTRINSIC_PROMISE, markHandled } from './prototype-guard'
+import {
+  assertCleanRoot,
+  boxed,
+  follow,
+  INTRINSIC_PROMISE,
+  markHandled,
+  markOwnHandled,
+} from './prototype-guard'
 
 /** The engine's `Promise` constructor, captured at load, so a replaced global is not read. */
 const NativePromise: PromiseConstructor = INTRINSIC_PROMISE
@@ -38,15 +45,20 @@ interface Box<V> {
   readonly value: V
 }
 
-/** Hands the work's outcome to the wait, a rejection included, and never rejects itself. */
-async function relay<T>(work: PromiseLike<T>, cut: Cut<T>): Promise<void> {
-  try {
-    // No check here: `settleOrCut` checks synchronously right after this call returns, before anything
-    // this await schedules can run, and that check is the one the wait's own await follows.
-    cut.resolve(await work)
-  } catch (error) {
-    cut.reject(error)
-  }
+/**
+ * The outcome of `work` as a native promise of a box, followed without a live `then` and without resolving
+ * with the answer itself, so a `then` on its prototype chain is never looked up either.
+ */
+function settled<T>(work: PromiseLike<T>): Promise<Box<T>> {
+  return new NativePromise<Box<T>>((resolve, reject) => {
+    follow(
+      work,
+      (value) => {
+        resolve(boxed(value))
+      },
+      reject,
+    )
+  })
 }
 
 /** Nothing was armed. */
@@ -67,15 +79,19 @@ function disarmed(): void {
 export async function verdictOf<T>(work: PromiseLike<T>): Promise<T> {
   markHandled(work)
   assertCleanRoot()
-  let answer: T
+  const wait = settled(work)
+  markOwnHandled(wait)
+  let answer: Box<T>
+  // The statement before the await, so nothing replaceable runs between the check and the await.
+  assertCleanRoot()
   try {
-    answer = await work
+    answer = await wait
   } catch (error) {
     assertCleanRoot()
     throw error
   }
   assertCleanRoot()
-  return answer
+  return answer.value
 }
 
 /**
@@ -101,6 +117,12 @@ export async function settleOrCut<T, U = never>(
 ): Promise<T | U> {
   markHandled(work)
   let release = disarmed
+  const letGo = (): void => {
+    const done = release
+    release = disarmed
+    done()
+  }
+  let answer: Box<T | U>
   try {
     const wait = new NativePromise<Box<T | U>>((resolve, reject) => {
       const cut = {
@@ -110,21 +132,28 @@ export async function settleOrCut<T, U = never>(
         reject,
       }
       release = arm(cut)
-      void relay(work, cut)
+      follow(
+        work,
+        (value) => {
+          cut.resolve(value)
+        },
+        (error) => {
+          cut.reject(error)
+        },
+      )
     })
-    markHandled(wait)
-    let answer: Box<T | U>
+    markOwnHandled(wait)
     // The statement before the await, so nothing replaceable runs between the check and the await.
     assertCleanRoot()
-    try {
-      answer = await wait
-    } catch (error) {
-      assertCleanRoot()
-      throw error
-    }
+    answer = await wait
+  } catch (error) {
+    letGo()
     assertCleanRoot()
-    return answer.value
-  } finally {
-    release()
+    throw error
   }
+  // The release runs replaceable built-ins, so the check is the last statement before the return, where
+  // the engine reads `then` of the value it resolves with.
+  letGo()
+  assertCleanRoot()
+  return answer.value
 }

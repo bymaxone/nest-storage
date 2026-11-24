@@ -145,6 +145,76 @@ describe('settleOrCut', () => {
     expect(outcome).toMatchObject({ error: { code: 'STORAGE_VALIDATION_FAILED' } })
   })
 
+  it('refuses an object answer when the release plants a then that answers for the return', async () => {
+    /* The release runs after the wait; a self-erasing then planted there must not answer for the return. */
+    const root = Object.prototype as unknown as Record<string, unknown>
+    const release = (): void => {
+      Object.defineProperty(root, 'then', {
+        configurable: true,
+        get() {
+          Reflect.deleteProperty(root, 'then')
+          return (resolve: (value: unknown) => void) => {
+            resolve({ forged: true })
+          }
+        },
+      })
+    }
+    let outcome: object | undefined
+    try {
+      outcome = await new Promise<object>((settle) => {
+        void nativeThen.call(
+          settleOrCut(
+            nothing().then(() => ({ clean: true })),
+            () => release,
+          ),
+          (value: unknown) => {
+            settle(Object.assign(Object.create(null) as object, { kind: 'answer', value }))
+          },
+          (error: unknown) => {
+            settle(Object.assign(Object.create(null) as object, { kind: 'refusal', error }))
+          },
+        )
+      })
+    } finally {
+      Reflect.deleteProperty(root, 'then')
+    }
+    expect((outcome as { kind: string }).kind).toBe('refusal')
+  })
+
+  it('leaves no unhandled rejection when the constructor on the prototype throws at entry', async () => {
+    /* markHandled must not read the slot it guards: the library's own rejection is absorbed all the same. */
+    let unhandled = 0
+    const seen = (): void => {
+      unhandled += 1
+    }
+    process.on('unhandledRejection', seen)
+    const original = ownDescriptor('constructor')
+    let finish: () => void = () => undefined
+    const ended = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    void Object.defineProperty(ended, 'constructor', { value: Promise })
+    const failing = nothing().then(() => 'late')
+    Object.defineProperty(proto, 'constructor', {
+      configurable: true,
+      get(): never {
+        throw new Error('hostile')
+      },
+    })
+    let call: Promise<unknown>
+    try {
+      call = settleOrCut(failing, () => () => undefined)
+      void Object.defineProperty(call, 'constructor', { value: Promise })
+    } finally {
+      Object.defineProperty(proto, 'constructor', original)
+    }
+    void nativeThen.call(call, finish, finish)
+    await ended
+    await new Promise<void>((done) => setTimeout(done, 20))
+    process.off('unhandledRejection', seen)
+    expect(unhandled).toBe(0)
+  })
+
   it('refuses an outcome when the runtime changed while the work ran', async () => {
     /* A key planted on the root prototype after the work started refuses the answer. */
     const root = Object.prototype as unknown as Record<string, unknown>
@@ -216,6 +286,114 @@ describe.each(entryPoints)('%s and a runtime that changes around the await', (_n
       Object.defineProperty(proto, 'then', thenOriginal)
     }
     expect(outcome).toMatchObject({ error: refusal })
+  })
+
+  /** Outcome of a call read without the live `then`, which the rows below replace. */
+  function readOutcome(pending: Promise<unknown>): Promise<object> {
+    const settled = (kind: string, content: unknown): object =>
+      Object.assign(Object.create(null) as object, { kind, content })
+    return new Promise<object>((resolve) => {
+      void nativeThen.call(
+        pending,
+        (value) => {
+          resolve(settled('answer', value))
+        },
+        (error: unknown) => {
+          resolve(settled('refusal', error))
+        },
+      )
+    })
+  }
+
+  /** Replaces `Promise.prototype.then` with one that answers `forged` for every promise it is called on. */
+  function replaceThen(): () => void {
+    const thenOriginal = ownDescriptor('then')
+    const forger = function (
+      this: Promise<unknown>,
+      onFulfilled?: (value: unknown) => unknown,
+    ): Promise<unknown> {
+      return nativeThen.call(this, () => onFulfilled?.('forged'))
+    }
+    Object.defineProperty(proto, 'then', { ...thenOriginal, value: forger })
+    return () => {
+      Object.defineProperty(proto, 'then', thenOriginal)
+    }
+  }
+
+  it('settles a Promise subclass without calling the live then, so a replaced then cannot answer for it', async () => {
+    /* `await` of a subclass looks `then` up on it; the answer here must be the work's own. */
+    class Sub<T> extends Promise<T> {}
+    const work = new Sub<string>((resolve) => {
+      resolve('real')
+    })
+    const restore = replaceThen()
+    let outcome: object
+    try {
+      outcome = await readOutcome(enter(work))
+    } finally {
+      restore()
+    }
+    expect(outcome).toMatchObject({ kind: 'answer', content: 'real' })
+  })
+
+  it('refuses a Promise subclass whose species cannot be built, instead of reading its then', async () => {
+    /* A species that throws leaves no way to follow the work without a live `then`: the call is refused. */
+    class Hostile<T> extends Promise<T> {
+      static override get [Symbol.species](): PromiseConstructor {
+        throw new Error('no species')
+      }
+    }
+    const work = new Hostile<string>((resolve) => {
+      resolve('real')
+    })
+    const restore = replaceThen()
+    let outcome: object
+    try {
+      outcome = await readOutcome(enter(work))
+    } finally {
+      restore()
+    }
+    expect(outcome).toMatchObject({ kind: 'refusal', content: refusal })
+  })
+
+  it('follows a plain thenable through its own then', async () => {
+    /* A thenable that is not a promise is the host's own: its `then` is what delivers the answer. */
+    const work = {
+      then(onFulfilled: (value: string) => void) {
+        onFulfilled('real')
+      },
+    } as unknown as Promise<string>
+    expect(await readOutcome(enter(work))).toMatchObject({ kind: 'answer', content: 'real' })
+  })
+
+  it('rejects with the reason of a thenable whose then throws', async () => {
+    /* A throwing `then` is the work failing, and the failure is the caller's. */
+    const failure = new Error('then threw')
+    const work = {
+      then() {
+        throw failure
+      },
+    } as unknown as Promise<string>
+    expect(await readOutcome(enter(work))).toMatchObject({ kind: 'refusal', content: failure })
+  })
+
+  it('rejects with the reason of a thenable whose then cannot be read', async () => {
+    /* A getter that throws is the work failing, and the failure is the caller's. */
+    const failure = new Error('then unreadable')
+    const work = {
+      get then(): never {
+        throw failure
+      },
+    } as unknown as Promise<string>
+    expect(await readOutcome(enter(work))).toMatchObject({ kind: 'refusal', content: failure })
+  })
+
+  it('answers with a value that is not a thenable, as a resolution would', async () => {
+    /* A validator may answer a plain value or nothing at all; it is the answer itself. */
+    expect(await readOutcome(enter(undefined as unknown as Promise<string>))).toMatchObject({
+      kind: 'answer',
+      content: undefined,
+    })
   })
 
   it('refuses an answer when the runtime changed while the work ran', async () => {
