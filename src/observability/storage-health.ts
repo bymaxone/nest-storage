@@ -74,8 +74,8 @@ function pinnedWork<P extends Promise<unknown>>(work: P): P {
 
 /**
  * Follows `work` by awaiting it once it is pinned, and settles the chain with what a callback answers. The chain
- * is a promise built here, never one derived from `work`. A `work` that cannot be followed (a frozen promise) is
- * answered by `onError`, so a probe that is not understood is `down`. The callbacks do not throw.
+ * is a promise built here, never one derived from `work`. A `work` that cannot be followed (a frozen promise), or
+ * a callback that throws, is answered by `onError`, so a probe that is not understood is `down`.
  */
 function chain<T, R>(
   work: Promise<T>,
@@ -101,14 +101,11 @@ async function follow<T, R>(
   onError: (error: unknown) => R,
   resolve: (value: R) => void,
 ): Promise<void> {
-  let value: T
   try {
-    value = await pinnedWork(work)
+    resolve(onValue(await pinnedWork(work)))
   } catch (error) {
     resolve(onError(error))
-    return
   }
-  resolve(onValue(value))
 }
 
 /** The answer with no prototype, so no `then` anywhere is looked up when it is resolved with. */

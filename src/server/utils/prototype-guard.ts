@@ -477,21 +477,24 @@ function carriesThen(carrier: object): number {
  *
  * @param value - What the async function is about to return.
  * @returns `value`, unchanged.
- * @throws StorageException `STORAGE_VALIDATION_FAILED` when the value or a prototype above it carries a `then`.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when the value or a prototype above it carries a `then`,
+ *   when the chain is too deep to be read, or when a root prototype gained a `then` while it was read.
  * @example
  *   return settles(Buffer.concat(chunks))
  */
 export function settles<V>(value: V): V {
   let node: unknown = value
   let depth = 0
-  while (
-    depth < CHAIN_LIMIT &&
-    node !== null &&
-    (typeof node === 'object' || typeof node === 'function')
-  ) {
-    if (hasOwn(node, 'then')) throw refusal(1, 0)
+  while (node !== null && (typeof node === 'object' || typeof node === 'function')) {
+    // A chain that is still going at the limit is not read to its end: it is refused, never passed.
+    if (depth === CHAIN_LIMIT || hasOwn(node, 'then')) throw refusal(1, 0)
     node = getPrototype(node)
     depth += 1
+  }
+  // The walk can run a host's trap that plants a `then` on a root and erases it when read, so the roots are
+  // read again as the last statement before the handoff.
+  if (carriesThen(root) + carriesThen(arrayPrototype) + carriesThen(functionPrototype) > 0) {
+    throw refusal(1, 0)
   }
   return value
 }

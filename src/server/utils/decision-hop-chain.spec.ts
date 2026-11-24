@@ -102,7 +102,7 @@ describe('a returned value that carries a `then`', () => {
     expect(settles(7)).toBe(7)
   })
 
-  it('stops walking a prototype chain that never ends, instead of reading it forever', () => {
+  it('refuses a chain that never ends, and a `then` deeper than the walk reads', () => {
     const endless: object = new Proxy(
       {},
       {
@@ -110,8 +110,44 @@ describe('a returned value that carries a `then`', () => {
         getOwnPropertyDescriptor: () => undefined,
       },
     )
+    let deep: object = { then: () => undefined }
+    for (let level = 0; level < 70; level += 1) deep = Object.create(deep) as object
 
-    expect(settles(endless)).toBe(endless)
+    expect(() => settles(endless)).toThrow()
+    expect(() => settles(deep)).toThrow()
+  })
+
+  it('refuses a value whose prototype read plants a `then` on the root', () => {
+    const value = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor() {
+          Object.defineProperty(Object.prototype, 'then', {
+            configurable: true,
+            get() {
+              Reflect.deleteProperty(Object.prototype, 'then')
+              return (resolve: (answer: unknown) => void) => {
+                resolve('forged')
+              }
+            },
+          })
+          return undefined
+        },
+        getPrototypeOf: () => null,
+      },
+    )
+
+    let refused: unknown
+    try {
+      settles(value)
+    } catch (error) {
+      refused = error
+    }
+    const left = Reflect.has(Object.prototype, 'then')
+    Reflect.deleteProperty(Object.prototype, 'then')
+
+    expect(left).toBe(true)
+    expect(isRootRefusal(refused)).toBe(true)
   })
 })
 
@@ -286,6 +322,30 @@ describe('the readiness of a bucket that is down', () => {
       await new Promise((resolve) => setImmediate(resolve))
       await new Promise((resolve) => setImmediate(resolve))
     } finally {
+      process.off('unhandledRejection', listener)
+    }
+
+    expect(unhandled).toEqual([])
+  })
+
+  it('answers `down` when the clock throws while the answer is kept, with nothing left unhandled', async () => {
+    const unhandled: unknown[] = []
+    const listener = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', listener)
+    const now = jest.spyOn(Date, 'now').mockImplementation(() => {
+      throw new Error('clock')
+    })
+    const storage = { checkBucket: () => Promise.resolve() }
+
+    try {
+      await expect(new StorageHealthIndicator(storage as never).check()).resolves.toEqual({
+        status: 'down',
+      })
+      await new Promise((resolve) => setImmediate(resolve))
+    } finally {
+      now.mockRestore()
       process.off('unhandledRejection', listener)
     }
 
