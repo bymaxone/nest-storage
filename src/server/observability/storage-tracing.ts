@@ -6,6 +6,7 @@ import { Injectable } from '@nestjs/common'
 import type { OnModuleInit } from '@nestjs/common'
 import { StorageException } from '../errors/storage-exception'
 import { absorb } from '../utils/absorb'
+import { tagged } from '../utils/prototype-guard'
 import { outcomeOf, type StorageOutcome } from './storage-operations'
 
 /** The span names the library starts. */
@@ -112,6 +113,16 @@ export class StorageTracing implements OnModuleInit {
     attributes: StorageSpanAttributes,
     run: () => Promise<T>,
     describe: ResultAttributes<T> = () => ({}),
+  ): Promise<T> {
+    return tagged(this.started(name, attributes, run, describe))
+  }
+
+  /** What {@link span} answers with, once the tracer has had its turn. */
+  private started<T>(
+    name: StorageSpanName,
+    attributes: StorageSpanAttributes,
+    run: () => Promise<T>,
+    describe: ResultAttributes<T>,
   ): Promise<T> {
     const api = this.#api
     if (!api) return run()

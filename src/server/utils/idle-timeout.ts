@@ -8,6 +8,7 @@ import { Readable } from 'node:stream'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
 import { describeError } from './describe-error'
+import { assertCleanRoot, follow } from './prototype-guard'
 import { destroyStream, isBufferLike, type UploadBody } from './stream-utils'
 
 /** Thrown into the uploader when its source delivered nothing for the allowed time. */
@@ -35,23 +36,39 @@ function isError(value: unknown): value is Error {
   }
 }
 
-/** Waits for `next`, rejecting with {@link SourceIdleError} if it does not settle in `idleMs`. */
-function withinIdleTime<T>(next: Promise<T>, idleMs: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new SourceIdleError(idleMs))
-    }, idleMs)
-    next.then(
-      (value) => {
-        clearTimeout(timer)
-        resolve(value)
-      },
-      (error: unknown) => {
-        clearTimeout(timer)
-        reject(isError(error) ? error : new Error(describeError(error)))
-      },
-    )
-  })
+/**
+ * Waits for `next` and hands its outcome to a callback, or hands {@link SourceIdleError} to the error callback
+ * if it does not settle in `idleMs`. The outcome is followed with the `then` captured at load and travels
+ * through callbacks, never through a promise this module resolves with the step, so a `then` a host replaced
+ * after load cannot rewrite the bytes of a step that was validated. Nothing here decides what the library
+ * reports about a payload: the step is the source's own and is passed on unchanged.
+ */
+function readWithinIdleTime<T>(
+  next: PromiseLike<T>,
+  idleMs: number,
+  onValue: (value: T) => void,
+  onError: (error: unknown) => void,
+): void {
+  let over = false
+  const timer = setTimeout(() => {
+    over = true
+    onError(new SourceIdleError(idleMs))
+  }, idleMs)
+  follow(
+    next,
+    (value) => {
+      if (over) return
+      over = true
+      clearTimeout(timer)
+      onValue(value)
+    },
+    (error: unknown) => {
+      if (over) return
+      over = true
+      clearTimeout(timer)
+      onError(isError(error) ? error : new Error(describeError(error)))
+    },
+  )
 }
 
 /**
@@ -81,13 +98,22 @@ export function withIdleTimeout(
     highWaterMark: 0,
     read() {
       // A Readable calls read() again only after the pending one has pushed, so reads never overlap.
-      withinIdleTime(iterator.next(), idleMs).then(
+      const fail = (error: unknown): void => {
+        wrapper.destroy(toError ? toError(error as Error) : (error as Error))
+      }
+      readWithinIdleTime(
+        iterator.next(),
+        idleMs,
         (step) => {
-          wrapper.push(step.done === true ? null : step.value)
+          try {
+            // The runtime is checked right before the bytes are handed on, so a replaced built-in is refused here.
+            assertCleanRoot()
+            wrapper.push(step.done === true ? null : step.value)
+          } catch (error) {
+            fail(error)
+          }
         },
-        (error: unknown) => {
-          wrapper.destroy(toError ? toError(error as Error) : (error as Error))
-        },
+        fail,
       )
     },
     destroy(error, callback) {

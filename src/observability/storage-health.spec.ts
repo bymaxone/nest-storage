@@ -208,4 +208,45 @@ describe('StorageHealthIndicator', () => {
     expect(getEventListeners(gone.signal, 'abort')).toHaveLength(0)
     finish()
   })
+  it('stays down when Promise.prototype.then is replaced after load to answer a refusal as success', async () => {
+    // The verdict is chained with the `then` captured at load, so a host that replaced it afterwards, to run the
+    // success handler when the bucket refused, does not make the bucket `up`. The replacement acts only on the
+    // bucket's own promise, so the test runner's use of `then` is left alone.
+    let refused: Promise<never> | undefined
+    const checkBucket = jest.fn(() => {
+      refused = Promise.reject(new Error('refused'))
+      return refused
+    })
+    const original = Promise.prototype.then
+    Promise.prototype.then = function replaced(
+      this: Promise<unknown>,
+      onFulfilled?: (value: unknown) => unknown,
+      onRejected?: (reason: unknown) => unknown,
+    ) {
+      const flip = this === refused && onRejected !== undefined
+      return original.call(this, onFulfilled, flip ? () => onFulfilled?.(undefined) : onRejected)
+    } as typeof Promise.prototype.then
+    let result: unknown
+    try {
+      result = await indicatorOver(checkBucket).check(new AbortController().signal)
+    } finally {
+      Promise.prototype.then = original
+    }
+
+    expect(result).toEqual({ status: 'down' })
+  })
+
+  it('stays down for an aborted caller when Promise.resolve is replaced after load to answer up', async () => {
+    const checkBucket = jest.fn().mockResolvedValue(undefined)
+    const original = Promise.resolve
+    Promise.resolve = (() => original.call(Promise, 'up')) as typeof Promise.resolve
+    let result: unknown
+    try {
+      result = await indicatorOver(checkBucket).check(AbortSignal.abort())
+    } finally {
+      Promise.resolve = original
+    }
+
+    expect(result).toEqual({ status: 'down' })
+  })
 })

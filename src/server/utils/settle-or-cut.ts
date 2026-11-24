@@ -15,6 +15,7 @@ import {
   INTRINSIC_PROMISE,
   markHandled,
   markOwnHandled,
+  tagged,
 } from './prototype-guard'
 
 /** The engine's `Promise` constructor, captured at load, so a replaced global is not read. */
@@ -76,7 +77,12 @@ function disarmed(): void {
  * @example
  *   const result = await verdictOf(scanner.scan(input))
  */
-export async function verdictOf<T>(work: PromiseLike<T>): Promise<T> {
+export function verdictOf<T>(work: PromiseLike<T>): Promise<T> {
+  // Tagged once the synchronous start, which can run a host's `then`, is over: the caller's await reads it next.
+  return tagged(waitForVerdict(work))
+}
+
+async function waitForVerdict<T>(work: PromiseLike<T>): Promise<T> {
   markHandled(work)
   assertCleanRoot()
   const wait = settled(work)
@@ -111,7 +117,14 @@ export async function verdictOf<T>(work: PromiseLike<T>): Promise<T> {
  *     return () => clearTimeout(timer)
  *   })
  */
-export async function settleOrCut<T, U = never>(
+export function settleOrCut<T, U = never>(
+  work: PromiseLike<T>,
+  arm: (cut: Cut<T | U>) => () => void,
+): Promise<T | U> {
+  return tagged(waitOrCut(work, arm))
+}
+
+async function waitOrCut<T, U>(
   work: PromiseLike<T>,
   arm: (cut: Cut<T | U>) => () => void,
 ): Promise<T | U> {

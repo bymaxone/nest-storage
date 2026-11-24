@@ -119,6 +119,24 @@ export function markHandled(work: PromiseLike<unknown>): void {
 }
 
 /**
+ * Gives a promise this library built an own `constructor` equal to the engine's, set with the `defineProperty`
+ * captured at load. A caller's `await` reads `constructor` of what it awaits, and when that is not the engine's
+ * `Promise` it queues a job that calls the live `then`; a host hook that ran before the promise was handed back
+ * could have replaced the one on the prototype, so a promise on a decision path carries its own.
+ *
+ * @param own - A native promise built by this library.
+ * @returns The same promise.
+ */
+export function tagged<P extends Promise<unknown>>(own: P): P {
+  try {
+    defineOwn(own, 'constructor', { value: INTRINSIC_PROMISE, configurable: true, writable: true })
+  } catch {
+    // Frozen: the caller's await decides.
+  }
+  return own
+}
+
+/**
  * Marks a promise this library built as handled, after giving it an own constructor, so the species lookup
  * of `then` does not read the one on the prototype, which a host may have made throw: that would leave this
  * very rejection unhandled.
@@ -126,12 +144,7 @@ export function markHandled(work: PromiseLike<unknown>): void {
  * @param own - A native promise built by this library.
  */
 export function markOwnHandled(own: Promise<unknown>): void {
-  try {
-    defineOwn(own, 'constructor', { value: INTRINSIC_PROMISE, configurable: true, writable: true })
-  } catch {
-    // Frozen: the lookup below decides.
-  }
-  markHandled(own)
+  markHandled(tagged(own))
 }
 
 /**

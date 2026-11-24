@@ -10,6 +10,24 @@
 import { Inject, Injectable, SetMetadata } from '@nestjs/common'
 import { StorageService } from '@bymax-one/nest-storage'
 
+/**
+ * What the readiness verdict is built from, taken when this module loads: a `Promise.prototype.then` or a
+ * `Promise.resolve` a host replaced afterwards cannot turn a `down` into an `up`, because neither is read at a
+ * check. The module imports nothing of the server entry's internals, so it holds its own copies.
+ */
+const NativePromise = Promise
+const nativeThen = Reflect.get(Promise.prototype, 'then') as () => unknown
+const applyCaptured = Reflect.apply
+
+/** Chains on `work` with the `then` captured at load. */
+function chain<T, R>(
+  work: Promise<T>,
+  onValue: (value: T) => R,
+  onError?: (error: unknown) => R,
+): Promise<R> {
+  return applyCaptured(nativeThen, work, [onValue, onError]) as Promise<R>
+}
+
 /** The outcome of one readiness check. */
 interface HealthIndicatorResult {
   status: 'up' | 'down'
@@ -65,17 +83,16 @@ export class StorageHealthIndicator implements HealthIndicator {
 
   /** The shared probe: one `HeadBucket` under its own deadline, remembered when it ends. */
   private probe(): Promise<'up' | 'down'> {
-    const running = this.storage
-      .checkBucket({ abortSignal: AbortSignal.timeout(STORAGE_HEALTH_TIMEOUT_MS) })
-      .then(
-        () => 'up' as const,
-        () => 'down' as const,
-      )
-      .then((status) => {
-        this.#answer = { at: Date.now(), status }
-        this.#running = undefined
-        return status
-      })
+    const checked = chain(
+      this.storage.checkBucket({ abortSignal: AbortSignal.timeout(STORAGE_HEALTH_TIMEOUT_MS) }),
+      () => 'up' as const,
+      () => 'down' as const,
+    )
+    const running = chain(checked, (status) => {
+      this.#answer = { at: Date.now(), status }
+      this.#running = undefined
+      return status
+    })
     this.#running = running
     return running
   }
@@ -86,14 +103,18 @@ export class StorageHealthIndicator implements HealthIndicator {
     signal: AbortSignal | undefined,
   ): Promise<'up' | 'down'> {
     if (signal === undefined) return probe
-    if (signal.aborted) return Promise.resolve('down')
-    return new Promise((resolve) => {
+    if (signal.aborted) {
+      return new NativePromise((resolve) => {
+        resolve('down')
+      })
+    }
+    return new NativePromise((resolve) => {
       const stop = (): void => {
         signal.removeEventListener('abort', stop)
         resolve('down')
       }
       signal.addEventListener('abort', stop)
-      void probe.then((status) => {
+      void chain(probe, (status) => {
         signal.removeEventListener('abort', stop)
         resolve(status)
       })

@@ -98,7 +98,7 @@ function callsFound(): Set<string> {
  * receiver the sources actually use.
  */
 const OUTSIDE_METHODS: Record<string, string> = {
-  then: 'the hook absorber, which drops a failure, and the idle wrapper, which hands the source its own chunks on; every verdict, id and size is read by `await`',
+  then: 'the hook absorber, which drops a failure; every verdict, id and size is read by `await` or through the `then` captured at load',
   toString:
     'called on numbers (`Number.prototype`, in the baseline), never an Error, Date or URLSearchParams',
   get: "called on Map, WeakMap, Reflect and the library's own cache (the first three in the baseline), never a URLSearchParams",
@@ -162,6 +162,28 @@ describe('library built-in calls', () => {
     expect(stale).toEqual([])
   })
 
+  it('builds no promise with the live Promise constructor outside the guard', () => {
+    // `new Promise(` reads the global at each call, so a host that replaced it after load would build the promise
+    // that carries a verdict, a chunk or a readiness answer. A site is exempt only with the reason it decides
+    // nothing the library reports; every other site builds from the constructor captured at load.
+    const EXEMPT_SITES: Record<string, string> = {}
+    const folders = [root, join(root, '..', 'observability')]
+    const found = folders.flatMap((folder) =>
+      sources(folder)
+        .filter((path) => !path.endsWith('prototype-guard.ts'))
+        .flatMap((path) => {
+          const source = readFileSync(path, 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '')
+          const hits = [...source.matchAll(/\bnew Promise\b/g)].length
+          return hits > 0 ? [path.slice(join(root, '..').length + 1)] : []
+        }),
+    )
+
+    expect(found.filter((file) => !(file in EXEMPT_SITES))).toEqual([])
+    expect(Object.keys(EXEMPT_SITES).filter((file) => !found.includes(file))).toEqual([])
+  })
+
   it('reads no verdict, id or size through a static of Promise or through `then`', () => {
     // `await` on a native promise does not look `then` up, and a static such as `Promise.race` is read
     // off the global at each call, so a replaced one could answer a scan or a validation as it likes.
@@ -170,6 +192,7 @@ describe('library built-in calls', () => {
       'services/validation.service.ts',
       'services/storage.service.ts',
       'utils/abort-support.ts',
+      'utils/idle-timeout.ts',
       'utils/multipart-abort.ts',
       'utils/multipart-failure.ts',
     ]

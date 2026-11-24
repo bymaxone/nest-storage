@@ -8,7 +8,7 @@ import { CreateMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { assertAbortSignal } from './call-input'
-import { markHandled } from './prototype-guard'
+import { markHandled, tagged } from './prototype-guard'
 import { nothing, settleOrCut, verdictOf } from './settle-or-cut'
 
 /**
@@ -177,7 +177,15 @@ export async function within<T>(promise: Promise<T>, ms: number): Promise<T | un
  * @returns `work`'s outcome, its own rejection reason unchanged, or a rejection with
  *   `STORAGE_REQUEST_ABORTED` once the signal aborted.
  */
-export async function abortable<T>(
+export function abortable<T>(
+  work: Promise<T>,
+  signal: AbortSignal | undefined,
+  context: Record<string, unknown>,
+): Promise<T> {
+  return tagged(waitUnlessAborted(work, signal, context))
+}
+
+async function waitUnlessAborted<T>(
   work: Promise<T>,
   signal: AbortSignal | undefined,
   context: Record<string, unknown>,

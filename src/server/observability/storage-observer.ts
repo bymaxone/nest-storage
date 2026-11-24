@@ -5,7 +5,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common'
 import { absorb } from '../utils/absorb'
-import { assertCleanRoot, dispatch, rejectedWith } from '../utils/prototype-guard'
+import { assertCleanRoot, dispatch, rejectedWith, tagged } from '../utils/prototype-guard'
 import { StorageMetricsTally } from './storage-metrics-tally'
 import { outcomeOf, scanVerdictOfError, type StorageOperation } from './storage-operations'
 import { StorageTracing, type StorageSpanAttributes, type StorageSpanName } from './storage-tracing'
@@ -129,9 +129,13 @@ export function Observed<T = unknown>(
         assertCleanRoot()
         return dispatch(original, this, args)
       }
+      // Tagged on the way out: the method's synchronous start, a host's validator or tracer included, has
+      // run by now, and the caller's await reads the promise's `constructor` next.
       try {
         assertCleanRoot()
-        return this.observer === undefined ? run() : this.observer.observe(operation, run, options)
+        return tagged(
+          this.observer === undefined ? run() : this.observer.observe(operation, run, options),
+        )
       } catch (error) {
         return rejectedWith<T>(error)
       }
