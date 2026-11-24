@@ -114,10 +114,10 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Known limits
 
-- **A call the runtime guard refuses does not touch the body.** When code in the same process adds a property to
-  `Object.prototype` after the library loaded, `upload()` is refused before it owns its body, so a `Readable` passed
-  as `body` is not destroyed and the caller still owns it and must close it. An upload rejected for any other reason
-  destroys the stream, as before.
+- **A call the runtime guard refuses does not touch the body.** When the runtime differs from what it was at load (a
+  property added to `Object.prototype`, say), an `upload()` refused at its start never owns its body: a `Readable`
+  passed as `body` is not destroyed, and the caller must close it. A refusal raised after the call began, like any
+  other rejection, destroys the stream.
 
 ## [1.1.21] - 2026-11-21
 
