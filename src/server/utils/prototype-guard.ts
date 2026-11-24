@@ -97,6 +97,7 @@ function fieldsOf(target: object, key: string | symbol): unknown[] {
     return [reflectGet(target, key)]
   }
   const descriptor = getDescriptor(target, key)
+  // Stryker disable next-line ArrayDeclaration: a constant first element is the same at load and at every check (equivalent).
   const fields: unknown[] = []
   let at = 0
   // Stryker disable next-line EqualityOperator: an index past the list reads `undefined` on both sides of the compare (equivalent).
@@ -178,6 +179,7 @@ function readBaseline(): void {
     at += 1
   }
   at = 0
+  // Stryker disable next-line EqualityOperator: an index past the list reads the global `undefined` at load and at every check (equivalent).
   while (at < GLOBALS.length) {
     capture(globalThis, item(GLOBALS, at))
     at += 1
