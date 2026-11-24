@@ -239,7 +239,7 @@ export async function readStreamUpTo(
       const buf = typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer)
       total += buf.byteLength
       within = total <= maxBytes
-      if (within) chunks.push(buf)
+      chunks.push(buf)
       return within
     }),
   )
