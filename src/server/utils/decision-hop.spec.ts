@@ -81,6 +81,20 @@ function restoreConstructor(): void {
   Reflect.defineProperty(proto, 'then', realThen)
 }
 
+/** A provider whose client records the body of every request and waits `beforeStore` before it answers. */
+function fakeProvider(sent: string[], beforeStore: () => Promise<void>): object {
+  return {
+    isConfigured: () => true,
+    getClient: () => ({
+      send: async (command: { input: { Body: unknown } }) => {
+        await beforeStore()
+        sent.push(String(command.input.Body))
+        return { ETag: '"e"' }
+      },
+    }),
+  }
+}
+
 /** A service wired with fakes, whose validator always refuses and whose client records what it is sent. */
 function serviceWith(
   observer?: StorageObserver,
@@ -96,16 +110,7 @@ function serviceWith(
     validation: { maxSizeBytes: 1000 },
     ...(scanner ? { scanner: { mode: 'pre-upload', timeoutMs: 1000 } } : {}),
   }
-  const provider = {
-    isConfigured: () => true,
-    getClient: () => ({
-      send: async (command: { input: { Body: unknown } }) => {
-        await beforeStore()
-        sent.push(String(command.input.Body))
-        return { ETag: '"e"' }
-      },
-    }),
-  }
+  const provider = fakeProvider(sent, beforeStore)
   const validation = {
     checkHeaders: () => undefined,
     validate: (input: { body: unknown }) =>
