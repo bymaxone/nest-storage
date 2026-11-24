@@ -69,7 +69,8 @@ export async function closeMultipartUpload(
  * @param bucket - The bucket of the upload.
  * @param key - The final object key.
  * @param created - The id the create answers with, or `undefined` if it fails; it never rejects.
- * @param onFailure - Told what a failed abort threw, for the caller's logs.
+ * @param onFailure - Told what a failed abort threw, or what the runtime refused while the cleanup was waiting,
+ *   for the caller's logs; a throw from it is swallowed because nobody awaits this path.
  */
 export function closeWhenCreated(
   client: S3Client,
@@ -81,7 +82,10 @@ export function closeWhenCreated(
   void closeAfter(client, bucket, key, created, onFailure)
 }
 
-/** Waits for the id and closes that upload; the id is read by `await`, which a replaced `then` does not reach. */
+/**
+ * Waits for the id and closes that upload; the id is read by `await`, which a replaced `then` does not reach.
+ * Nothing awaits this, so it never rejects: a refusal from the runtime goes to `onFailure`.
+ */
 async function closeAfter(
   client: S3Client,
   bucket: string,
@@ -89,7 +93,16 @@ async function closeAfter(
   created: Promise<string | undefined>,
   onFailure: ((err: unknown) => void) | undefined,
 ): Promise<void> {
-  await verdictOf(closeMultipartUpload(client, bucket, key, await verdictOf(created), onFailure))
+  try {
+    await verdictOf(closeMultipartUpload(client, bucket, key, await verdictOf(created), onFailure))
+  } catch (err) {
+    try {
+      onFailure?.(err)
+    } catch {
+      // The sink is the caller's: when it throws too, there is nowhere left to report to, and this path is
+      // detached, so a rejection here would end the process rather than reach anyone.
+    }
+  }
 }
 
 /**
