@@ -5,6 +5,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common'
 import { absorb } from '../utils/absorb'
+import { assertCleanRoot, dispatch, rejectedWith } from '../utils/prototype-guard'
 import { StorageMetricsTally } from './storage-metrics-tally'
 import { outcomeOf, scanVerdictOfError, type StorageOperation } from './storage-operations'
 import { StorageTracing, type StorageSpanAttributes, type StorageSpanName } from './storage-tracing'
@@ -121,8 +122,19 @@ export function Observed<T = unknown>(
   return (_target, _key, descriptor) => {
     const original = descriptor.value as (...args: unknown[]) => Promise<T>
     descriptor.value = function (this: Observing, ...args: unknown[]): Promise<T> {
-      const run = (): Promise<T> => original.apply(this, args)
-      return this.observer === undefined ? run() : this.observer.observe(operation, run, options)
+      // The runtime is checked before anything dispatches, and the method is called with the `apply`
+      // captured at load: a replaced `Function.prototype.apply` would otherwise answer without the method
+      // body, and its own guard, ever running.
+      const run = (): Promise<T> => {
+        assertCleanRoot()
+        return dispatch(original, this, args)
+      }
+      try {
+        assertCleanRoot()
+        return this.observer === undefined ? run() : this.observer.observe(operation, run, options)
+      } catch (error) {
+        return rejectedWith<T>(error)
+      }
     }
   }
 }

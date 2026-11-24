@@ -7,6 +7,7 @@ import type { S3Client } from '@aws-sdk/client-s3'
 import type { Logger } from '@nestjs/common'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
 import { CLEANUP_DEADLINE_MS, requestAborted, within } from './abort-support'
+import { isRootRefusal } from './prototype-guard'
 import { abortFailureLogger, closeMultipartUpload, closeWhenCreated } from './multipart-abort'
 
 /** The object a multipart upload was writing, and what the caller reported about the call. */
@@ -64,6 +65,10 @@ export async function failMultipartUpload(
     uploadId,
     abortFailureLogger(logger),
   )
+  // A refusal of the runtime check is not a failure of the upload: it keeps its own code, after the cleanup.
+  if (isRootRefusal(err)) {
+    throw err
+  }
   const context = { ...target.caller, op: 'upload-multipart', ...abort }
   throw abortedBy ? requestAborted(abortedBy, context) : mapMultipartError(err, context)
 }

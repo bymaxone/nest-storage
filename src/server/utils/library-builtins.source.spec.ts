@@ -201,6 +201,13 @@ describe('library built-in calls', () => {
     expect(bare).toEqual([])
   })
 
+  it('dispatches nothing through a live `apply`, `call`, `bind` or `Reflect`, which a replaced Function.prototype member would answer', () => {
+    // A call of a function value reads `apply`, `call` or `bind` off Function.prototype at each use, and a
+    // `Reflect` static off the global; the guard module holds captured copies for the sources to use.
+    const live = [...text.matchAll(/\.(?:apply|call|bind)\(|\bReflect\.\w+\(/g)].map((m) => m[0])
+    expect(live).toEqual([])
+  })
+
   it('accepts the realm as loaded', () => {
     expect(() => {
       assertCleanRoot()

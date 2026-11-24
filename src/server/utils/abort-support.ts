@@ -132,8 +132,7 @@ export function bindToSignal(client: S3Client, signal: AbortSignal): SignalBound
   const bound = new Proxy(client, {
     get(target, property) {
       if (property !== 'send') {
-        const value: unknown = Reflect.get(target, property, target)
-        return value
+        return (target as unknown as Record<string | symbol, unknown>)[property]
       }
       return (command: Parameters<S3Client['send']>[0], options?: object) => {
         if (command instanceof CreateMultipartUploadCommand) {

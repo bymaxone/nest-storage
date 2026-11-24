@@ -13,6 +13,7 @@ import {
   SIGNED_URL_KEYS,
   VALIDATION_KEYS,
 } from './option-keys'
+import { bindTo } from '../utils/prototype-guard'
 import { readField } from '../utils/read-once'
 import { isBoundedLength, OVERSIZED_ARRAY } from './option-array-bound'
 
@@ -74,7 +75,7 @@ function copyValidator(entry: unknown): unknown {
     // `validate` that only the root prototype supplies.
     validate:
       typeof validate === 'function'
-        ? (validate as (...args: unknown[]) => unknown).bind(entry)
+        ? bindTo(validate as (...args: unknown[]) => unknown, entry)
         : validate,
   }
 }
@@ -89,7 +90,7 @@ function copyScanner(impl: unknown): unknown {
   if (!isObject(impl)) return impl
   const scan = readField(impl, 'scan')
   return {
-    scan: typeof scan === 'function' ? (scan as (...args: unknown[]) => unknown).bind(impl) : scan,
+    scan: typeof scan === 'function' ? bindTo(scan as (...args: unknown[]) => unknown, impl) : scan,
   }
 }
 

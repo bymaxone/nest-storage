@@ -9,6 +9,7 @@
  * @layer server/utils
  */
 import { StorageException } from '../errors/storage-exception'
+import type { Callable } from './callable'
 
 /** The names a clean `Object.prototype` carries; any other string key is planted. */
 const STANDARD_NAMES = [
@@ -61,6 +62,7 @@ const arrayPrototype: object = Array.prototype
 const functionPrototype: object = Function.prototype
 const reflectGet = Reflect.get.bind(Reflect) as (target: object, key: PropertyKey) => unknown
 const apply = Reflect.apply.bind(Reflect)
+const functionBind = reflectGet(Function.prototype, 'bind')
 const ownKeys = Reflect.ownKeys.bind(Reflect)
 const getDescriptor = Object.getOwnPropertyDescriptor.bind(Object)
 const getPrototype = Object.getPrototypeOf.bind(Object) as (target: unknown) => object
@@ -124,6 +126,45 @@ export function boxed<V>(value: V): { readonly value: V } {
   box.value = value
   return box as { readonly value: V }
 }
+/**
+ * Calls a function with the `Reflect.apply` captured at load, so a replaced `Function.prototype.apply` or
+ * `call` is never the one that runs it.
+ *
+ * @param fn - The function to call.
+ * @param thisArg - Its `this`.
+ * @param args - Its arguments.
+ * @returns What the function returned.
+ */
+export function dispatch<R>(fn: Callable<R>, thisArg: unknown, args: readonly unknown[]): R {
+  return apply(fn as () => unknown, thisArg, args) as R
+}
+
+/**
+ * Binds a function to a `this` with the `Function.prototype.bind` captured at load, so a replaced `bind`
+ * cannot hand back a function of its own.
+ *
+ * @param fn - The function to bind.
+ * @param thisArg - What it is bound to.
+ * @returns The bound function.
+ */
+export function bindTo<F extends Callable>(fn: F, thisArg: unknown): F {
+  return apply(functionBind as () => unknown, fn, [thisArg]) as F
+}
+
+/**
+ * A promise already rejected with `reason`, built from the constructor captured at load, not from
+ * `Promise.reject`, which is read off the global at each call.
+ *
+ * @param reason - The rejection.
+ * @returns A rejected native promise.
+ */
+export function rejectedWith<T>(reason: unknown): Promise<T> {
+  return new INTRINSIC_PROMISE<T>((_resolve, reject) => {
+    const settle: (reason: unknown) => void = reject
+    settle(reason)
+  })
+}
+
 /** The refusals this module raised, so a caller can tell one from an ordinary validation error. */
 const raised = new WeakSet()
 
