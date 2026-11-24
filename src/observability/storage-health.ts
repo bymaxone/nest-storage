@@ -192,8 +192,9 @@ export class StorageHealthIndicator implements HealthIndicator {
     const running = chain(
       checked,
       (status) => {
-        this.#answer = { at: Date.now(), status }
+        // Released first: a clock that throws must not leave this settled answer to be shared by every later check.
         this.#running = undefined
+        this.#answer = { at: Date.now(), status }
         return status
       },
       down,

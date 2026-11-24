@@ -352,6 +352,24 @@ describe('the readiness of a bucket that is down', () => {
     expect(unhandled).toEqual([])
   })
 
+  it('probes the bucket again once the clock recovers from a throw while the answer was kept', async () => {
+    const checkBucket = jest.fn(() => Promise.resolve())
+    const indicator = new StorageHealthIndicator({ checkBucket } as never)
+    const now = jest.spyOn(Date, 'now').mockImplementationOnce(() => {
+      throw new Error('clock')
+    })
+    let first: unknown
+    try {
+      first = await indicator.check()
+    } finally {
+      now.mockRestore()
+    }
+
+    await expect(indicator.check()).resolves.toEqual({ status: 'up' })
+    expect(first).toEqual({ status: 'down' })
+    expect(checkBucket).toHaveBeenCalledTimes(2)
+  })
+
   it('answers `down` for a probe it cannot follow (a frozen promise), not an error', async () => {
     const storage = {
       checkBucket: () => Object.freeze(Promise.resolve()),
