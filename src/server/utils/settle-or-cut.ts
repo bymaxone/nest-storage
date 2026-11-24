@@ -139,9 +139,9 @@ export function verdictOf<T>(work: T | PromiseLike<T>): Promise<T> {
  */
 export function allOf<T>(items: readonly (T | PromiseLike<T>)[]): Promise<T[]> {
   // Every item is marked before the first check, so a refusal of the runtime leaves none of them unhandled.
+  const count = items.length
   let at = 0
-  // Stryker disable next-line EqualityOperator: `<=` is equivalent, since its one extra pass calls markHandled(undefined), a no-op; `>=` is not equivalent and is killed only by a synchronous hang (an empty list never leaves the loop) in the row `answers an empty list with an empty list` of decision-hop.spec.ts, measured by hand, so removing that row exposes it.
-  while (at < items.length) {
+  while (at !== count) {
     markHandled(items[at] as PromiseLike<unknown>)
     at += 1
   }
