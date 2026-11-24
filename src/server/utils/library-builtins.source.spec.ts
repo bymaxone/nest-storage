@@ -9,7 +9,10 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { assertCleanRoot } from './prototype-guard'
 
+/** The server sources, where the files a verdict passes through live. */
 const root = join(__dirname, '..')
+/** Every library source: the server, the observability subpath and the shared types. */
+const srcRoot = join(__dirname, '..', '..')
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -19,9 +22,26 @@ function sources(dir: string): string[] {
   })
 }
 
-const text = sources(root)
+/**
+ * What the readiness indicator reads from the engine once, while its module loads and before any host code of the
+ * application runs: the captured `Object` statics and the check of the promise constructor. The indicator ships
+ * as its own subpath and cannot import the guard that holds the same captures for the server, so these exact
+ * statements are the only exemption; a live call anywhere else in it is still found.
+ */
+const LOAD_TIME_CAPTURES = [
+  /^const \w+ = Object\.\w+\.bind\(Object\)/gm,
+  /Reflect\.get\(candidate, 'prototype'\)/g,
+]
+
+function withoutLoadTimeCaptures(path: string, source: string): string {
+  return path.endsWith('storage-health.ts')
+    ? LOAD_TIME_CAPTURES.reduce((rest, capture) => rest.replace(capture, ''), source)
+    : source
+}
+
+const text = sources(srcRoot)
   .filter((path) => !path.endsWith('prototype-guard.ts'))
-  .map((path) => readFileSync(path, 'utf8'))
+  .map((path) => withoutLoadTimeCaptures(path, readFileSync(path, 'utf8')))
   .join('\n')
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^\s*\/\/.*$/gm, '')
@@ -165,7 +185,7 @@ describe('library built-in calls', () => {
     // that carries a verdict, a chunk or a readiness answer. A site is exempt only with the reason it decides
     // nothing the library reports; every other site builds from the constructor captured at load.
     const EXEMPT_SITES: Record<string, string> = {}
-    const folders = [root, join(root, '..', 'observability')]
+    const folders = [srcRoot]
     const found = folders.flatMap((folder) =>
       sources(folder)
         .filter((path) => !path.endsWith('prototype-guard.ts'))
@@ -174,7 +194,7 @@ describe('library built-in calls', () => {
             .replace(/\/\*[\s\S]*?\*\//g, '')
             .replace(/^\s*\/\/.*$/gm, '')
           const hits = [...source.matchAll(/\bnew Promise\b/g)].length
-          return hits > 0 ? [path.slice(join(root, '..').length + 1)] : []
+          return hits > 0 ? [path.slice(srcRoot.length + 1)] : []
         }),
     )
 
@@ -226,7 +246,7 @@ describe('library built-in calls', () => {
     // A bare `await` reads the `constructor` of what it awaits at that moment, and one that is not the engine's is
     // resolved through the live `then`; a host hook that ran just before could have planted either. The hops are
     // the only awaits, and the lint rule `no-restricted-syntax` states the same for the editor.
-    const folders = [root, join(root, '..', 'observability')]
+    const folders = [srcRoot]
     const bare = folders.flatMap((folder) =>
       sources(folder)
         .filter((path) => !path.endsWith('settle-or-cut.ts') && !path.endsWith('.spec.ts'))
@@ -238,7 +258,7 @@ describe('library built-in calls', () => {
             ...source.matchAll(
               /\bawait\s+(?!(?:verdictOf|settleOrCut|abortable|allOf|pinnedWork)\b)[^\n]{0,40}/g,
             ),
-          ].map((m) => `${path.slice(join(root, '..').length + 1)}: ${m[0]}`)
+          ].map((m) => `${path.slice(srcRoot.length + 1)}: ${m[0]}`)
         }),
     )
     expect(bare).toEqual([])
