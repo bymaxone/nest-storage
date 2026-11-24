@@ -19,11 +19,8 @@ import { verdictOf } from './settle-or-cut'
  * @throws StorageException `STORAGE_VALIDATION_FAILED` naming `maxBytes`.
  */
 export function assertMaxBytes(maxBytes: number | undefined): void {
-  // Stryker disable next-line ConditionalExpression: `Number.isInteger` is false for every value that is not a number, so the `typeof` test refuses nothing the next one does not (equivalent).
-  if (
-    maxBytes !== undefined &&
-    (typeof maxBytes !== 'number' || !Number.isInteger(maxBytes) || maxBytes < 1)
-  ) {
+  // `Number.isInteger` is false for every value that is not a number, so no separate type test is needed.
+  if (maxBytes !== undefined && (!Number.isInteger(maxBytes) || maxBytes < 1)) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
       reason: 'maxBytes must be an integer >= 1',
     })
