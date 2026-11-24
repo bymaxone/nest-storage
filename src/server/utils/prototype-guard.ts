@@ -69,6 +69,12 @@ const getDescriptor = Object.getOwnPropertyDescriptor.bind(Object)
 const getPrototype = Object.getPrototypeOf.bind(Object) as (target: unknown) => object
 const hasOwn = Object.hasOwn.bind(Object)
 const isProxy: (target: unknown) => boolean = types.isProxy.bind(types)
+/** Every prototype a Buffer is read through; a `then` on one of them answers for each chunk a stream hands out. */
+const bufferPrototypes: readonly object[] = [
+  Buffer.prototype as object,
+  Uint8Array.prototype,
+  getPrototype(Uint8Array.prototype),
+]
 const same = Object.is.bind(Object) as (left: unknown, right: unknown) => boolean
 const defineOwn = Object.defineProperty.bind(Object) as (
   target: object,
@@ -562,6 +568,11 @@ export function assertCleanRoot(): void {
     at += 1
   }
   planted += carriesThen(arrayPrototype) + carriesThen(functionPrototype)
+  at = 0
+  while (at < bufferPrototypes.length) {
+    planted += carriesThen(item(bufferPrototypes, at))
+    at += 1
+  }
   at = 0
   while (at < entries.length) {
     if (differs(item(entries, at))) {

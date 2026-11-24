@@ -204,6 +204,35 @@ describe('a returned value that carries a `then`', () => {
 
     expect(isRootRefusal(refused)).toBe(true)
   })
+
+  it('never hands a validator the bytes a `then` planted on Buffer.prototype answers with', async () => {
+    const seen: string[] = []
+    const options = { ...UPLOAD_OPTIONS, validation: {} }
+    const magic = {
+      name: 'magic',
+      validate: async ({ readBytes }: { readBytes: (n: number) => Promise<Buffer> }) => {
+        plantThen(Buffer.prototype as object, '%PDF')
+        seen.push(String(await readBytes(4)))
+        return { ok: true }
+      },
+    }
+    const service = new ValidationService(options as never, [magic as never])
+
+    const outcome = await service
+      .validate({
+        key: 'k',
+        contentType: 'text/plain',
+        size: 12,
+        body: Readable.from([Buffer.from('MZ-malicious')]),
+      })
+      .then(
+        () => 'accepted',
+        (error: unknown) => (isRootRefusal(error) ? 'refused' : 'failed'),
+      )
+
+    expect(outcome).toBe('refused')
+    expect(seen).toEqual([])
+  })
 })
 
 describe('a stream the library reads', () => {

@@ -14,12 +14,12 @@ const BUDGETS = [
   {
     name: 'server (NestJS module + AWS SDK externals)',
     path: 'dist/server/index.mjs',
-    brotli: 33_890,
+    brotli: 33_940,
   },
   {
     name: 'server CJS (NestJS module + AWS SDK externals)',
     path: 'dist/server/index.cjs',
-    brotli: 33_920,
+    brotli: 33_990,
   },
   {
     name: 'observability (metrics contributor + readiness indicator)',
