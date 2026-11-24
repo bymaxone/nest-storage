@@ -62,7 +62,7 @@ note on each entry is the compatibility contract — read it, not the number.
   `Promise` constructor captured at load, with no `Promise.race`, `Promise.resolve`, `Promise.all` or `then` on the
   path, so a host that replaces one of them after load cannot turn an infected or rejected result into an accepted
   one. The `constructor` of the promise prototype joins the baseline, and a host that replaces it makes the library
-  refuse scans.
+  refuse every call.
 
   **Apply to a derived backend:** nothing to change. An application that adds a key to `Object.prototype` (a polyfill
   or a library that extends it) now fails at module start-up and on every storage call with

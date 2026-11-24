@@ -1088,7 +1088,7 @@ a validation result and an upload id are read with `await` on a promise built fr
 captured at load, so replacing `Promise.race`, `Promise.resolve`, `Promise.all` or `Promise.prototype.then`
 after load cannot turn an infected or rejected result into an accepted one. A tracing agent that wraps
 `then` and delegates is not refused; a host that replaces `Promise.prototype.constructor` after load
-makes the library refuse scans. A replacement made before the library is imported is not seen.
+makes the library refuse every call. A replacement made before the library is imported is not seen.
 
 ### `keyPrefix` is a namespace, not an access boundary
 
