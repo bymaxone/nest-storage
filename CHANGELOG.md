@@ -64,17 +64,10 @@ note on each entry is the compatibility contract — read it, not the number.
   one. The `constructor` of the promise prototype joins the baseline, and a host that replaces it makes the library
   refuse every call.
 
-  Every `await` on a decision path (a scan, a validation, a health probe, a multipart id, a presigned part list, the
-  scanned buffer) goes through one hop: the work is followed with the `then` captured at load, the root check runs
-  right before the await and again after it on the fulfilment and the rejection path, the answer travels in a box
-  without a prototype, and the promise the hop hands back carries a non-configurable, non-writable `constructor` of
-  its own, so a `constructor` or a `then` a host plants while its own code runs (a request getter, a tracer, a
-  middleware) is never read by the caller's await. A lint rule keeps a bare `await` out of the sources, and a promise
-  whose constructor cannot be pinned (a frozen one) is refused. A `then` on `Object.prototype`, `Array.prototype` or
-  `Function.prototype` is refused like a planted key, a refusal at a scan is logged (`STORAGE_ROOT_GUARD_REFUSED`), and
-  a promise left behind by a refusal, or whose `Symbol.species` throws, is marked as handled without raising an
-  unhandled rejection. The tracer receives a copy of the span's start, never the promise the library awaits, and the
-  health indicator is built from captured built-ins. Not covered: a scanner or validator dependency that reads
+  Every `await` on a decision path goes through one hop: the work is followed with the `then` captured at load, the root check runs
+  right before the await and again after it on the fulfilment and the rejection path, and the promise the hop hands back carries a `constructor` of its own, so a `constructor` or a `then` a host plants
+  while its own code runs is never read by the caller's await. A lint rule keeps a bare `await` out of the sources. The tracer receives a copy of the span's start, never the
+  promise the library awaits. Not covered: a scanner or validator dependency that reads
   `Promise` statics itself, a replaced `setTimeout` or `clearTimeout` (the library's timers read the live ones), and a
   `then` planted and erased again between the entry of a call and the moment the work answers, and a host that
   replaces the `constructor` slot of `Promise.prototype` with a function carrying the engine's prototype before the
