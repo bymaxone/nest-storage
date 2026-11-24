@@ -8,6 +8,7 @@
  * library is imported is outside what it can see.
  * @layer server/utils
  */
+import { types } from 'node:util'
 import { StorageException } from '../errors/storage-exception'
 import type { Callable } from './callable'
 
@@ -67,6 +68,7 @@ const ownKeys = Reflect.ownKeys.bind(Reflect)
 const getDescriptor = Object.getOwnPropertyDescriptor.bind(Object)
 const getPrototype = Object.getPrototypeOf.bind(Object) as (target: unknown) => object
 const hasOwn = Object.hasOwn.bind(Object)
+const isProxy: (target: unknown) => boolean = types.isProxy.bind(types)
 const same = Object.is.bind(Object) as (left: unknown, right: unknown) => boolean
 const defineOwn = Object.defineProperty.bind(Object) as (
   target: object,
@@ -341,7 +343,13 @@ function field(descriptor: PropertyDescriptor | undefined, name: string): unknow
     : undefined
 }
 
+/** The key that stands for where a built-in's prototype chain goes, which a host can re-point. */
+const PARENT = Symbol('parent')
+
 function fieldsOf(target: object, key: string | symbol): unknown[] {
+  if (key === PARENT) {
+    return [getPrototype(target)]
+  }
   if (target === globalThis) {
     // A global binding may be a lazy accessor; the value it resolves to is what a decision reads.
     return [reflectGet(target, key)]
@@ -420,6 +428,7 @@ function readBaseline(): void {
   let at = 0
   while (at < list.length) {
     captureAll(item(list, at))
+    capture(item(list, at), PARENT)
     at += 1
   }
   // Not the whole of Buffer: its pool size is a setting a host may tune, and no decision reads it.
@@ -431,6 +440,8 @@ function readBaseline(): void {
   // `await` takes a promise's own resolution only while its `constructor` is the native one; any other
   // value sends it through a `then` lookup. It is a data property that no instrumentation rewrites.
   capture(intrinsicPromisePrototype, 'constructor')
+  // Every promise the SDK or a callback derives through `then` is built by the species of its constructor.
+  capture(INTRINSIC_PROMISE, Symbol.species)
   at = 0
   // Stryker disable next-line EqualityOperator: an index past the list reads the global `undefined` at load and at every check (equivalent).
   while (at < GLOBALS.length) {
@@ -478,7 +489,8 @@ function carriesThen(carrier: object): number {
  * @param value - What the async function is about to return.
  * @returns `value`, unchanged.
  * @throws StorageException `STORAGE_VALIDATION_FAILED` when the value or a prototype above it carries a `then`,
- *   when the chain is too deep to be read, or when a root prototype gained a `then` while it was read.
+ *   when a prototype above it is a Proxy, when the chain is too deep to be read, or when a root prototype gained a
+ *   `then` while it was read.
  * @example
  *   return settles(Buffer.concat(chunks))
  */
@@ -487,7 +499,11 @@ export function settles<V>(value: V): V {
   let depth = 0
   while (node !== null && (typeof node === 'object' || typeof node === 'function')) {
     // A chain that is still going at the limit is not read to its end: it is refused, never passed.
-    if (depth === CHAIN_LIMIT || hasOwn(node, 'then')) throw refusal(1, 0)
+    // A Proxy above the value is refused before any trap of it runs: `hasOwn` would see no `then` while the
+    // resolution reads one through `get`. The value itself may be one (an options object a host wraps).
+    if (depth === CHAIN_LIMIT || (depth > 0 && isProxy(node)) || hasOwn(node, 'then')) {
+      throw refusal(1, 0)
+    }
     node = getPrototype(node)
     depth += 1
   }

@@ -76,10 +76,12 @@ note on each entry is the compatibility contract — read it, not the number.
   A value an async function hands on (a buffer, a stream, a head a validator read, a span's result) is checked for a
   `then` on itself and on every prototype above it, because the return of an async function reads `then` there; a
   stream is read step by step through the same hop instead of with `for await`, and the readiness check follows the
-  bucket probe through the promise's own constructor, so a replaced or throwing `Promise[Symbol.species]` neither
-  answers `up` for a bucket that is down nor leaves a rejection unhandled. Not covered: the AWS SDK's own
-  `S3Client.send`, which reads `Promise[Symbol.species]` itself and can leave its own rejection unhandled when a host
-  makes that member throw.
+  bucket probe through the promise's own constructor. A Proxy anywhere above the value is refused, because its
+  `get` trap could answer a `then` the walk never saw; the `[[Prototype]]` of each guarded built-in and
+  `Promise[Symbol.species]` join the baseline, so a host that re-points one or replaces the species makes the
+  library refuse every call. Not covered: a species that replaces itself and then erases itself again while the AWS
+  SDK's own `S3Client.send` runs, which can leave that rejection unhandled. The readiness check reads the clock
+  captured at load, and a signal whose `removeEventListener` throws still gets the probe's answer.
 
   **Apply to a derived backend:** nothing to change. An application that adds a key to `Object.prototype` (a polyfill
   or a library that extends it) now fails at module start-up and on every storage call with

@@ -7,6 +7,7 @@
 import { Test } from '@nestjs/testing'
 import { FileScannerService } from './file-scanner.service'
 import { abortable } from '../utils/abort-support'
+import { isRootRefusal } from '../utils/prototype-guard'
 import { BYMAX_STORAGE_OPTIONS, BYMAX_STORAGE_FILE_SCANNER } from '../bymax-storage.constants'
 import { StorageException } from '../errors/storage-exception'
 import type { IFileScanner } from '../interfaces/file-scanner.interface'
@@ -105,7 +106,6 @@ describe('verdict paths and the members of Promise', () => {
     ['Promise.resolve', () => patch(Promise, 'resolve', () => nativeResolve(CLEAN))],
     ['Promise.all', () => patch(Promise, 'all', () => nativeResolve([CLEAN]))],
     ['Promise.prototype.then', () => patch(proto, 'then', cleaningThen)],
-    ['Promise[Symbol.species]', () => patchSpecies(Subclass)],
     [
       'the Promise binding',
       () =>
@@ -119,6 +119,20 @@ describe('verdict paths and the members of Promise', () => {
         ),
     ],
   ]
+
+  it('refuses a scan and a validation outright once `Promise[Symbol.species]` answers with a constructor of the host', async () => {
+    /* The species builds every promise a `then` derives, the SDK's own included, so it joined the baseline. */
+    const scan = await under(
+      () => patchSpecies(Subclass),
+      () => infectedService.scan(input),
+    )
+    const validation = await under(
+      () => patchSpecies(Subclass),
+      () => abortable(nativeReject(new Error('rejected')), new AbortController().signal, {}),
+    )
+
+    expect([rejectionOf(scan), rejectionOf(validation)].map(isRootRefusal)).toEqual([true, true])
+  })
 
   it.each(answeredClean)(
     'keeps an infected scan infected with %s replaced to answer clean',

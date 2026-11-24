@@ -29,7 +29,7 @@ function sources(dir: string): string[] {
  * statements are the only exemption; a live call anywhere else in it is still found.
  */
 const LOAD_TIME_CAPTURES = [
-  /^const \w+ = Object\.\w+\.bind\(Object\)/gm,
+  /^const \w+(?:: \(\) => number)? = (?:Object\.\w+|Date\.now)\.bind\((?:Object|Date)\)/gm,
   /Reflect\.get\(candidate, 'prototype'\)/g,
 ]
 

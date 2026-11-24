@@ -18,6 +18,19 @@ function indicatorOver(checkBucket: jest.Mock): StorageHealthIndicator {
   return new StorageHealthIndicator({ checkBucket } as unknown as StorageService)
 }
 
+/**
+ * An indicator from a copy of the module loaded now, so a fake clock installed first is the clock the module
+ * captured: the live one is read once, at load, and never again.
+ */
+async function indicatorUnderFakeClock(checkBucket: jest.Mock): Promise<StorageHealthIndicator> {
+  let made: StorageHealthIndicator | undefined
+  await jest.isolateModulesAsync(async () => {
+    const fresh = await import('./storage-health')
+    made = new fresh.StorageHealthIndicator({ checkBucket } as unknown as StorageService)
+  })
+  return made as unknown as StorageHealthIndicator
+}
+
 describe('StorageHealthIndicator', () => {
   afterEach(() => {
     jest.useRealTimers()
@@ -86,7 +99,7 @@ describe('StorageHealthIndicator', () => {
       .fn()
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('x'))
-    const indicator = indicatorOver(checkBucket)
+    const indicator = await indicatorUnderFakeClock(checkBucket)
 
     await expect(indicator.check()).resolves.toEqual({ status: 'up' })
     jest.setSystemTime(1_000_000 + STORAGE_HEALTH_CACHE_MS - 1)
@@ -166,7 +179,7 @@ describe('StorageHealthIndicator', () => {
   it('leaves no abort listener on a long-lived signal, however many checks it was given to', async () => {
     jest.useFakeTimers({ now: 1_000_000 })
     const checkBucket = jest.fn().mockResolvedValue(undefined)
-    const indicator = indicatorOver(checkBucket)
+    const indicator = await indicatorUnderFakeClock(checkBucket)
     const host = new AbortController()
 
     for (let round = 0; round < 25; round += 1) {

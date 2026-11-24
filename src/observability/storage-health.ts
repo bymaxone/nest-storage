@@ -24,6 +24,8 @@ const defineOwn = Object.defineProperty.bind(Object) as (
 ) => unknown
 const getDescriptor = Object.getOwnPropertyDescriptor.bind(Object)
 const hasOwn = Object.hasOwn.bind(Object)
+/** The clock as it was at load, so a `Date.now` a host replaced since neither freezes nor breaks the cache. */
+const now: () => number = Date.now.bind(Date)
 /**
  * The constructor the promise prototype names, accepted only when the slot is a data property and the function it
  * holds is the engine's: its `prototype` is the prototype an async function's promise has. A getter, or a slot
@@ -161,7 +163,7 @@ export class StorageHealthIndicator implements HealthIndicator {
   /** Whether the bucket answers in time; the aggregator's signal ends this caller's wait. */
   check(signal?: AbortSignal): Promise<HealthIndicatorResult> {
     const kept = this.#answer
-    if (kept !== undefined && Date.now() - kept.at < STORAGE_HEALTH_CACHE_MS) {
+    if (kept !== undefined && now() - kept.at < STORAGE_HEALTH_CACHE_MS) {
       return pinned(
         new NativePromise<HealthIndicatorResult>((resolve) => {
           resolve(answerOf(kept.status))
@@ -194,7 +196,7 @@ export class StorageHealthIndicator implements HealthIndicator {
       (status) => {
         // Released first: a clock that throws must not leave this settled answer to be shared by every later check.
         this.#running = undefined
-        this.#answer = { at: Date.now(), status }
+        this.#answer = { at: now(), status }
         return status
       },
       down,
@@ -215,15 +217,24 @@ export class StorageHealthIndicator implements HealthIndicator {
       })
     }
     return new NativePromise<'up' | 'down'>((resolve) => {
+      // The host's signal is only ever asked to stop telling this wait about an abort; if it cannot, the answer is
+      // still the probe's, never a callback that throws into the chain.
+      const detach = (): void => {
+        try {
+          signal.removeEventListener('abort', stop)
+        } catch {
+          // Nothing to release: the listener answers once, and a second answer is ignored.
+        }
+      }
       const stop = (): void => {
-        signal.removeEventListener('abort', stop)
+        detach()
         resolve('down')
       }
       signal.addEventListener('abort', stop)
       void chain(
         probe,
         (status) => {
-          signal.removeEventListener('abort', stop)
+          detach()
           resolve(status)
         },
         stop,

@@ -11,7 +11,7 @@ import { StorageHealthIndicator } from '../../observability/storage-health'
 import { StorageService } from '../services/storage.service'
 import { ValidationService } from '../services/validation.service'
 import { FileScannerService } from '../services/file-scanner.service'
-import { isRootRefusal, settles } from './prototype-guard'
+import { assertCleanRoot, INTRINSIC_PROMISE, isRootRefusal, settles } from './prototype-guard'
 import { readStream, readStreamUpTo } from './stream-utils'
 
 const proto: object = Object.getPrototypeOf(Promise.resolve()) as object
@@ -147,6 +147,61 @@ describe('a returned value that carries a `then`', () => {
     Reflect.deleteProperty(Object.prototype, 'then')
 
     expect(left).toBe(true)
+    expect(isRootRefusal(refused)).toBe(true)
+  })
+
+  it('refuses a Proxy anywhere above the value, whose trap would answer a `then` the walk did not see', () => {
+    const forged = new Proxy(Object.prototype, {
+      get(target, key, receiver) {
+        return key === 'then'
+          ? (resolve: (value: unknown) => void) => {
+              resolve('forged')
+            }
+          : (Reflect.get(target, key, receiver) as unknown)
+      },
+    })
+    const value = Object.create(forged) as object
+
+    let refused: unknown
+    try {
+      settles(value)
+    } catch (error) {
+      refused = error
+    }
+
+    expect(isRootRefusal(refused)).toBe(true)
+  })
+
+  it('refuses every use once the prototype of a guarded built-in was pointed elsewhere', () => {
+    const original = Object.getPrototypeOf(typedArray) as object
+    Object.setPrototypeOf(typedArray, new Proxy(Object.prototype, {}))
+    let refused: unknown
+    try {
+      assertCleanRoot()
+    } catch (error) {
+      refused = error
+    } finally {
+      Object.setPrototypeOf(typedArray, original)
+    }
+
+    expect(isRootRefusal(refused)).toBe(true)
+  })
+
+  it('refuses every use once `Promise[Symbol.species]` was replaced after the library loaded', () => {
+    const real = Object.getOwnPropertyDescriptor(INTRINSIC_PROMISE, Symbol.species)!
+    Reflect.defineProperty(INTRINSIC_PROMISE, Symbol.species, {
+      configurable: true,
+      get: () => Promise,
+    })
+    let refused: unknown
+    try {
+      assertCleanRoot()
+    } catch (error) {
+      refused = error
+    } finally {
+      Reflect.defineProperty(INTRINSIC_PROMISE, Symbol.species, real)
+    }
+
     expect(isRootRefusal(refused)).toBe(true)
   })
 })
@@ -328,46 +383,53 @@ describe('the readiness of a bucket that is down', () => {
     expect(unhandled).toEqual([])
   })
 
-  it('answers `down` when the clock throws while the answer is kept, with nothing left unhandled', async () => {
+  it('keeps its cache by the clock read at load: a Date.now the host moved or broke afterwards is not consulted', async () => {
+    const checkBucket = jest.fn(() => Promise.resolve())
+    const indicator = new StorageHealthIndicator({ checkBucket } as never)
+    const first = await indicator.check()
+    const now = jest.spyOn(Date, 'now').mockImplementation(() => Date.parse('2099-01-01'))
+    let moved: unknown
+    let broken: unknown
+    try {
+      moved = await indicator.check()
+      now.mockImplementation(() => {
+        throw new Error('clock')
+      })
+      broken = await indicator.check()
+    } finally {
+      now.mockRestore()
+    }
+
+    expect([first, moved, broken]).toEqual([{ status: 'up' }, { status: 'up' }, { status: 'up' }])
+    expect(checkBucket).toHaveBeenCalledTimes(1)
+  })
+
+  it('answers the probe, not a hang, when the signal it listens to throws as it is detached', async () => {
     const unhandled: unknown[] = []
     const listener = (reason: unknown): void => {
       unhandled.push(reason)
     }
     process.on('unhandledRejection', listener)
-    const now = jest.spyOn(Date, 'now').mockImplementation(() => {
-      throw new Error('clock')
-    })
-    const storage = { checkBucket: () => Promise.resolve() }
+    const detach = jest
+      .spyOn(EventTarget.prototype, 'removeEventListener')
+      .mockImplementation(() => {
+        throw new Error('host removeEventListener')
+      })
+    const indicator = new StorageHealthIndicator({ checkBucket: () => Promise.resolve() } as never)
+    let answer: unknown = 'pending'
 
     try {
-      await expect(new StorageHealthIndicator(storage as never).check()).resolves.toEqual({
-        status: 'down',
+      void indicator.check(new AbortController().signal).then((result) => {
+        answer = result
       })
-      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setTimeout(resolve, 50))
     } finally {
-      now.mockRestore()
+      detach.mockRestore()
       process.off('unhandledRejection', listener)
     }
 
+    expect(answer).toEqual({ status: 'up' })
     expect(unhandled).toEqual([])
-  })
-
-  it('probes the bucket again once the clock recovers from a throw while the answer was kept', async () => {
-    const checkBucket = jest.fn(() => Promise.resolve())
-    const indicator = new StorageHealthIndicator({ checkBucket } as never)
-    const now = jest.spyOn(Date, 'now').mockImplementationOnce(() => {
-      throw new Error('clock')
-    })
-    let first: unknown
-    try {
-      first = await indicator.check()
-    } finally {
-      now.mockRestore()
-    }
-
-    await expect(indicator.check()).resolves.toEqual({ status: 'up' })
-    expect(first).toEqual({ status: 'down' })
-    expect(checkBucket).toHaveBeenCalledTimes(2)
   })
 
   it('answers `down` for a probe it cannot follow (a frozen promise), not an error', async () => {
