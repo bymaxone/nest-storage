@@ -32,7 +32,7 @@ const hasOwn = Object.hasOwn.bind(Object)
 function checkedPromise(prototype: object): PromiseConstructor {
   const slot = getDescriptor(prototype, 'constructor')
   const candidate =
-    slot !== undefined && !hasOwn(slot, 'get') && !hasOwn(slot, 'set')
+    slot !== undefined && hasOwn(slot, 'value') && !hasOwn(slot, 'get') && !hasOwn(slot, 'set')
       ? (slot.value as unknown)
       : undefined
   if (typeof candidate !== 'function' || Reflect.get(candidate, 'prototype') !== prototype) {
