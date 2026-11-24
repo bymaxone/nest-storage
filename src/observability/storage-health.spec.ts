@@ -249,6 +249,27 @@ describe('StorageHealthIndicator', () => {
     expect(result).toEqual({ status: 'down' })
   })
 
+  it('hands back a promise with its own fixed constructor, for each of the three ways a check answers', async () => {
+    // A caller's `await` reads `constructor` first: an own, read-only one that is the engine's `Promise` keeps a
+    // `then` or a `constructor` a host replaced on the prototype out of the way the verdict reaches the caller.
+    const pending = indicatorOver(jest.fn().mockResolvedValue(undefined)).check(
+      new AbortController().signal,
+    )
+    const cached = indicatorOver(jest.fn().mockResolvedValue(undefined))
+    await cached.check(new AbortController().signal)
+    const again = cached.check(new AbortController().signal)
+    const aborted = indicatorOver(jest.fn().mockResolvedValue(undefined)).check(AbortSignal.abort())
+
+    for (const answer of [pending, again, aborted]) {
+      expect(Object.getOwnPropertyDescriptor(answer, 'constructor')).toMatchObject({
+        value: Promise,
+        writable: false,
+        configurable: false,
+      })
+    }
+    await Promise.all([pending, again, aborted])
+  })
+
   it('stays down for an aborted caller when Promise.resolve is replaced after load to answer up', async () => {
     const checkBucket = jest.fn().mockResolvedValue(undefined)
     const original = Promise.resolve

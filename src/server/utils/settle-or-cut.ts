@@ -73,10 +73,6 @@ function settled<T>(work: T | PromiseLike<T>): Promise<Box<T>> {
  */
 export function mirrorOf(work: PromiseLike<unknown> | undefined): Promise<undefined> {
   const mirror = new NativePromise<undefined>((resolve, reject) => {
-    if (work === undefined) {
-      resolve(undefined)
-      return
-    }
     follow(
       work,
       () => {
@@ -123,7 +119,7 @@ export function verdictOf<T>(work: T | PromiseLike<T>): Promise<T> {
 export function allOf<T>(items: readonly (T | PromiseLike<T>)[]): Promise<T[]> {
   // Every item is marked before the first check, so a refusal of the runtime leaves none of them unhandled.
   let at = 0
-  while (at < items.length) {
+  while (at !== items.length) {
     markHandled(items[at] as PromiseLike<unknown>)
     at += 1
   }

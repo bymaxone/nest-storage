@@ -447,3 +447,111 @@ describe('guardIdleBody', () => {
     source.destroy()
   })
 })
+
+describe('withIdleTimeout and a step that settles twice or after the cut', () => {
+  function sourceAnswering(next: () => unknown): Readable {
+    const source = new Readable({ read() {} })
+    source[Symbol.asyncIterator] = (() => ({
+      next,
+    })) as unknown as (typeof source)[typeof Symbol.asyncIterator]
+    return source
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('hands on no bytes that arrive after the idle error', async () => {
+    // The wait ended with the idle error, so a step that comes after it is not pushed into the wrapper.
+    const push = jest.spyOn(Readable.prototype, 'push')
+    let answer: (step: IteratorResult<Buffer>) => void = () => undefined
+    const wrapper = withIdleTimeout(
+      sourceAnswering(
+        () =>
+          new Promise<IteratorResult<Buffer>>((resolve) => {
+            answer = resolve
+          }),
+      ),
+      10,
+    )
+    wrapper.on('data', () => undefined)
+    await new Promise<unknown>((resolve) => wrapper.once('error', resolve))
+    answer({ done: false, value: Buffer.from('late') })
+    await tick()
+
+    expect(push).not.toHaveBeenCalledWith(Buffer.from('late'))
+  })
+
+  it('maps the failure once when the source fails after the idle error', async () => {
+    // The second failure is the source's own, arriving late: it is not reported through the mapping again.
+    let fail: (reason: unknown) => void = () => undefined
+    const toError = jest.fn((error: Error) => error)
+    const wrapper = withIdleTimeout(
+      sourceAnswering(
+        () =>
+          new Promise<IteratorResult<Buffer>>((_resolve, reject) => {
+            fail = reject
+          }),
+      ),
+      10,
+      toError,
+    )
+    wrapper.on('data', () => undefined)
+    await new Promise<unknown>((resolve) => wrapper.once('error', resolve))
+    fail(new Error('late failure'))
+    await tick()
+
+    expect(toError).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a failure that follows the bytes of the same step', async () => {
+    // A thenable that answers with a value and then with a failure is honoured once, by its first answer.
+    const toError = jest.fn((error: Error) => error)
+    const received: string[] = []
+    let asked = 0
+    const wrapper = withIdleTimeout(
+      sourceAnswering(() => {
+        asked += 1
+        if (asked > 1) return new Promise<never>(() => undefined)
+        return {
+          then(
+            onValue: (step: IteratorResult<Buffer>) => void,
+            onError: (reason: unknown) => void,
+          ) {
+            onValue({ done: false, value: Buffer.from('first') })
+            onError(new Error('second answer'))
+          },
+        }
+      }),
+      1000,
+      toError,
+    )
+    wrapper.on('data', (chunk: Buffer) => received.push(chunk.toString()))
+    wrapper.on('error', () => undefined)
+    await tick()
+    wrapper.destroy()
+
+    expect(received).toEqual(['first'])
+    expect(toError).not.toHaveBeenCalled()
+  })
+
+  it('ignores bytes that follow the failure of the same step', async () => {
+    // The order is reversed: the failure comes first and ends the stream, so the bytes after it go nowhere.
+    const push = jest.spyOn(Readable.prototype, 'push')
+    const wrapper = withIdleTimeout(
+      sourceAnswering(() => ({
+        then(onValue: (step: IteratorResult<Buffer>) => void, onError: (reason: unknown) => void) {
+          onError(new Error('first answer'))
+          onValue({ done: false, value: Buffer.from('second') })
+        },
+      })),
+      1000,
+    )
+    wrapper.on('data', () => undefined)
+    const failure = await new Promise<unknown>((resolve) => wrapper.once('error', resolve))
+    await tick()
+
+    expect((failure as Error).message).toBe('first answer')
+    expect(push).not.toHaveBeenCalledWith(Buffer.from('second'))
+  })
+})

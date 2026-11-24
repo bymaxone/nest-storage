@@ -34,9 +34,7 @@ const now: () => number = Date.now.bind(Date)
 function checkedPromise(prototype: object): PromiseConstructor {
   const slot = getDescriptor(prototype, 'constructor')
   const candidate =
-    slot !== undefined && hasOwn(slot, 'value') && !hasOwn(slot, 'get') && !hasOwn(slot, 'set')
-      ? (slot.value as unknown)
-      : undefined
+    slot !== undefined && hasOwn(slot, 'value') ? (slot.value as unknown) : undefined
   if (typeof candidate !== 'function' || Reflect.get(candidate, 'prototype') !== prototype) {
     throw new Error('The Promise constructor is not the engine one: refusing to load.')
   }

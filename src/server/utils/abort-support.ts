@@ -112,8 +112,9 @@ async function uploadIdOf(
   try {
     return (await verdictOf(sent)).UploadId
   } catch {
-    return undefined
+    // A refused or failed create has no upload id to hand on.
   }
+  return undefined
 }
 
 /**
