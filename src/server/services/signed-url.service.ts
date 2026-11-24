@@ -37,7 +37,7 @@ import { clampTtl } from '../utils/ttl-clamp'
 import { assertMimeAllowed } from '../utils/mime-allowed'
 import { assertHeaderValues, assertMetadata, copyMetadata } from '../utils/header-value'
 import { assertCleanRoot } from '../utils/prototype-guard'
-import { allOf, verdictOf } from '../utils/settle-or-cut'
+import { allOf, stepOf, verdictOf } from '../utils/settle-or-cut'
 
 /** The `GetObject` a download URL signs, with the response overrides the caller asked for. */
 function getCommand(
@@ -324,7 +324,8 @@ export class SignedUrlService {
           UploadId: uploadId,
           PartNumber: partNumber,
         })
-        const url = await verdictOf(getSignedUrl(client, cmd, opts))
+        // A part is followed, not scanned: the whole batch is guarded, and a scan per part grows with the parts.
+        const url = await stepOf(getSignedUrl(client, cmd, opts))
         return { partNumber, url }
       }),
     )
