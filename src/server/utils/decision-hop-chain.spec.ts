@@ -28,6 +28,13 @@ const CARRIERS: readonly [string, () => object][] = [
   ['EventEmitter.prototype', (): object => EventEmitter.prototype],
 ]
 
+/** The module options an upload through a fake client needs. */
+const UPLOAD_OPTIONS = {
+  bucket: 'b',
+  publicBaseUrl: 'https://cdn.example',
+  multipart: { thresholdBytes: 1e9 },
+}
+
 /** Leaves a `then` that stays on `target` and hands out `forged` as the answer of whatever it is read from. */
 function plantThen(target: object, forged: unknown): void {
   Reflect.defineProperty(target, 'then', {
@@ -135,12 +142,7 @@ describe('a stream the library reads', () => {
   }
 
   it('never lets a listener the host attaches to the body forge the head a validator peeks at', async () => {
-    const options = {
-      bucket: 'b',
-      publicBaseUrl: 'https://cdn.example',
-      multipart: { thresholdBytes: 1e9 },
-      validation: {},
-    }
+    const options = { ...UPLOAD_OPTIONS, validation: {} }
     const peeked: string[] = []
     const stored: string[] = []
     const magic = {
