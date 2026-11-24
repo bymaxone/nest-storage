@@ -9,6 +9,7 @@ import { PassThrough, Readable } from 'node:stream'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { verdictOf } from './settle-or-cut'
+import { settles } from './prototype-guard'
 
 /** Every shape accepted as an upload body. */
 export type UploadBody = Buffer | NodeJS.ReadableStream | Uint8Array
@@ -170,13 +171,39 @@ async function teeAndPeek(
   return { head, replacementBody: uploadPT }
 }
 
+/**
+ * Reads a stream chunk by chunk without `for await`, whose awaits read `constructor` and `then` of every promise
+ * the iterator returns: each `next()` goes through {@link verdictOf} instead, which follows it with the captured
+ * `then`. The stream is released when `take` stops the read, and not when the stream itself failed or ended.
+ *
+ * @param source - The stream to read.
+ * @param take - Receives each chunk; answers `false` to stop reading.
+ */
+async function eachChunk(
+  source: NodeJS.ReadableStream,
+  take: (chunk: unknown) => boolean,
+): Promise<void> {
+  const iterator = (source as AsyncIterable<unknown>)[Symbol.asyncIterator]()
+  let more = true
+  while (more) {
+    const step = await verdictOf(iterator.next())
+    more = step.done !== true && take(step.value)
+    if (step.done !== true && !more) {
+      await verdictOf(iterator.return?.())
+    }
+  }
+}
+
 /** Concatenates every chunk a (size-bounded) stream emits into one Buffer. */
 async function collectStream(stream: PassThrough): Promise<Buffer> {
   const chunks: Buffer[] = []
-  for await (const chunk of stream as AsyncIterable<Buffer>) {
-    chunks.push(chunk)
-  }
-  return Buffer.concat(chunks)
+  await verdictOf(
+    eachChunk(stream, (chunk) => {
+      chunks.push(chunk as Buffer)
+      return true
+    }),
+  )
+  return settles(Buffer.concat(chunks))
 }
 
 /**
@@ -205,15 +232,17 @@ export async function readStreamUpTo(
 ): Promise<Buffer | undefined> {
   const chunks: Buffer[] = []
   let total = 0
-  for await (const chunk of source) {
-    const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
-    total += buf.byteLength
-    if (total > maxBytes) {
-      return undefined
-    }
-    chunks.push(buf)
-  }
-  return Buffer.concat(chunks)
+  let within = true as boolean
+  await verdictOf(
+    eachChunk(source, (chunk) => {
+      const buf = typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer)
+      total += buf.byteLength
+      within = total <= maxBytes
+      if (within) chunks.push(buf)
+      return within
+    }),
+  )
+  return within ? settles(Buffer.concat(chunks)) : undefined
 }
 
 /**
@@ -224,10 +253,13 @@ export async function readStreamUpTo(
  */
 export async function readStream(source: NodeJS.ReadableStream): Promise<Buffer> {
   const chunks: Buffer[] = []
-  for await (const chunk of source) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
-  }
-  return Buffer.concat(chunks)
+  await verdictOf(
+    eachChunk(source, (chunk) => {
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer))
+      return true
+    }),
+  )
+  return settles(Buffer.concat(chunks))
 }
 
 /**

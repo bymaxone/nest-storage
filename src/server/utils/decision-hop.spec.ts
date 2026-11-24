@@ -501,6 +501,25 @@ describe('the hop every decision path goes through', () => {
       expect(() => loadWith('forged', load)).toThrow('not the engine one')
     })
 
+    it.each(loaders)(
+      '%s refuses a slot that is a getter, even one that hands back the real constructor',
+      (_name, load) => {
+        Reflect.defineProperty(proto, 'constructor', {
+          configurable: true,
+          get: () => realConstructor.value as unknown,
+        })
+        try {
+          expect(() => {
+            jest.isolateModules(() => {
+              load()
+            })
+          }).toThrow('not the engine one')
+        } finally {
+          restoreConstructor()
+        }
+      },
+    )
+
     it.each(loaders)('%s loads when the slot is untouched', (_name, load) => {
       expect(() => loadWith(realConstructor.value, load)).not.toThrow()
     })

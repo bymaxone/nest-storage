@@ -69,9 +69,18 @@ note on each entry is the compatibility contract — read it, not the number.
   while its own code runs is never read by the caller's await. A lint rule keeps a bare `await` out of the sources. The tracer receives a copy of the span's start, never the
   promise the library awaits. Not covered: a scanner or validator dependency that reads
   `Promise` statics itself, a replaced `setTimeout` or `clearTimeout` (the library's timers read the live ones), and a
-  `then` planted and erased again between the entry of a call and the moment the work answers, and a host that
-  replaces the `constructor` slot of `Promise.prototype` with a function carrying the engine's prototype before the
-  module loads (a different prototype, or a slot that is not a function, makes the module refuse to load).
+  `then` planted and erased again between the entry of a call and the moment the work answers. A host that replaces
+  the `constructor` slot of `Promise.prototype` before the module loads is refused at load unless the slot still holds
+  the engine's own function as a plain value (a getter, a different prototype or a slot that is not a function makes
+  the module refuse to load).
+
+  A value an async function hands on (a buffer, a stream, a head a validator read, a span's result) is checked for a
+  `then` on itself and on every prototype above it, because the return of an async function reads `then` there; a
+  stream is read step by step through the same hop instead of with `for await`, and the readiness check follows the
+  bucket probe through the promise's own constructor, so a replaced or throwing `Promise[Symbol.species]` neither
+  answers `up` for a bucket that is down nor leaves a rejection unhandled. Not covered: the AWS SDK's own
+  `S3Client.send`, which reads `Promise[Symbol.species]` itself and can leave its own rejection unhandled when a host
+  makes that member throw.
 
   **Apply to a derived backend:** nothing to change. An application that adds a key to `Object.prototype` (a polyfill
   or a library that extends it) now fails at module start-up and on every storage call with

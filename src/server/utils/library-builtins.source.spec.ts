@@ -236,7 +236,7 @@ describe('library built-in calls', () => {
             .replace(/^\s*\/\/.*$/gm, '')
           return [
             ...source.matchAll(
-              /(?<!\bfor\s)\bawait\s+(?!(?:verdictOf|settleOrCut|abortable|allOf)\b)[^\n]{0,40}/g,
+              /\bawait\s+(?!(?:verdictOf|settleOrCut|abortable|allOf|pinnedWork)\b)[^\n]{0,40}/g,
             ),
           ].map((m) => `${path.slice(join(root, '..').length + 1)}: ${m[0]}`)
         }),

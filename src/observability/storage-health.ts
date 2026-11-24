@@ -15,7 +15,6 @@ import { StorageService } from '@bymax-one/nest-storage'
  * `Promise.resolve` a host replaced afterwards cannot turn a `down` into an `up`, because neither is read at a
  * check. The module imports nothing of the server entry's internals, so it holds its own copies.
  */
-const applyCaptured = Reflect.apply
 const getPrototype = Object.getPrototypeOf.bind(Object) as (target: unknown) => object
 const create = Object.create.bind(Object) as (prototype: null) => Record<string, unknown>
 const defineOwn = Object.defineProperty.bind(Object) as (
@@ -23,12 +22,19 @@ const defineOwn = Object.defineProperty.bind(Object) as (
   key: PropertyKey,
   descriptor: PropertyDescriptor,
 ) => unknown
+const getDescriptor = Object.getOwnPropertyDescriptor.bind(Object)
+const hasOwn = Object.hasOwn.bind(Object)
 /**
- * The constructor the promise prototype names, accepted only when it is the engine's: its `prototype` is the
- * prototype an async function's promise has; a slot replaced
- * before this module loaded would otherwise become the baseline.
+ * The constructor the promise prototype names, accepted only when the slot is a data property and the function it
+ * holds is the engine's: its `prototype` is the prototype an async function's promise has. A getter, or a slot
+ * replaced before this module loaded, would otherwise become the baseline.
  */
-function checkedPromise(candidate: unknown, prototype: object): PromiseConstructor {
+function checkedPromise(prototype: object): PromiseConstructor {
+  const slot = getDescriptor(prototype, 'constructor')
+  const candidate =
+    slot !== undefined && !hasOwn(slot, 'get') && !hasOwn(slot, 'set')
+      ? (slot.value as unknown)
+      : undefined
   if (typeof candidate !== 'function' || Reflect.get(candidate, 'prototype') !== prototype) {
     throw new Error('The Promise constructor is not the engine one: refusing to load.')
   }
@@ -40,11 +46,7 @@ const intrinsicPrototype = getPrototype(
     // Nothing to await: only the promise this function returns is read.
   })(),
 )
-const NativePromise = checkedPromise(
-  Reflect.get(intrinsicPrototype, 'constructor'),
-  intrinsicPrototype,
-)
-const nativeThen = Reflect.get(intrinsicPrototype, 'then') as () => unknown
+const NativePromise = checkedPromise(intrinsicPrototype)
 
 /**
  * Gives a promise built here an own, fixed `constructor`, set from a descriptor without a prototype: whoever
@@ -59,19 +61,54 @@ function pinned<P extends Promise<unknown>>(own: P): P {
   return own
 }
 
-/** Chains on `work` with the `then` captured at load; the derived promise is pinned and handled before it is handed on. */
+/**
+ * Fixes the `constructor` of a promise right before it is awaited. `await` of a promise whose `constructor` is the
+ * engine's `Promise` registers its reactions directly: no `then` is looked up and no species is read, so a host
+ * that replaced `then`, or made `Promise[Symbol.species]` answer or throw, is never consulted.
+ *
+ * @throws TypeError when the promise cannot take the property (a frozen one).
+ */
+function pinnedWork<P extends Promise<unknown>>(work: P): P {
+  return pinned(work)
+}
+
+/**
+ * Follows `work` by awaiting it once it is pinned, and settles the chain with what a callback answers. The chain
+ * is a promise built here, never one derived from `work`. A `work` that cannot be followed (a frozen promise) is
+ * answered by `onError`, so a probe that is not understood is `down`. The callbacks do not throw.
+ */
 function chain<T, R>(
   work: Promise<T>,
   onValue: (value: T) => R,
-  onError?: (error: unknown) => R,
+  onError: (error: unknown) => R,
 ): Promise<R> {
-  const derived = pinned(applyCaptured(nativeThen, pinned(work), [onValue, onError]) as Promise<R>)
-  applyCaptured(nativeThen, derived, [ignore, ignore])
-  return derived
+  return pinned(
+    new NativePromise<R>((resolve) => {
+      void follow(work, onValue, onError, resolve)
+    }),
+  )
 }
 
-function ignore(): void {
-  // A settlement nobody reads: the promise is only being marked as handled.
+/** What a probe that failed or was not understood answers. */
+function down(): 'down' {
+  return 'down'
+}
+
+/** Awaits `work` and hands its outcome to the callbacks; it never rejects. */
+async function follow<T, R>(
+  work: Promise<T>,
+  onValue: (value: T) => R,
+  onError: (error: unknown) => R,
+  resolve: (value: R) => void,
+): Promise<void> {
+  let value: T
+  try {
+    value = await pinnedWork(work)
+  } catch (error) {
+    resolve(onError(error))
+    return
+  }
+  resolve(onValue(value))
 }
 
 /** The answer with no prototype, so no `then` anywhere is looked up when it is resolved with. */
@@ -153,13 +190,17 @@ export class StorageHealthIndicator implements HealthIndicator {
     const checked = chain(
       this.storage.checkBucket({ abortSignal: AbortSignal.timeout(STORAGE_HEALTH_TIMEOUT_MS) }),
       () => 'up' as const,
-      () => 'down' as const,
+      down,
     )
-    const running = chain(checked, (status) => {
-      this.#answer = { at: Date.now(), status }
-      this.#running = undefined
-      return status
-    })
+    const running = chain(
+      checked,
+      (status) => {
+        this.#answer = { at: Date.now(), status }
+        this.#running = undefined
+        return status
+      },
+      down,
+    )
     this.#running = running
     return running
   }
@@ -171,24 +212,24 @@ export class StorageHealthIndicator implements HealthIndicator {
   ): Promise<'up' | 'down'> {
     if (signal === undefined) return probe
     if (signal.aborted) {
-      return pinned(
-        new NativePromise<'up' | 'down'>((resolve) => {
-          resolve('down')
-        }),
-      )
+      return new NativePromise<'up' | 'down'>((resolve) => {
+        resolve('down')
+      })
     }
-    return pinned(
-      new NativePromise<'up' | 'down'>((resolve) => {
-        const stop = (): void => {
-          signal.removeEventListener('abort', stop)
-          resolve('down')
-        }
-        signal.addEventListener('abort', stop)
-        void chain(probe, (status) => {
+    return new NativePromise<'up' | 'down'>((resolve) => {
+      const stop = (): void => {
+        signal.removeEventListener('abort', stop)
+        resolve('down')
+      }
+      signal.addEventListener('abort', stop)
+      void chain(
+        probe,
+        (status) => {
           signal.removeEventListener('abort', stop)
           resolve(status)
-        })
-      }),
-    )
+        },
+        stop,
+      )
+    })
   }
 }

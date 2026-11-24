@@ -75,6 +75,8 @@ const defineOwn = Object.defineProperty.bind(Object) as (
 ) => unknown
 const create = Object.create.bind(Object) as (prototype: null) => Record<string, unknown>
 const symbolFor = reflectGet(Symbol, 'for') as (key: string) => symbol
+/** The longest prototype chain {@link settles} walks; chains are a handful deep. */
+const CHAIN_LIMIT = 64
 const exemptSymbol = symbolFor('$$jest-protect-from-deletion')
 const setHas = reflectGet(Set.prototype, 'has')
 const standardNames = new Set(STANDARD_NAMES)
@@ -83,12 +85,18 @@ const weakAdd = reflectGet(WeakSet.prototype, 'add') as (key: object) => unknown
 /** Promises whose species lookup threw: they are refused, though marking them as handled pinned their constructor. */
 const speciesBroken = new WeakSet()
 /**
- * The constructor the `constructor` slot of the promise prototype names, accepted only when it is the engine's: its
- * `prototype` is the very prototype an async function's promise has. A slot a host replaced before this module loaded would otherwise become the baseline.
+ * The constructor the `constructor` slot of the promise prototype names, accepted only when the slot is a data
+ * property and the function it holds is the engine's: its `prototype` is the very prototype an async function's
+ * promise has. A getter, or a slot a host replaced before this module loaded, would otherwise become the baseline.
  *
- * @throws Error when the slot does not name the engine's `Promise`.
+ * @throws Error when the slot is not a data property naming the engine's `Promise`.
  */
-function checkedPromise(candidate: unknown, prototype: object): PromiseConstructor {
+function checkedPromise(prototype: object): PromiseConstructor {
+  const slot = getDescriptor(prototype, 'constructor')
+  const candidate =
+    slot !== undefined && !hasOwn(slot, 'get') && !hasOwn(slot, 'set')
+      ? (slot.value as unknown)
+      : undefined
   if (typeof candidate !== 'function' || reflectGet(candidate, 'prototype') !== prototype) {
     throw new Error('The Promise constructor is not the engine one: refusing to load.')
   }
@@ -104,10 +112,7 @@ const intrinsicPromisePrototype = getPrototype(
   })(),
 )
 /** The `Promise` constructor of the engine, as {@link intrinsicPromisePrototype} names it. */
-export const INTRINSIC_PROMISE = checkedPromise(
-  reflectGet(intrinsicPromisePrototype, 'constructor'),
-  intrinsicPromisePrototype,
-)
+export const INTRINSIC_PROMISE = checkedPromise(intrinsicPromisePrototype)
 /** The engine's own `then`, read at load, to mark a started promise as handled whatever `then` is now. */
 const intrinsicThen = reflectGet(intrinsicPromisePrototype, 'then') as (
   this: Promise<unknown>,
@@ -463,6 +468,32 @@ function isPlantedKey(key: string | symbol): boolean {
 /** One for an own `then` on a carrier that has none at load, which would answer for every value it holds. */
 function carriesThen(carrier: object): number {
   return hasOwn(carrier, 'then') ? 1 : 0
+}
+
+/**
+ * Hands `value` on for an async return, refusing a value that would answer for itself:
+ * returning it from an async function resolves a promise with it, which reads `then` off the value and off every
+ * prototype above it, so an own `then` anywhere on that chain (a getter included) is refused.
+ *
+ * @param value - What the async function is about to return.
+ * @returns `value`, unchanged.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when the value or a prototype above it carries a `then`.
+ * @example
+ *   return settles(Buffer.concat(chunks))
+ */
+export function settles<V>(value: V): V {
+  let node: unknown = value
+  let depth = 0
+  while (
+    depth < CHAIN_LIMIT &&
+    node !== null &&
+    (typeof node === 'object' || typeof node === 'function')
+  ) {
+    if (hasOwn(node, 'then')) throw refusal(1, 0)
+    node = getPrototype(node)
+    depth += 1
+  }
+  return value
 }
 
 /** A fresh refusal per call: typed, counts only, and it names neither a key nor a built-in. */

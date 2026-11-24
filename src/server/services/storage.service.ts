@@ -97,7 +97,7 @@ import { Observed, StorageObserver } from '../observability/storage-observer'
 import { rememberUploadedBytes, uploadedBytesOf } from '../utils/uploaded-bytes'
 import { uploadSingleShot, type UploadContext } from '../utils/upload-single-shot'
 import type { IdempotencyCache } from '../utils/idempotency-cache'
-import { assertCleanRoot } from '../utils/prototype-guard'
+import { assertCleanRoot, settles } from '../utils/prototype-guard'
 import { getObjectInput } from '../utils/get-object-input'
 import { verdictOf } from '../utils/settle-or-cut'
 
@@ -262,12 +262,12 @@ export class StorageService {
     context: Record<string, unknown>,
   ): Promise<UploadBody> {
     if (!this.scanner.isEnabled() || this.scanner.getMode() !== 'pre-upload') {
-      return body
+      return settles(body)
     }
     // A buffer is copied: the caller still holds it, and a change they make while the scan runs would
     // otherwise be stored without having been scanned.
     if (isBufferLike(body)) {
-      return Buffer.from(body)
+      return settles(Buffer.from(body))
     }
     return await verdictOf(
       bufferStreamForScan(body, context, this.options.validation?.maxSizeBytes),

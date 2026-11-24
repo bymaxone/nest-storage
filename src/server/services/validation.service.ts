@@ -15,6 +15,7 @@ import { assertHeaderValues, assertMetadata } from '../utils/header-value'
 import { assertIntegerInput } from '../utils/numeric-input'
 import { readOptionalField } from '../utils/read-once'
 import { verdictOf } from '../utils/settle-or-cut'
+import { settles } from '../utils/prototype-guard'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -109,7 +110,7 @@ export class ValidationService {
       const readBytes = async (maxBytes: number): Promise<Buffer> => {
         const { head, replacementBody } = await verdictOf(peekFirstBytes(body, maxBytes))
         body = replacementBody
-        return head
+        return settles(head)
       }
       const result = await verdictOf(
         validator.validate({
@@ -129,6 +130,6 @@ export class ValidationService {
         })
       }
     }
-    return body
+    return settles(body)
   }
 }

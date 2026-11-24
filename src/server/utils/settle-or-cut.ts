@@ -11,6 +11,7 @@
 import {
   assertCleanRoot,
   boxed,
+  settles,
   follow,
   INTRINSIC_PROMISE,
   markHandled,
@@ -172,7 +173,7 @@ async function waitForVerdict<T, W>(work: W, make: (work: W) => Promise<Box<T>>)
     throw error
   }
   assertCleanRoot()
-  return answer.value
+  return settles(answer.value)
 }
 
 /**
@@ -243,5 +244,5 @@ async function waitOrCut<T, U>(
   // the engine reads `then` of the value it resolves with.
   letGo()
   assertCleanRoot()
-  return answer.value
+  return settles(answer.value)
 }

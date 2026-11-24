@@ -232,4 +232,34 @@ describe('StorageTracing', () => {
     ).resolves.toBe(8)
     await new Promise((resolve) => setImmediate(resolve))
   })
+
+  it('answers with what the operation returned when a span end plants a self-erasing `then` on the root prototype', async () => {
+    const verdict = { status: 'infected', engine: 'av' }
+    startActiveSpan = (_name, _options, fn) => {
+      const planting = span()
+      planting.end.mockImplementation(() => {
+        Reflect.defineProperty(Object.prototype, 'then', {
+          configurable: true,
+          get() {
+            Reflect.deleteProperty(Object.prototype, 'then')
+            return (resolve: (value: unknown) => void) => {
+              resolve({ status: 'clean', engine: 'av' })
+            }
+          },
+        })
+      })
+      return fn(planting)
+    }
+    const tracing = await loaded()
+
+    const outcome = await tracing
+      .span('storage.scan', {}, () => Promise.resolve(verdict))
+      .then(
+        (value) => ({ value }),
+        () => ({ value: undefined }),
+      )
+    Reflect.deleteProperty(Object.prototype, 'then')
+
+    expect(outcome.value === undefined || outcome.value === verdict).toBe(true)
+  })
 })

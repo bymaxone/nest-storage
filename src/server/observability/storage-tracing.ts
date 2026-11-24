@@ -6,7 +6,7 @@ import { Injectable } from '@nestjs/common'
 import type { OnModuleInit } from '@nestjs/common'
 import { StorageException } from '../errors/storage-exception'
 import { absorb } from '../utils/absorb'
-import { tagged } from '../utils/prototype-guard'
+import { settles, tagged } from '../utils/prototype-guard'
 import { mirrorOf, verdictOf } from '../utils/settle-or-cut'
 import { outcomeOf, type StorageOutcome } from './storage-operations'
 
@@ -94,7 +94,8 @@ export class StorageTracing implements OnModuleInit {
     }
     absorb(() => span.setAttributes({ 'bymax.storage.outcome': 'success', ...describe(result) }))
     absorb(() => span.end())
-    return result
+    // The host's span code has run: the check is the last statement before the return.
+    return settles(result)
   }
 
   /**
