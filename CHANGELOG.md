@@ -112,6 +112,13 @@ note on each entry is the compatibility contract — read it, not the number.
   **Apply to a derived backend:** a client that read parameters out of `details.contentType` reads them from the
   request it sent.
 
+### Known limits
+
+- **A call the runtime guard refuses does not touch the body.** When code in the same process adds a property to
+  `Object.prototype` after the library loaded, `upload()` is refused before it owns its body, so a `Readable` passed
+  as `body` is not destroyed and the caller still owns it and must close it. An upload rejected for any other reason
+  destroys the stream, as before.
+
 ## [1.1.21] - 2026-11-21
 
 ### Fixed
