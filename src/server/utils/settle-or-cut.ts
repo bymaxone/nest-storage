@@ -1,11 +1,11 @@
 /**
  * @fileoverview Waits for a piece of work or for a cut, whichever comes first, without calling
  * `Promise.race`, `Promise.resolve` or any other static of `Promise` at the moment of the wait. Those
- * statics are read off the global at every call, so a host that replaced one after load could answer
+ * statics are read off the global at every call, so one replaced after load could answer
  * a scan or a validation with a verdict of its own; the outcome here is read through the native
  * promise this module built from the constructor it captured at load. The root guard runs
- * synchronously right before each await of a verdict, and again right after it, so no member a
- * host replaced can run between the check and the await.
+ * synchronously right before each await of a verdict, and again right after it, so a member replaced
+ * before the check is refused; host code that runs after the last check is trusted (see SECURITY.md).
  * @layer server/utils
  */
 import {

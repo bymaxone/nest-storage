@@ -60,8 +60,9 @@ note on each entry is the compatibility contract — read it, not the number.
 
   A scan verdict, a validation result and a multipart upload id are read with `await` on a promise built from the
   `Promise` constructor captured at load, with no `Promise.race`, `Promise.resolve`, `Promise.all` or `then` on the
-  path, so a host that replaces one of them after load cannot turn an infected or rejected result into an accepted
-  one. The `constructor` of the promise prototype joins the baseline, and a host that replaces it makes the library
+  path, so replacing one of them after load does not turn an infected or rejected result into an accepted
+  one. These checks are best-effort hardening, not a security boundary: code in the same process is trusted (see
+  SECURITY.md, "Threat model: same-process code"). The `constructor` of the promise prototype joins the baseline, and a host that replaces it makes the library
   refuse every call.
 
   Every `await` on a decision path goes through one hop: the work is followed with the `then` captured at load, the root check runs

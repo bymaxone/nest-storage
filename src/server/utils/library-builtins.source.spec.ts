@@ -71,7 +71,7 @@ const DETECTED = new Set([
 /** Calls the guard does not detect, each with the reason it cannot move a limit or a request. */
 const EXEMPT: Record<string, string> = {
   'Promise.resolve':
-    'the no-op validator and scanner and the hook absorber, each with a fixed answer; the files that carry a verdict never call it (the row below)',
+    'the no-op validator and scanner return a fixed answer through it and the hook absorber discards what it returns; a replaced `Promise.resolve` could change the no-op answer, which is the same-process trust SECURITY.md states; the files that carry a verdict from host code never call it (the row below)',
   'Date.now':
     'a clock read for a metric and for the `expiresAt` shown to a caller; the signed expiry is `expiresIn`, which the presigner computes',
   'AbortSignal.timeout': 'a deadline timer; the request is aborted, never widened',

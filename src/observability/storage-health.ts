@@ -12,8 +12,8 @@ import { StorageService } from '@bymax-one/nest-storage'
 
 /**
  * What the readiness verdict is built from, taken when this module loads: a `Promise.prototype.then` or a
- * `Promise.resolve` a host replaced afterwards cannot turn a `down` into an `up`, because neither is read at a
- * check. The module imports nothing of the server entry's internals, so it holds its own copies.
+ * `Promise.resolve` replaced afterwards does not turn a `down` into an `up`, because neither is read at a
+ * check (best-effort: code in the same process is trusted, see SECURITY.md). The module imports nothing of the server entry's internals, so it holds its own copies.
  */
 const getPrototype = Object.getPrototypeOf.bind(Object) as (target: unknown) => object
 const create = Object.create.bind(Object) as (prototype: null) => Record<string, unknown>

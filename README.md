@@ -1087,7 +1087,7 @@ name) while one differs: a key on `Object.prototype`, a replaced standard method
 `Promise` member the verdicts depend on (the `constructor` of the promise prototype). A scan verdict,
 a validation result and an upload id are read with `await` on a promise built from the constructor
 captured at load, so replacing `Promise.race`, `Promise.resolve`, `Promise.all` or `Promise.prototype.then`
-after load cannot turn an infected or rejected result into an accepted one. A tracing agent that wraps
+after load does not turn an infected or rejected result into an accepted one. These checks are best-effort hardening, not a security boundary: code in the same process is trusted (see [SECURITY.md](./SECURITY.md), "Threat model: same-process code"). A tracing agent that wraps
 `then` and delegates is not refused; a host that replaces `Promise.prototype.constructor` after load
 makes the library refuse every call. A replacement made before the library is imported is not seen, except that a `constructor` slot of the promise prototype that is not the engine's own function as a plain value makes the module refuse to load. A scanner or validator dependency that reads `Promise` statics itself is not covered, and neither is a `then` planted and erased again between the entry of a call and the moment the work answers.
 
