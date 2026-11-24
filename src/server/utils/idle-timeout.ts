@@ -91,6 +91,9 @@ export function withIdleTimeout(
   toError?: (error: Error) => Error,
 ): Readable {
   const iterator = source[Symbol.asyncIterator]() as AsyncIterator<Buffer | string>
+  // The runtime is scanned before the first bytes are handed on and again when the source ends, not for every
+  // chunk: a scan walks every guarded built-in, and a stream of many chunks would pay it as often.
+  let scanned = false
   const wrapper = new Readable({
     objectMode: false,
     // No read-ahead: with a buffer to fill, Node calls read() while the consumer is paused, and the
@@ -106,8 +109,12 @@ export function withIdleTimeout(
         idleMs,
         (step) => {
           try {
-            // The runtime is checked right before the bytes are handed on, so a replaced built-in is refused here.
-            assertCleanRoot()
+            // A replaced built-in is refused before the first bytes are handed on, and one planted later and left
+            // in place is refused when the source ends, before the stream is closed as complete.
+            if (!scanned || step.done === true) {
+              assertCleanRoot()
+              scanned = true
+            }
             wrapper.push(step.done === true ? null : step.value)
           } catch (error) {
             fail(error)

@@ -107,6 +107,9 @@ Known limits:
 - A `then` or a `Promise[Symbol.species]` that is planted and erased again inside one call is not seen.
 - A replacement made before the library is imported is not seen, and a dependency that reads `Promise` statics
   itself is not covered.
+- `StorageService.exists()` and `StorageService.downloadBuffer()` return their own promise, not a pinned one, so a
+  `then` or `constructor` replaced on `Promise.prototype` after load is not checked on those two calls: the refusal
+  the library raises reaches the caller through the replaced member, which can report success.
 
 ---
 
