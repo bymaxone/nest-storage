@@ -58,6 +58,12 @@ note on each entry is the compatibility contract — read it, not the number.
   fixed reason, names no key or built-in, reaches the caller unchanged (`exists()` rethrows it), and nothing is handed
   to the HTTP handler. A replacement made before the library is imported is not seen.
 
+  A scan verdict, a validation result and a multipart upload id are read with `await` on a promise built from the
+  `Promise` constructor captured at load, with no `Promise.race`, `Promise.resolve`, `Promise.all` or `then` on the
+  path, so a host that replaces one of them after load cannot turn an infected or rejected result into an accepted
+  one. The `constructor` of the promise prototype joins the baseline, and a host that replaces it makes the library
+  refuse scans.
+
   **Apply to a derived backend:** nothing to change. An application that adds a key to `Object.prototype` (a polyfill
   or a library that extends it) now fails at module start-up and on every storage call with
   `STORAGE_VALIDATION_FAILED`; remove the extension.

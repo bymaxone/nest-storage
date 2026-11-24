@@ -50,9 +50,10 @@ const DETECTED = new Set([
 
 /** Calls the guard does not detect, each with the reason it cannot move a limit or a request. */
 const EXEMPT: Record<string, string> = {
-  'Promise.resolve': 'scheduling only; no decision reads its result',
-  'Promise.race': 'scheduling only; no decision reads its result',
-  'Promise.all': 'scheduling only; no decision reads its result',
+  'Promise.resolve':
+    'the no-op validator and scanner and the hook absorber, each with a fixed answer; the files that carry a verdict never call it (the row below)',
+  'Promise.all':
+    'builds the list of presigned part URLs a caller receives; no library decision reads it',
   'Date.now':
     'a clock read for a metric and for the `expiresAt` shown to a caller; the signed expiry is `expiresIn`, which the presigner computes',
   'AbortSignal.timeout': 'a deadline timer; the request is aborted, never widened',
@@ -97,8 +98,8 @@ function callsFound(): Set<string> {
  * receiver the sources actually use.
  */
 const OUTSIDE_METHODS: Record<string, string> = {
-  then: 'Promise scheduling; no decision reads it',
-  catch: 'Promise scheduling; no decision reads it',
+  then: 'the hook absorber, which drops a failure, and the idle wrapper, which hands the source its own chunks on; every verdict, id and size is read by `await`',
+  catch: 'drops the rejection of work nobody waits for any more; it carries no verdict',
   toString:
     'called on numbers (`Number.prototype`, in the baseline), never an Error, Date or URLSearchParams',
   get: "called on Map, WeakMap, Reflect and the library's own cache (the first three in the baseline), never a URLSearchParams",
@@ -160,6 +161,26 @@ describe('library built-in calls', () => {
       .filter((key) => !found.has(key))
       .sort()
     expect(stale).toEqual([])
+  })
+
+  it('reads no verdict, id or size through a static of Promise or through `then`', () => {
+    // `await` on a native promise does not look `then` up, and a static such as `Promise.race` is read
+    // off the global at each call, so a replaced one could answer a scan or a validation as it likes.
+    const verdictFiles = [
+      'services/file-scanner.service.ts',
+      'services/validation.service.ts',
+      'services/storage.service.ts',
+      'utils/abort-support.ts',
+      'utils/multipart-abort.ts',
+      'utils/multipart-failure.ts',
+    ]
+    const calls = verdictFiles.flatMap((file) => {
+      const source = readFileSync(join(root, file), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '')
+      return [...source.matchAll(/\bPromise\.\w+\(|\.then\(/g)].map((m) => `${file}: ${m[0]}`)
+    })
+    expect(calls).toEqual([])
   })
 
   it('accepts the realm as loaded', () => {

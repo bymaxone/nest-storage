@@ -1078,6 +1078,18 @@ passed (see _What `details` repeats_). Neither the text of the provider nor anyt
 in it. An object key you passed still reaches whatever consumes the exception, so if a key is itself
 sensitive in your deployment, do not log the envelope verbatim.
 
+### The runtime must stay as the library found it
+
+The library compares the built-ins its decisions read with how they were when it loaded, and refuses
+every public call and every attempt of every command with `STORAGE_VALIDATION_FAILED` (counts only, no
+name) while one differs: a key on `Object.prototype`, a replaced standard method, or a replaced
+`Promise` member the verdicts depend on (the `constructor` of the promise prototype). A scan verdict,
+a validation result and an upload id are read with `await` on a promise built from the constructor
+captured at load, so replacing `Promise.race`, `Promise.resolve`, `Promise.all` or `Promise.prototype.then`
+after load cannot turn an infected or rejected result into an accepted one. A tracing agent that wraps
+`then` and delegates is not refused; a host that replaces `Promise.prototype.constructor` after load
+makes the library refuse scans. A replacement made before the library is imported is not seen.
+
 ### `keyPrefix` is a namespace, not an access boundary
 
 It scopes the keys this library composes; it does not restrict what the credentials can reach. Anything

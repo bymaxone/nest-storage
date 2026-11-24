@@ -75,7 +75,18 @@ export function closeWhenCreated(
   created: Promise<string | undefined>,
   onFailure?: (err: unknown) => void,
 ): void {
-  void created.then((uploadId) => closeMultipartUpload(client, bucket, key, uploadId, onFailure))
+  void closeAfter(client, bucket, key, created, onFailure)
+}
+
+/** Waits for the id and closes that upload; the id is read by `await`, which a replaced `then` does not reach. */
+async function closeAfter(
+  client: S3Client,
+  bucket: string,
+  key: string,
+  created: Promise<string | undefined>,
+  onFailure: ((err: unknown) => void) | undefined,
+): Promise<void> {
+  await closeMultipartUpload(client, bucket, key, await created, onFailure)
 }
 
 /**

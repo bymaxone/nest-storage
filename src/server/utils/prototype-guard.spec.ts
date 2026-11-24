@@ -236,6 +236,10 @@ describe('assertCleanRoot', () => {
       ],
       ['the URL username getter', () => swapGetter(URL.prototype, 'username', () => '')],
       ['the URL password getter', () => swapGetter(URL.prototype, 'password', () => '')],
+      [
+        'Promise.prototype.constructor',
+        () => swap(Promise.prototype, 'constructor', class Other {}),
+      ],
       ['the Set binding', () => swapGlobal('Set', class Other {})],
       ['the Buffer binding', () => swapGlobal('Buffer', class Other {})],
       ...BOUND_GLOBALS.map((name): [string, () => () => void] => [
@@ -279,7 +283,11 @@ describe('assertCleanRoot', () => {
         restore()
       }
       const replacedReason = reasonOf(replacedError)
-      Object.defineProperty(Object.prototype, 'ACL', { value: 1, configurable: true, writable: true })
+      Object.defineProperty(Object.prototype, 'ACL', {
+        value: 1,
+        configurable: true,
+        writable: true,
+      })
       try {
         expect(replacedReason).toBe('a built-in was replaced after the library loaded')
         expect(reasonOf(refusal())).toBe(
@@ -402,7 +410,6 @@ describe('assertCleanRoot', () => {
 })
 
 const define = Object.defineProperty.bind(Object)
-
 
 function swapSetter(target: object, name: string, value: () => unknown): () => void {
   const original = descriptorOf(target, name)

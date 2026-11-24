@@ -178,6 +178,9 @@ function readBaseline(): void {
     capture(Buffer, item(BUFFER_CALLS, at))
     at += 1
   }
+  // `await` takes a promise's own resolution only while its `constructor` is the native one; any other
+  // value sends it through a `then` lookup. It is a data property that no instrumentation rewrites.
+  capture(Promise.prototype, 'constructor')
   at = 0
   // Stryker disable next-line EqualityOperator: an index past the list reads the global `undefined` at load and at every check (equivalent).
   while (at < GLOBALS.length) {
