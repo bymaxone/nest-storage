@@ -144,6 +144,31 @@ describe('a promise returned from a decision path', () => {
     expect(live).toBe(false)
   })
 
+  it('from a decorated method that refuses the dirty runtime is awaited without a call to the live then', async () => {
+    class Service {
+      @Observed('head')
+      method(): Promise<string> {
+        return Promise.resolve('real')
+      }
+    }
+    const host = openWindow()
+    let live: boolean
+    let refusal: unknown
+    try {
+      host.plant()
+      const returned = new Service().method()
+      refusal = await returned.catch((error: unknown) => error)
+      live = await liveThenCalledOn(new Service().method(), host)
+    } finally {
+      host.restore()
+    }
+
+    expect(refusal).toMatchObject({
+      response: { error: { code: STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED } },
+    })
+    expect(live).toBe(false)
+  })
+
   it('from the span seam is awaited without a call to the live then', async () => {
     const tracing = new StorageTracing()
     await tracing.onModuleInit()

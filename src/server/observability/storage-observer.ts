@@ -138,7 +138,8 @@ export function Observed<T = unknown>(
           this.observer === undefined ? run() : this.observer.observe(operation, run, options),
         )
       } catch (error) {
-        return rejectedWith<T>(error)
+        // Tagged like the success path: the refusal is awaited by the same caller, through the same `constructor`.
+        return tagged(rejectedWith<T>(error))
       }
     }
   }
