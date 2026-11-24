@@ -71,8 +71,7 @@ note on each entry is the compatibility contract — read it, not the number.
   `Promise` statics itself, a replaced `setTimeout` or `clearTimeout` (the library's timers read the live ones), and a
   `then` planted and erased again between the entry of a call and the moment the work answers. A host that replaces
   the `constructor` slot of `Promise.prototype` before the module loads is refused at load unless the slot still holds
-  the engine's own function as a plain value (a getter, a different prototype or a slot that is not a function makes
-  the module refuse to load).
+  the engine's own function as a plain value.
 
   A value an async function hands on (a buffer, a stream, a head a validator read, a span's result) is checked for a
   `then` on itself and on every prototype above it, because the return of an async function reads `then` there; a
