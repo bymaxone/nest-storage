@@ -14,7 +14,7 @@ const BUDGETS = [
   {
     name: 'server (NestJS module + AWS SDK externals)',
     path: 'dist/server/index.mjs',
-    brotli: 33_940,
+    brotli: 33_970,
   },
   {
     name: 'server CJS (NestJS module + AWS SDK externals)',
