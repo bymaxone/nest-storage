@@ -15,17 +15,70 @@ import { StorageService } from '@bymax-one/nest-storage'
  * `Promise.resolve` a host replaced afterwards cannot turn a `down` into an `up`, because neither is read at a
  * check. The module imports nothing of the server entry's internals, so it holds its own copies.
  */
-const NativePromise = Promise
-const nativeThen = Reflect.get(Promise.prototype, 'then') as () => unknown
 const applyCaptured = Reflect.apply
+const getPrototype = Object.getPrototypeOf.bind(Object) as (target: unknown) => object
+const create = Object.create.bind(Object) as (prototype: null) => Record<string, unknown>
+const defineOwn = Object.defineProperty.bind(Object) as (
+  target: object,
+  key: PropertyKey,
+  descriptor: PropertyDescriptor,
+) => unknown
+/**
+ * The constructor the promise prototype names, accepted only when it is the engine's: its `prototype` is the
+ * prototype an async function's promise has; a slot replaced
+ * before this module loaded would otherwise become the baseline.
+ */
+function checkedPromise(candidate: unknown, prototype: object): PromiseConstructor {
+  if (typeof candidate !== 'function' || Reflect.get(candidate, 'prototype') !== prototype) {
+    throw new Error('The Promise constructor is not the engine one: refusing to load.')
+  }
+  return candidate as PromiseConstructor
+}
+/** The engine's own promise prototype, read from an async function's promise and not from the global binding. */
+const intrinsicPrototype = getPrototype(
+  (async (): Promise<void> => {
+    // Nothing to await: only the promise this function returns is read.
+  })(),
+)
+const NativePromise = checkedPromise(
+  Reflect.get(intrinsicPrototype, 'constructor'),
+  intrinsicPrototype,
+)
+const nativeThen = Reflect.get(intrinsicPrototype, 'then') as () => unknown
 
-/** Chains on `work` with the `then` captured at load. */
+/**
+ * Gives a promise built here an own, fixed `constructor`, set from a descriptor without a prototype: whoever
+ * awaits it reads that, never the one on the prototype, which a host hook may have replaced since load.
+ */
+function pinned<P extends Promise<unknown>>(own: P): P {
+  const pin = create(null)
+  pin.value = NativePromise
+  pin.configurable = false
+  pin.writable = false
+  defineOwn(own, 'constructor', pin)
+  return own
+}
+
+/** Chains on `work` with the `then` captured at load; the derived promise is pinned and handled before it is handed on. */
 function chain<T, R>(
   work: Promise<T>,
   onValue: (value: T) => R,
   onError?: (error: unknown) => R,
 ): Promise<R> {
-  return applyCaptured(nativeThen, work, [onValue, onError]) as Promise<R>
+  const derived = pinned(applyCaptured(nativeThen, pinned(work), [onValue, onError]) as Promise<R>)
+  applyCaptured(nativeThen, derived, [ignore, ignore])
+  return derived
+}
+
+function ignore(): void {
+  // A settlement nobody reads: the promise is only being marked as handled.
+}
+
+/** The answer with no prototype, so no `then` anywhere is looked up when it is resolved with. */
+function answerOf(status: 'up' | 'down'): HealthIndicatorResult {
+  const answer = create(null)
+  answer.status = status
+  return answer as unknown as HealthIndicatorResult
 }
 
 /** The outcome of one readiness check. */
@@ -72,13 +125,27 @@ export class StorageHealthIndicator implements HealthIndicator {
   constructor(@Inject(StorageService) private readonly storage: StorageService) {}
 
   /** Whether the bucket answers in time; the aggregator's signal ends this caller's wait. */
-  async check(signal?: AbortSignal): Promise<HealthIndicatorResult> {
+  check(signal?: AbortSignal): Promise<HealthIndicatorResult> {
     const kept = this.#answer
     if (kept !== undefined && Date.now() - kept.at < STORAGE_HEALTH_CACHE_MS) {
-      return { status: kept.status }
+      return pinned(
+        new NativePromise<HealthIndicatorResult>((resolve) => {
+          resolve(answerOf(kept.status))
+        }),
+      )
     }
-    const status = await this.waitFor(this.#running ?? this.probe(), signal)
-    return { status }
+    // Followed with the captured `then`, never awaited: the answer is built here, after the last step that could
+    // run host code, and handed on without a prototype.
+    return pinned(
+      new NativePromise<HealthIndicatorResult>((resolve) => {
+        const settle = (status: 'up' | 'down'): void => {
+          resolve(answerOf(status))
+        }
+        void chain(this.waitFor(this.#running ?? this.probe(), signal), settle, () => {
+          settle('down')
+        })
+      }),
+    )
   }
 
   /** The shared probe: one `HeadBucket` under its own deadline, remembered when it ends. */
@@ -104,20 +171,24 @@ export class StorageHealthIndicator implements HealthIndicator {
   ): Promise<'up' | 'down'> {
     if (signal === undefined) return probe
     if (signal.aborted) {
-      return new NativePromise((resolve) => {
-        resolve('down')
-      })
+      return pinned(
+        new NativePromise<'up' | 'down'>((resolve) => {
+          resolve('down')
+        }),
+      )
     }
-    return new NativePromise((resolve) => {
-      const stop = (): void => {
-        signal.removeEventListener('abort', stop)
-        resolve('down')
-      }
-      signal.addEventListener('abort', stop)
-      void chain(probe, (status) => {
-        signal.removeEventListener('abort', stop)
-        resolve(status)
-      })
-    })
+    return pinned(
+      new NativePromise<'up' | 'down'>((resolve) => {
+        const stop = (): void => {
+          signal.removeEventListener('abort', stop)
+          resolve('down')
+        }
+        signal.addEventListener('abort', stop)
+        void chain(probe, (status) => {
+          signal.removeEventListener('abort', stop)
+          resolve(status)
+        })
+      }),
+    )
   }
 }

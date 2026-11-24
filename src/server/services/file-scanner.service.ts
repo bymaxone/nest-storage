@@ -149,7 +149,9 @@ export class FileScannerService {
     }
     const scanner = this.scanner
     const run = (): Promise<FileScanResult> => this.evaluate(scanner, input, caller)
-    return await (this.observer === undefined ? run() : this.observer.scan(input.mode, run))
+    return await verdictOf(
+      this.observer === undefined ? run() : this.observer.scan(input.mode, run),
+    )
   }
 
   /** Runs the scanner and applies the library's policy to what it answered. */

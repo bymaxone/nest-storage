@@ -26,10 +26,15 @@ import { Observed, StorageObserver } from '../observability/storage-observer'
 import { StorageException } from '../errors/storage-exception'
 import { callDetails } from '../utils/call-details'
 import { resolveBucket as resolveBucketInput } from '../utils/call-input'
-import { readLifecycleBucket, readLifecycleRule, type LooseLifecycleRule } from '../utils/request-fields'
+import {
+  readLifecycleBucket,
+  readLifecycleRule,
+  type LooseLifecycleRule,
+} from '../utils/request-fields'
 import { isNoLifecycleConfiguration, mapLifecycleError } from '../errors/lifecycle-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { assertCleanRoot } from '../utils/prototype-guard'
+import { verdictOf } from '../utils/settle-or-cut'
 
 /**
  * The rule-level `Prefix` that AWS deprecated in favour of `Filter`, read by key so the
@@ -103,7 +108,9 @@ export class BucketLifecycleService {
     const options = readLifecycleBucket(scoped)
     this.assertConfigured()
     const bucket = this.resolveBucket(options.bucket)
-    return (await this.read(bucket, options.bucket)).rules.map((rule) => this.toView(rule))
+    return (await verdictOf(this.read(bucket, options.bucket))).rules.map((rule) =>
+      this.toView(rule),
+    )
   }
 
   /**
@@ -125,7 +132,7 @@ export class BucketLifecycleService {
     this.assertConfigured()
     const owned = this.toRule(readLifecycleRule(input))
     const bucket = this.resolveBucket(options.bucket)
-    const snapshot = await this.read(bucket, options.bucket)
+    const snapshot = await verdictOf(this.read(bucket, options.bucket))
     const index = snapshot.rules.findIndex((existing) => existing.ID === owned.ID)
     this.assertOwnable(snapshot.rules[index])
     const rules = [...snapshot.rules]
@@ -134,7 +141,7 @@ export class BucketLifecycleService {
     } else {
       rules[index] = owned
     }
-    await this.write(bucket, options.bucket, rules, snapshot, 'upsert')
+    await verdictOf(this.write(bucket, options.bucket, rules, snapshot, 'upsert'))
   }
 
   /**
@@ -154,14 +161,14 @@ export class BucketLifecycleService {
     this.assertConfigured()
     this.assertRuleId(id)
     const bucket = this.resolveBucket(options.bucket)
-    const snapshot = await this.read(bucket, options.bucket)
+    const snapshot = await verdictOf(this.read(bucket, options.bucket))
     const target = snapshot.rules.find((existing) => existing.ID === id)
     if (target === undefined) {
       return false
     }
     this.assertOwnable(target)
     const rules = snapshot.rules.filter((existing) => existing.ID !== id)
-    await this.write(bucket, options.bucket, rules, snapshot, 'remove')
+    await verdictOf(this.write(bucket, options.bucket, rules, snapshot, 'remove'))
     return true
   }
 
@@ -193,7 +200,9 @@ export class BucketLifecycleService {
       return
     }
     if (!this.isWithinKeyPrefix(existing)) {
-      throw ruleInvalid('A rule with this id exists outside the module keyPrefix and is not changed')
+      throw ruleInvalid(
+        'A rule with this id exists outside the module keyPrefix and is not changed',
+      )
     }
   }
 
@@ -226,9 +235,11 @@ export class BucketLifecycleService {
   /** Reads the configuration; "none yet" is an empty snapshot. */
   private async read(bucket: string, perCall: string | undefined): Promise<LifecycleSnapshot> {
     try {
-      const response = await this.s3Provider
-        .getClient()
-        .send(new GetBucketLifecycleConfigurationCommand({ Bucket: bucket }))
+      const response = await verdictOf(
+        this.s3Provider
+          .getClient()
+          .send(new GetBucketLifecycleConfigurationCommand({ Bucket: bucket })),
+      )
       return {
         rules: response.Rules ?? [],
         transitionDefaultMinimumObjectSize: response.TransitionDefaultMinimumObjectSize,
@@ -256,17 +267,19 @@ export class BucketLifecycleService {
     const client = this.s3Provider.getClient()
     try {
       if (rules.length === 0) {
-        await client.send(new DeleteBucketLifecycleCommand({ Bucket: bucket }))
+        await verdictOf(client.send(new DeleteBucketLifecycleCommand({ Bucket: bucket })))
         return
       }
-      await client.send(
-        new PutBucketLifecycleConfigurationCommand({
-          Bucket: bucket,
-          LifecycleConfiguration: { Rules: rules },
-          ...(snapshot.transitionDefaultMinimumObjectSize !== undefined
-            ? { TransitionDefaultMinimumObjectSize: snapshot.transitionDefaultMinimumObjectSize }
-            : {}),
-        }),
+      await verdictOf(
+        client.send(
+          new PutBucketLifecycleConfigurationCommand({
+            Bucket: bucket,
+            LifecycleConfiguration: { Rules: rules },
+            ...(snapshot.transitionDefaultMinimumObjectSize !== undefined
+              ? { TransitionDefaultMinimumObjectSize: snapshot.transitionDefaultMinimumObjectSize }
+              : {}),
+          }),
+        ),
       )
     } catch (err) {
       throw mapLifecycleError(err, callDetails(`lifecycle.${op}`, { bucket: perCall }))
@@ -288,7 +301,8 @@ export class BucketLifecycleService {
       }
       // An empty abort prefix is the module's whole namespace (aborting a stale upload deletes
       // no object); the key guard itself needs a non-empty key.
-      const prefix = rule.prefix === '' ? this.keyResolver.getPrefix() : this.keyResolver.normalize(rule.prefix)
+      const prefix =
+        rule.prefix === '' ? this.keyResolver.getPrefix() : this.keyResolver.normalize(rule.prefix)
       return {
         ID: id,
         Status: 'Enabled',

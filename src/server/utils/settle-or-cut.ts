@@ -50,7 +50,7 @@ interface Box<V> {
  * The outcome of `work` as a native promise of a box, followed without a live `then` and without resolving
  * with the answer itself, so a `then` on its prototype chain is never looked up either.
  */
-function settled<T>(work: PromiseLike<T>): Promise<Box<T>> {
+function settled<T>(work: T | PromiseLike<T>): Promise<Box<T>> {
   return new NativePromise<Box<T>>((resolve, reject) => {
     follow(
       work,
@@ -60,6 +60,32 @@ function settled<T>(work: PromiseLike<T>): Promise<Box<T>> {
       reject,
     )
   })
+}
+
+/**
+ * A copy of how `work` ends, for a party that is not the caller: a native promise of `undefined` that follows
+ * `work` with the captured `then`, with its own handled marker, so nothing the party does to the copy reaches
+ * the promise the caller awaits.
+ *
+ * @param work - The promise to mirror; nothing is mirrored when it is missing.
+ * @returns A pinned, handled native promise.
+ */
+export function mirrorOf(work: PromiseLike<unknown> | undefined): Promise<undefined> {
+  const mirror = new NativePromise<undefined>((resolve, reject) => {
+    if (work === undefined) {
+      resolve(undefined)
+      return
+    }
+    follow(
+      work,
+      () => {
+        resolve(undefined)
+      },
+      reject,
+    )
+  })
+  markOwnHandled(mirror)
+  return mirror
 }
 
 /** Nothing was armed. */
@@ -77,15 +103,64 @@ function disarmed(): void {
  * @example
  *   const result = await verdictOf(scanner.scan(input))
  */
-export function verdictOf<T>(work: PromiseLike<T>): Promise<T> {
+export function verdictOf<T>(work: T | PromiseLike<T>): Promise<T> {
   // Tagged once the synchronous start, which can run a host's `then`, is over: the caller's await reads it next.
-  return tagged(waitForVerdict(work))
+  return tagged(waitForVerdict(work, settled<T>))
 }
 
-async function waitForVerdict<T>(work: PromiseLike<T>): Promise<T> {
-  markHandled(work)
+/**
+ * Waits for every item, as `Promise.all` would, without reading the static or a live `then`: each item is
+ * followed with the captured `then`, and the list travels in a box without a prototype. The first rejection
+ * ends the wait. The runtime is checked right before the await and again after it, as in {@link verdictOf}.
+ *
+ * @param items - The promises or values to wait for.
+ * @returns Their answers, in order.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when the runtime differs from the one at load.
+ * @example
+ *   const urls = await allOf(parts.map((part) => sign(part)))
+ */
+export function allOf<T>(items: readonly (T | PromiseLike<T>)[]): Promise<T[]> {
+  // Every item is marked before the first check, so a refusal of the runtime leaves none of them unhandled.
+  let at = 0
+  while (at < items.length) {
+    markHandled(items[at] as PromiseLike<unknown>)
+    at += 1
+  }
+  return tagged(waitForVerdict(items, joined<T>))
+}
+
+/** Every item followed, answered as one box. */
+function joined<T>(items: readonly (T | PromiseLike<T>)[]): Promise<Box<T[]>> {
+  return new NativePromise<Box<T[]>>((resolve, reject) => {
+    const answers: T[] = []
+    let left = items.length
+    if (left === 0) {
+      resolve(boxed(answers))
+      return
+    }
+    let at = 0
+    while (at < items.length) {
+      const index = at
+      const item = items[index] as T | PromiseLike<T>
+      at += 1
+      follow(
+        item,
+        (value) => {
+          answers[index] = value
+          left -= 1
+          if (left === 0) resolve(boxed(answers))
+        },
+        reject,
+      )
+      markHandled(item as PromiseLike<unknown>)
+    }
+  })
+}
+
+async function waitForVerdict<T, W>(work: W, make: (work: W) => Promise<Box<T>>): Promise<T> {
+  markHandled(work as PromiseLike<unknown>)
   assertCleanRoot()
-  const wait = settled(work)
+  const wait = make(work)
   markOwnHandled(wait)
   let answer: Box<T>
   // The statement before the await, so nothing replaceable runs between the check and the await.

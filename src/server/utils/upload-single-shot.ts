@@ -19,6 +19,7 @@ import {
   normalizeSingleShotBody,
   putObjectHeaders,
 } from './upload-support'
+import { verdictOf } from './settle-or-cut'
 
 /** What a single-shot upload needs of the service that runs it. */
 export interface UploadContext {
@@ -55,9 +56,9 @@ export async function uploadSingleShot(
   }
   const watch = abortOnBodyFailure(input.Body, abortSignal)
   try {
-    const response = await context.s3Provider
-      .getClient()
-      .send(new PutObjectCommand(input), sendOptions(watch.signal))
+    const response = await verdictOf(
+      context.s3Provider.getClient().send(new PutObjectCommand(input), sendOptions(watch.signal)),
+    )
     if (onProgress) {
       emitProgress(onProgress, total, total)
     }

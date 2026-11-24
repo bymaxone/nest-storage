@@ -7,6 +7,7 @@ import type { OnModuleInit } from '@nestjs/common'
 import { StorageException } from '../errors/storage-exception'
 import { absorb } from '../utils/absorb'
 import { tagged } from '../utils/prototype-guard'
+import { mirrorOf, verdictOf } from '../utils/settle-or-cut'
 import { outcomeOf, type StorageOutcome } from './storage-operations'
 
 /** The span names the library starts. */
@@ -69,7 +70,7 @@ export class StorageTracing implements OnModuleInit {
   /** Loads the API once, at start-up; a package that is not there leaves the seam inert. */
   async onModuleInit(): Promise<void> {
     try {
-      const loaded: unknown = await import('@opentelemetry/api')
+      const loaded: unknown = await verdictOf(import('@opentelemetry/api'))
       this.#api = loaded as OtelApi
     } catch {
       // The package is not installed: the seam stays inert.
@@ -84,7 +85,7 @@ export class StorageTracing implements OnModuleInit {
   ): Promise<T> {
     let result: T
     try {
-      result = await run()
+      result = await verdictOf(run())
     } catch (error) {
       absorb(() => span.setAttributes({ 'bymax.storage.outcome': outcomeOf(error) }))
       absorb(() => span.setStatus({ code: STATUS_ERROR, message: codeOf(error) }))
@@ -135,7 +136,9 @@ export class StorageTracing implements OnModuleInit {
           latch.claimed = true
           latch.started = this.traced(span, run, describe)
         }
-        return latch.started
+        // The host gets a copy of the outcome, never the promise the caller awaits: a hook of its own on that
+        // promise could plant a constructor or a `then` on it.
+        return mirrorOf(latch.started)
       }),
     )
     if (latch.started) return latch.started

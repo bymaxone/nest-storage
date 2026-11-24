@@ -52,8 +52,6 @@ const DETECTED = new Set([
 const EXEMPT: Record<string, string> = {
   'Promise.resolve':
     'the no-op validator and scanner and the hook absorber, each with a fixed answer; the files that carry a verdict never call it (the row below)',
-  'Promise.all':
-    'builds the list of presigned part URLs a caller receives; no library decision reads it',
   'Date.now':
     'a clock read for a metric and for the `expiresAt` shown to a caller; the signed expiry is `expiresIn`, which the presigner computes',
   'AbortSignal.timeout': 'a deadline timer; the request is aborted, never widened',
@@ -221,6 +219,28 @@ describe('library built-in calls', () => {
         /\bawait\s+(?:this\.)?(?:scanLogged|scanWithinDeadline|runCustomValidators|evaluate|validator\.validate|scanner\.scan)\(|\breturn\s+(?!await\b)(?:this\.)?(?:settleOrCut|scanLogged|scanWithinDeadline|abortable|verdictOf|observer)\b/g
       return [...source.matchAll(pattern)].map((m) => `${file}: ${m[0]}`)
     })
+    expect(bare).toEqual([])
+  })
+
+  it('awaits nothing in the sources except through a hop that follows it with the then captured at load', () => {
+    // A bare `await` reads the `constructor` of what it awaits at that moment, and one that is not the engine's is
+    // resolved through the live `then`; a host hook that ran just before could have planted either. The hops are
+    // the only awaits, and the lint rule `no-restricted-syntax` states the same for the editor.
+    const folders = [root, join(root, '..', 'observability')]
+    const bare = folders.flatMap((folder) =>
+      sources(folder)
+        .filter((path) => !path.endsWith('settle-or-cut.ts') && !path.endsWith('.spec.ts'))
+        .flatMap((path) => {
+          const source = readFileSync(path, 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '')
+          return [
+            ...source.matchAll(
+              /(?<!\bfor\s)\bawait\s+(?!(?:verdictOf|settleOrCut|abortable|allOf)\b)[^\n]{0,40}/g,
+            ),
+          ].map((m) => `${path.slice(join(root, '..').length + 1)}: ${m[0]}`)
+        }),
+    )
     expect(bare).toEqual([])
   })
 

@@ -7,6 +7,7 @@ import type { DeleteManyResult, FailedDeletion } from '../interfaces/delete-many
 import { providerFailureReason } from '../errors/provider-failure'
 import { logProviderFailure } from './provider-failure-log'
 import { isRootRefusal } from './prototype-guard'
+import { verdictOf } from './settle-or-cut'
 
 /**
  * Deletes one chunk (at most 1000 keys). Per-key outcomes come from the response, with the provider's
@@ -27,12 +28,14 @@ export async function deleteObjectsChunk(
   const deleted: string[] = []
   const failed: FailedDeletion[] = []
   try {
-    const response = await client.send(
-      new DeleteObjectsCommand({
-        Bucket: bucket,
-        // `Quiet: false` returns both successes and per-key errors.
-        Delete: { Objects: chunk.map((key) => ({ Key: key })), Quiet: false },
-      }),
+    const response = await verdictOf(
+      client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          // `Quiet: false` returns both successes and per-key errors.
+          Delete: { Objects: chunk.map((key) => ({ Key: key })), Quiet: false },
+        }),
+      ),
     )
     for (const ok of response.Deleted ?? []) {
       if (ok.Key !== undefined) {

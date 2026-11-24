@@ -9,6 +9,7 @@ import { mapMultipartError } from '../errors/multipart-error-mapper'
 import { CLEANUP_DEADLINE_MS, requestAborted, within } from './abort-support'
 import { isRootRefusal } from './prototype-guard'
 import { abortFailureLogger, closeMultipartUpload, closeWhenCreated } from './multipart-abort'
+import { verdictOf } from './settle-or-cut'
 
 /** The object a multipart upload was writing, and what the caller reported about the call. */
 export interface MultipartTarget {
@@ -52,18 +53,20 @@ export async function failMultipartUpload(
   let uploadId = upload.uploadId
   // Stryker disable next-line ConditionalExpression: when the uploader already holds an id it is the one the create answered, so waiting for the created id again yields the same value (equivalent).
   if (uploadId === undefined && lookup) {
-    uploadId = await within(lookup, CLEANUP_DEADLINE_MS)
+    uploadId = await verdictOf(within(lookup, CLEANUP_DEADLINE_MS))
     // The caller does not wait longer, but an id that arrives later is still aborted.
     if (uploadId === undefined) {
       closeWhenCreated(client, target.bucket, target.finalKey, lookup, abortFailureLogger(logger))
     }
   }
-  const abort = await closeMultipartUpload(
-    client,
-    target.bucket,
-    target.finalKey,
-    uploadId,
-    abortFailureLogger(logger),
+  const abort = await verdictOf(
+    closeMultipartUpload(
+      client,
+      target.bucket,
+      target.finalKey,
+      uploadId,
+      abortFailureLogger(logger),
+    ),
   )
   // A refusal of the runtime check is not a failure of the upload: it keeps its own code, after the cleanup.
   if (isRootRefusal(err)) {

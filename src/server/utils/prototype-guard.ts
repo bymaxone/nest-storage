@@ -80,6 +80,20 @@ const setHas = reflectGet(Set.prototype, 'has')
 const standardNames = new Set(STANDARD_NAMES)
 const weakHas = reflectGet(WeakSet.prototype, 'has') as (key: object) => boolean
 const weakAdd = reflectGet(WeakSet.prototype, 'add') as (key: object) => unknown
+/** Promises whose species lookup threw: they are refused, though marking them as handled pinned their constructor. */
+const speciesBroken = new WeakSet()
+/**
+ * The constructor the `constructor` slot of the promise prototype names, accepted only when it is the engine's: its
+ * `prototype` is the very prototype an async function's promise has. A slot a host replaced before this module loaded would otherwise become the baseline.
+ *
+ * @throws Error when the slot does not name the engine's `Promise`.
+ */
+function checkedPromise(candidate: unknown, prototype: object): PromiseConstructor {
+  if (typeof candidate !== 'function' || reflectGet(candidate, 'prototype') !== prototype) {
+    throw new Error('The Promise constructor is not the engine one: refusing to load.')
+  }
+  return candidate as PromiseConstructor
+}
 /**
  * The promise prototype and constructor `await` consults, read from an async function's own promise and
  * not from the global binding, which a host may have replaced before this module loaded.
@@ -90,10 +104,10 @@ const intrinsicPromisePrototype = getPrototype(
   })(),
 )
 /** The `Promise` constructor of the engine, as {@link intrinsicPromisePrototype} names it. */
-export const INTRINSIC_PROMISE = reflectGet(
+export const INTRINSIC_PROMISE = checkedPromise(
+  reflectGet(intrinsicPromisePrototype, 'constructor'),
   intrinsicPromisePrototype,
-  'constructor',
-) as PromiseConstructor
+)
 /** The engine's own `then`, read at load, to mark a started promise as handled whatever `then` is now. */
 const intrinsicThen = reflectGet(intrinsicPromisePrototype, 'then') as (
   this: Promise<unknown>,
@@ -113,8 +127,32 @@ function ignore(): void {
 export function markHandled(work: PromiseLike<unknown>): void {
   try {
     apply(intrinsicThen as () => unknown, work, [ignore, ignore])
+    return
   } catch {
-    // Not a native promise: its own `then` is the host's, and it is not called here.
+    // Not a native promise, or one whose species lookup threw: told apart below.
+  }
+  if (work instanceof INTRINSIC_PROMISE) {
+    // The promise is remembered as one whose species did not work, so {@link follow} still refuses it.
+    apply(weakAdd as () => unknown, speciesBroken, [work])
+    handleWithoutSpecies(work)
+  }
+}
+
+/**
+ * Marks a native promise as handled without reading `Promise[Symbol.species]`: with an own `constructor` of
+ * `undefined`, the species lookup of `then` takes the engine's default constructor and reads nothing a host
+ * may have made throw. The own property is left configurable, so the caller can pin it afterwards.
+ */
+function handleWithoutSpecies(work: object): void {
+  const open = create(null)
+  open.value = undefined
+  open.configurable = true
+  open.writable = true
+  try {
+    defineOwn(work, 'constructor', open)
+    apply(intrinsicThen as () => unknown, work, [ignore, ignore])
+  } catch {
+    // Frozen, or not a promise this library can mark: nothing more is done to it.
   }
 }
 
@@ -128,23 +166,45 @@ export function markHandled(work: PromiseLike<unknown>): void {
  * @returns The same promise.
  */
 export function tagged<P extends Promise<unknown>>(own: P): P {
+  if (pinConstructor(own)) return own
+  // Frozen or already pinned otherwise: the promise cannot be vouched for, so it is not handed on. Its own
+  // outcome is marked as handled and the caller gets the refusal in its place.
+  markHandled(own)
+  return refused() as unknown as P
+}
+
+/** Pins `constructor` on `own` without a prototype on the descriptor; false when the promise refuses it. */
+function pinConstructor(own: object): boolean {
+  // No prototype, so a `get` or `set` planted on `Object.prototype` is never read as part of the descriptor.
+  const pin = create(null)
+  pin.value = INTRINSIC_PROMISE
+  pin.configurable = false
+  pin.writable = false
   try {
-    defineOwn(own, 'constructor', { value: INTRINSIC_PROMISE, configurable: true, writable: true })
+    defineOwn(own, 'constructor', pin)
+    return true
   } catch {
-    // Frozen: the caller's await decides.
+    return false
   }
-  return own
+}
+
+/** A rejected, pinned promise carrying the runtime refusal. */
+function refused(): Promise<never> {
+  const answer = rejectedWith<never>(refusal(0, 1))
+  pinConstructor(answer)
+  return answer
 }
 
 /**
- * Marks a promise this library built as handled, after giving it an own constructor, so the species lookup
- * of `then` does not read the one on the prototype, which a host may have made throw: that would leave this
- * very rejection unhandled.
+ * Marks a promise this library built as handled without a species lookup (see {@link handleWithoutSpecies}),
+ * then pins its constructor for the await that follows, so a throwing species cannot leave this very rejection
+ * unhandled.
  *
  * @param own - A native promise built by this library.
  */
 export function markOwnHandled(own: Promise<unknown>): void {
-  markHandled(tagged(own))
+  handleWithoutSpecies(own)
+  pinConstructor(own)
 }
 
 /**
@@ -211,10 +271,14 @@ export function rejectedWith<T>(reason: unknown): Promise<T> {
  * @param onError - Receives what it rejected with, or the refusal.
  */
 export function follow<T>(
-  work: PromiseLike<T>,
+  work: T | PromiseLike<T>,
   onValue: (value: T) => void,
   onError: (reason: unknown) => void,
 ): void {
+  if (apply(weakHas as () => unknown, speciesBroken, [work])) {
+    onError(refusal(0, 1))
+    return
+  }
   try {
     apply(intrinsicThen as () => unknown, work, [onValue, onError])
     return
@@ -222,6 +286,8 @@ export function follow<T>(
     // Either not a native promise, or one whose species threw: told apart below.
   }
   if (work instanceof INTRINSIC_PROMISE) {
+    // Marked as handled, so the rejection it may carry is not left unhandled behind the refusal.
+    markHandled(work)
     onError(refusal(0, 1))
     return
   }

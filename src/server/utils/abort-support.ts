@@ -110,7 +110,7 @@ async function uploadIdOf(
   sent: Promise<{ UploadId?: string | undefined }>,
 ): Promise<string | undefined> {
   try {
-    return (await sent).UploadId
+    return (await verdictOf(sent)).UploadId
   } catch {
     return undefined
   }

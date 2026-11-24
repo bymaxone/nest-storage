@@ -8,6 +8,7 @@
 import { PassThrough, Readable } from 'node:stream'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { verdictOf } from './settle-or-cut'
 
 /** Every shape accepted as an upload body. */
 export type UploadBody = Buffer | NodeJS.ReadableStream | Uint8Array
@@ -65,7 +66,7 @@ export async function peekFirstBytes(
     const buf = Buffer.isBuffer(body) ? body : Buffer.from(body)
     return { head: buf.subarray(0, maxBytes), replacementBody: buf }
   }
-  return teeAndPeek(body, maxBytes)
+  return await verdictOf(teeAndPeek(body, maxBytes))
 }
 
 /**
@@ -165,7 +166,7 @@ async function teeAndPeek(
     uploadPT.once('error', () => undefined)
     uploadPT.destroy(err)
   })
-  const head = await collectStream(peekPT)
+  const head = await verdictOf(collectStream(peekPT))
   return { head, replacementBody: uploadPT }
 }
 

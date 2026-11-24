@@ -34,7 +34,8 @@ interface ValidationInput {
 export class ValidationService {
   constructor(
     @Inject(BYMAX_STORAGE_OPTIONS) private readonly options: ResolvedBymaxStorageOptions,
-    @Inject(BYMAX_STORAGE_UPLOAD_VALIDATORS) private readonly validators: readonly IUploadValidator[],
+    @Inject(BYMAX_STORAGE_UPLOAD_VALIDATORS)
+    private readonly validators: readonly IUploadValidator[],
   ) {}
 
   /**
@@ -67,7 +68,10 @@ export class ValidationService {
    * @throws StorageException `STORAGE_MIME_NOT_ALLOWED` or `STORAGE_VALIDATION_FAILED`.
    */
   checkHeaders(
-    input: Pick<ValidationInput, 'contentType' | 'cacheControl' | 'contentDisposition' | 'kmsKeyId' | 'metadata'>,
+    input: Pick<
+      ValidationInput,
+      'contentType' | 'cacheControl' | 'contentDisposition' | 'kmsKeyId' | 'metadata'
+    >,
   ): void {
     assertMimeAllowed(this.options.validation?.mimeWhitelist, input.contentType)
     assertHeaderValues({
@@ -103,7 +107,7 @@ export class ValidationService {
     let body: UploadBody = input.body
     for (const validator of this.validators) {
       const readBytes = async (maxBytes: number): Promise<Buffer> => {
-        const { head, replacementBody } = await peekFirstBytes(body, maxBytes)
+        const { head, replacementBody } = await verdictOf(peekFirstBytes(body, maxBytes))
         body = replacementBody
         return head
       }

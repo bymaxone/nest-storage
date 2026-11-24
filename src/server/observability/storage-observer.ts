@@ -6,6 +6,7 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { absorb } from '../utils/absorb'
 import { assertCleanRoot, dispatch, rejectedWith, tagged } from '../utils/prototype-guard'
+import { verdictOf } from '../utils/settle-or-cut'
 import { StorageMetricsTally } from './storage-metrics-tally'
 import { outcomeOf, scanVerdictOfError, type StorageOperation } from './storage-operations'
 import { StorageTracing, type StorageSpanAttributes, type StorageSpanName } from './storage-tracing'
@@ -57,7 +58,7 @@ export class StorageObserver {
       const startedAt = process.hrtime.bigint()
       let result: T
       try {
-        result = await run()
+        result = await verdictOf(run())
       } catch (error) {
         absorb(() => {
           this.tally.operation(operation, outcomeOf(error), secondsSince(startedAt))
@@ -71,7 +72,7 @@ export class StorageObserver {
       return result
     }
     return options.span === undefined
-      ? counted()
+      ? tagged(counted())
       : this.tracing.span(options.span, options.attributes ?? {}, counted, options.describe)
   }
 
@@ -87,7 +88,7 @@ export class StorageObserver {
   ): Promise<T> {
     const counted = async (): Promise<T> => {
       try {
-        const result = await run()
+        const result = await verdictOf(run())
         absorb(() => {
           this.tally.scan(result.status === 'unknown' ? 'unknown' : 'clean')
         })
