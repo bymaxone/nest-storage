@@ -5,9 +5,32 @@
  */
 import { StorageException } from '../errors/storage-exception'
 import type * as Guard from './prototype-guard'
-import { assertCleanRoot } from './prototype-guard'
+import { assertCleanRoot, isRootRefusal } from './prototype-guard'
 
 const root = Object.prototype as unknown as Record<string | symbol, unknown>
+
+/** Global bindings the guard compares by the value they resolve to, other than those with their own row. */
+const BOUND_GLOBALS = [
+  'Object',
+  'Function',
+  'Array',
+  'String',
+  'RegExp',
+  'Symbol',
+  'Reflect',
+  'Map',
+  'WeakMap',
+  'Error',
+  'TypeError',
+  'Number',
+  'Math',
+  'JSON',
+  'Boolean',
+  'Uint8Array',
+  'ArrayBuffer',
+  'process',
+  'URL',
+]
 
 function refusal(): StorageException {
   try {
@@ -215,6 +238,12 @@ describe('assertCleanRoot', () => {
       ['the URL password getter', () => swapGetter(URL.prototype, 'password', () => '')],
       ['the Set binding', () => swapGlobal('Set', class Other {})],
       ['the Buffer binding', () => swapGlobal('Buffer', class Other {})],
+      ...BOUND_GLOBALS.map((name): [string, () => () => void] => [
+        `the ${name} binding`,
+        () => swapGlobal(name, class Other {}),
+      ]),
+      ['the __proto__ setter', () => swapSetter(Object.prototype, '__proto__', () => undefined)],
+      ['the writable flag of Math.abs', () => flag(Math, 'abs', { writable: false })],
     ]
 
     it.each(replaced)(
@@ -238,6 +267,28 @@ describe('assertCleanRoot', () => {
         expect(details.planted).toBe(0)
       },
     )
+
+    it('says which of the two conditions refused, in the reason', () => {
+      const reasonOf = (error: StorageException): unknown =>
+        (error.getResponse() as { error: { details: { reason: string } } }).error.details.reason
+      const restore = swap(Math, 'min', () => 0)
+      let replacedError: StorageException
+      try {
+        replacedError = refusal()
+      } finally {
+        restore()
+      }
+      const replacedReason = reasonOf(replacedError)
+      Object.defineProperty(Object.prototype, 'ACL', { value: 1, configurable: true, writable: true })
+      try {
+        expect(replacedReason).toBe('a built-in was replaced after the library loaded')
+        expect(reasonOf(refusal())).toBe(
+          'the root object prototype carries a key the library did not find at load',
+        )
+      } finally {
+        Reflect.deleteProperty(Object.prototype, 'ACL')
+      }
+    })
 
     it('still names a planted key by count when a built-in is replaced too', () => {
       const restore = swap(Object, 'hasOwn', () => true)
@@ -300,6 +351,22 @@ describe('assertCleanRoot', () => {
     expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
   })
 
+  it('recognises only a refusal the guard raised', () => {
+    // A validation failure about a caller's input, and any non-object, are not root refusals.
+    Object.defineProperty(Object.prototype, 'ACL', { value: 1, configurable: true, writable: true })
+    let raised: unknown
+    try {
+      raised = refusal()
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'ACL')
+    }
+    expect(isRootRefusal(raised)).toBe(true)
+    expect(isRootRefusal(new StorageException('STORAGE_VALIDATION_FAILED'))).toBe(false)
+    expect(isRootRefusal(null)).toBe(false)
+    expect(isRootRefusal('STORAGE_VALIDATION_FAILED')).toBe(false)
+    expect(isRootRefusal(undefined)).toBe(false)
+  })
+
   it('builds a fresh refusal on every call, carrying counts and no key', () => {
     Object.defineProperty(Object.prototype, 'ACL', {
       value: 'public-read',
@@ -316,9 +383,47 @@ describe('assertCleanRoot', () => {
       Reflect.deleteProperty(Object.prototype, 'ACL')
     }
   })
+
+  // Keep this the last row of the file: it cannot be undone, and the guard of this realm refuses afterwards.
+  it('refuses a built-in made non-configurable after the module loaded', async () => {
+    let loaded: typeof Guard | undefined
+    await jest.isolateModulesAsync(async () => {
+      loaded = await import('./prototype-guard')
+    })
+    Object.defineProperty(Math, 'floor', { configurable: false })
+    let thrown: unknown
+    try {
+      loaded?.assertCleanRoot()
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+  })
 })
 
 const define = Object.defineProperty.bind(Object)
+
+
+function swapSetter(target: object, name: string, value: () => unknown): () => void {
+  const original = descriptorOf(target, name)
+  Object.defineProperty(target, name, { ...original, set: value })
+  return () => {
+    Object.defineProperty(target, name, original)
+  }
+}
+
+/** Changes one flag of a property; `configurable: false` cannot be undone, so only a property no other row uses. */
+function flag(target: object, name: string, change: PropertyDescriptor): () => void {
+  const original = descriptorOf(target, name)
+  Object.defineProperty(target, name, { ...original, ...change })
+  return () => {
+    try {
+      Object.defineProperty(target, name, original)
+    } catch {
+      // A property made non-configurable stays so; its value and flags are otherwise unchanged.
+    }
+  }
+}
 
 function wrapped(original: (this: unknown) => unknown): () => unknown {
   return function (this: unknown) {

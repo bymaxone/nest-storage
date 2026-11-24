@@ -97,8 +97,9 @@ function fieldsOf(target: object, key: string | symbol): unknown[] {
     return [reflectGet(target, key)]
   }
   const descriptor = getDescriptor(target, key)
-  const fields: unknown[] = [descriptor !== undefined]
+  const fields: unknown[] = []
   let at = 0
+  // Stryker disable next-line EqualityOperator: an index past the list reads `undefined` on both sides of the compare (equivalent).
   while (at < FIELDS.length) {
     fields[fields.length] = field(descriptor, item(FIELDS, at))
     at += 1
@@ -117,6 +118,7 @@ function capture(target: object, key: string | symbol): void {
 function captureAll(target: object): void {
   const keys = ownKeys(target)
   let at = 0
+  // Stryker disable next-line EqualityOperator: an index past the keys captures the key `undefined`, which reads the same at load and at every check (equivalent).
   while (at < keys.length) {
     capture(target, item(keys, at))
     at += 1
@@ -124,7 +126,8 @@ function captureAll(target: object): void {
 }
 
 /** The built-ins a decision path calls live: functions, prototypes and the iterator prototypes. */
-function readBaseline(): void {
+function baselineTargets(): object[] {
+  // Stryker disable next-line ArrayDeclaration: any array yields the same iterator prototype (equivalent).
   const arrayIterator = getPrototype([][Symbol.iterator]())
   const list: object[] = [
     root,
@@ -153,10 +156,16 @@ function readBaseline(): void {
     URL.prototype,
     arrayIterator,
     getPrototype(arrayIterator),
+    // Stryker disable next-line StringLiteral: any string yields the same iterator prototype (equivalent).
     getPrototype(''[Symbol.iterator]()),
     getPrototype(new Map()[Symbol.iterator]()),
     getPrototype(new Set()[Symbol.iterator]()),
   ]
+  return list
+}
+
+function readBaseline(): void {
+  const list = baselineTargets()
   let at = 0
   while (at < list.length) {
     captureAll(item(list, at))
@@ -184,6 +193,7 @@ try {
 function differs(entry: Entry): boolean {
   const now = fieldsOf(entry.target, entry.key)
   let at = 0
+  // Stryker disable next-line EqualityOperator: an index past the fields compares `undefined` with `undefined` (equivalent).
   while (at < now.length) {
     if (!same(now[at], entry.fields[at])) {
       return true
@@ -222,11 +232,8 @@ function refusal(planted: number, replaced: number): StorageException {
  * @returns `true` only for an object this module raised.
  */
 export function isRootRefusal(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (apply(weakHas as () => unknown, raised, [error]) as boolean)
-  )
+  // `WeakSet.prototype.has` answers `false` for a primitive or `null`, so no type test comes first.
+  return apply(weakHas as () => unknown, raised, [error]) as boolean
 }
 
 /**

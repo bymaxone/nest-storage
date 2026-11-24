@@ -82,6 +82,18 @@ describe('S3ClientProvider with a key planted on the root object prototype', () 
     expect(calls[0]?.hostname).toBe('s3.example.com')
   })
 
+  it('names the guard in the middleware stack, after the retry middleware', () => {
+    // The name is what a host reads in `identify()` and what an operator removes it by.
+    const provider = makeProvider()
+    provider.onModuleInit()
+    const stack = provider.getClient().middlewareStack.identify()
+    const guard = stack.findIndex((line) => line.startsWith('rootPrototypeGuard'))
+    const retry = stack.findIndex((line) => line.startsWith('retryMiddleware'))
+    expect(guard).toBeGreaterThan(-1)
+    expect(retry).toBeGreaterThan(-1)
+    expect(guard).toBeGreaterThan(retry)
+  })
+
   it.each([
     ['ACL', 'public-read'],
     ['GrantRead', 'uri=evil'],
