@@ -17,7 +17,8 @@ import { emit } from '../utils/log-event'
 import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 import { failureError } from '../utils/provider-failure-log'
 import { readOptionalField } from '../utils/read-once'
-import { settleOrCut } from '../utils/settle-or-cut'
+import { isRootRefusal } from '../utils/prototype-guard'
+import { settleOrCut, verdictOf } from '../utils/settle-or-cut'
 import { StorageObserver } from '../observability/storage-observer'
 
 /** What the log line holds when the details cannot be turned into text. */
@@ -148,7 +149,7 @@ export class FileScannerService {
     }
     const scanner = this.scanner
     const run = (): Promise<FileScanResult> => this.evaluate(scanner, input, caller)
-    return this.observer === undefined ? run() : this.observer.scan(input.mode, run)
+    return await (this.observer === undefined ? run() : this.observer.scan(input.mode, run))
   }
 
   /** Runs the scanner and applies the library's policy to what it answered. */
@@ -157,7 +158,7 @@ export class FileScannerService {
     input: ScanInput,
     caller: Record<string, unknown>,
   ): Promise<FileScanResult> {
-    const result = await this.scanLogged(scanner, input, caller)
+    const result = await verdictOf(this.scanLogged(scanner, input, caller))
     // Each field of what the scanner answered is its own: a key only the root prototype supplies is not a field.
     const status = readOptionalField(result, 'status')
     const engine = scannerLabel(readOptionalField(result, 'engine'))
@@ -226,9 +227,14 @@ export class FileScannerService {
     caller: Record<string, unknown>,
   ): Promise<ScannerOutcome> {
     try {
-      return await this.scanWithinDeadline(scanner, input, caller)
+      return await verdictOf(this.scanWithinDeadline(scanner, input, caller))
     } catch (err) {
-      if (!(err instanceof StorageException)) {
+      if (isRootRefusal(err)) {
+        emit(this.logger, 'warn', {
+          event: STORAGE_LOG_EVENTS.rootGuardRefused,
+          message: 'The runtime differs from the one the library loaded in; the scan was refused',
+        })
+      } else if (!(err instanceof StorageException)) {
         emit(this.logger, 'warn', {
           event: STORAGE_LOG_EVENTS.scanFailed,
           message: 'Scanner failed',
@@ -251,7 +257,7 @@ export class FileScannerService {
   ): Promise<ScannerOutcome> {
     const timeoutMs = this.options.scanner?.timeoutMs ?? DEFAULT_SCANNER_TIMEOUT_MS
     const controller = new AbortController()
-    return settleOrCut(scanner.scan({ ...input, signal: controller.signal }), (cut) => {
+    return await settleOrCut(scanner.scan({ ...input, signal: controller.signal }), (cut) => {
       const timer = setTimeout(() => {
         emit(this.logger, 'warn', {
           event: STORAGE_LOG_EVENTS.scanTimeout,

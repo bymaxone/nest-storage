@@ -14,6 +14,7 @@ import { assertMimeAllowed } from '../utils/mime-allowed'
 import { assertHeaderValues, assertMetadata } from '../utils/header-value'
 import { assertIntegerInput } from '../utils/numeric-input'
 import { readOptionalField } from '../utils/read-once'
+import { verdictOf } from '../utils/settle-or-cut'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -54,7 +55,7 @@ export class ValidationService {
   async validate(input: ValidationInput): Promise<{ body: UploadBody }> {
     this.checkHeaders(input)
     this.checkSize(input.size)
-    const body = await this.runCustomValidators(input)
+    const body = await verdictOf(this.runCustomValidators(input))
     return { body }
   }
 
@@ -106,13 +107,15 @@ export class ValidationService {
         body = replacementBody
         return head
       }
-      const result = await validator.validate({
-        key: input.key,
-        contentType: input.contentType,
-        ...(input.size !== undefined ? { size: input.size } : {}),
-        ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
-        readBytes,
-      })
+      const result = await verdictOf(
+        validator.validate({
+          key: input.key,
+          contentType: input.contentType,
+          ...(input.size !== undefined ? { size: input.size } : {}),
+          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+          readBytes,
+        }),
+      )
       // Each field once, and not one that only the root prototype supplies: a result without `ok` is not an `ok`.
       const ok = readOptionalField(result, 'ok')
       if (!ok) {

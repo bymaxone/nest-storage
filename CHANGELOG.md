@@ -64,6 +64,14 @@ note on each entry is the compatibility contract — read it, not the number.
   one. The `constructor` of the promise prototype joins the baseline, and a host that replaces it makes the library
   refuse every call.
 
+  The root check runs synchronously right before each await of a verdict, and again after it on the fulfilment and
+  the rejection path; the answer travels in a box without a prototype, and the engine's own `Promise` is read from an
+  async function's promise, not from the global. A `then` on `Object.prototype`, `Array.prototype` or
+  `Function.prototype` is refused like a planted key, a refusal at a scan is logged (`STORAGE_ROOT_GUARD_REFUSED`), and
+  a promise left behind by a refusal is marked as handled with the `then` captured at load. Not covered: a scanner or
+  validator dependency that reads `Promise` statics itself, and a `then` planted and erased again between the entry of
+  a call and the moment the work answers.
+
   **Apply to a derived backend:** nothing to change. An application that adds a key to `Object.prototype` (a polyfill
   or a library that extends it) now fails at module start-up and on every storage call with
   `STORAGE_VALIDATION_FAILED`; remove the extension.

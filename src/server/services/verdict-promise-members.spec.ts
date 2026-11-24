@@ -197,6 +197,108 @@ describe('verdict paths and the members of Promise', () => {
     expect(rejection).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
   })
 
+  it('keeps an infected scan infected when a replaced then forges only the infected answers', async () => {
+    /* A `then` that passes every other settlement on and answers clean for an infected one, as a returned promise would reach it. */
+    const forgingThen = function (
+      this: Promise<unknown>,
+      onFulfilled?: (value: unknown) => unknown,
+      onRejected?: (reason: unknown) => unknown,
+    ): unknown {
+      return nativeThen.call(
+        this,
+        (value: unknown) =>
+          onFulfilled?.(
+            typeof value === 'object' && value !== null && 'threat' in value
+              ? { status: 'clean', engine: 'e' }
+              : value,
+          ),
+        onRejected,
+      )
+    }
+    const outcome = await under(
+      () => patch(proto, 'then', forgingThen),
+      () => infectedService.scan(input),
+    )
+    expect(rejectionOf(outcome)).toMatchObject({ code: 'STORAGE_SCAN_INFECTED' })
+  })
+
+  it('refuses a scan when a replaced then restores the constructor before the verdict is read', async () => {
+    /* The forger swaps the constructor so `await` looks `then` up, and its `then` swaps it back. */
+    const original = Object.getOwnPropertyDescriptor(proto, 'constructor')!
+    const forger = function (
+      this: Promise<unknown>,
+      onFulfilled?: (value: unknown) => unknown,
+      onRejected?: (reason: unknown) => unknown,
+    ): unknown {
+      Object.defineProperty(proto, 'constructor', original)
+      // A rejection is passed on as it is, so the harness itself leaves nothing unhandled.
+      return nativeThen.call(
+        this,
+        () => onFulfilled?.(Object.assign(Object.create(null) as object, CLEAN)),
+        onRejected,
+      )
+    }
+    // The outcome is kept in a variable: the forger answers for every await in this scope, the harness's too.
+    let rejection: unknown
+    const restoreThen = patch(proto, 'then', forger)
+    const restoreConstructor = patch(proto, 'constructor', Impostor)
+    try {
+      await infectedService.scan(input)
+    } catch (error) {
+      rejection = error
+    } finally {
+      restoreConstructor()
+      restoreThen()
+    }
+    expect(rejection).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+  })
+
+  it.each([
+    ['Object.prototype', Object.prototype],
+    ['Array.prototype', Array.prototype],
+    ['Function.prototype', Function.prototype],
+  ])(
+    'refuses a scan when a self-erasing then is planted on %s before the call',
+    async (_name, carrier) => {
+      /* The planted `then` removes itself when called and answers clean, so only a check before the await sees it. */
+      const holder = carrier as unknown as Record<string, unknown>
+      const outcome = await under(
+        () => {
+          holder.then = (resolve: (value: unknown) => void) => {
+            Reflect.deleteProperty(holder, 'then')
+            resolve(Object.assign(Object.create(null) as object, CLEAN))
+          }
+          return () => {
+            Reflect.deleteProperty(holder, 'then')
+          }
+        },
+        () => infectedService.scan(input),
+      )
+      expect(rejectionOf(outcome)).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+    },
+  )
+
+  it('refuses a rejected scan when the runtime changed while it ran', async () => {
+    /* The rejection path is checked too, so a failure is not trusted either. */
+    const failing: IFileScanner = {
+      scan: () => {
+        Object.defineProperty(proto, 'constructor', {
+          ...Object.getOwnPropertyDescriptor(proto, 'constructor')!,
+          value: Impostor,
+        })
+        return nativeReject(new Error('scanner down'))
+      },
+    }
+    const service = await serviceFor(failing)
+    const original = Object.getOwnPropertyDescriptor(proto, 'constructor')!
+    try {
+      const outcome = await outcomeOf(() => service.scan(input))
+      expect(rejectionOf(outcome)).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+    } finally {
+      Object.defineProperty(proto, 'constructor', original)
+    }
+  })
+
   it('builds the wait from the constructor captured at load', () => {
     /* Guards the premise of the rows above: the captured constructor is the realm's own. */
     expect(NativePromise).toBe(Promise)

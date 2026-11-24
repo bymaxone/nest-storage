@@ -56,6 +56,9 @@ const GLOBALS = [
 
 /** Every built-in below is read from the realm once, here, and bound; a later replacement is not seen. */
 const root: object = Object.prototype
+/** Carriers whose own `then` would make every array or function a thenable that `await` or a resolution calls. */
+const arrayPrototype: object = Array.prototype
+const functionPrototype: object = Function.prototype
 const reflectGet = Reflect.get.bind(Reflect) as (target: object, key: PropertyKey) => unknown
 const apply = Reflect.apply.bind(Reflect)
 const ownKeys = Reflect.ownKeys.bind(Reflect)
@@ -70,6 +73,43 @@ const setHas = reflectGet(Set.prototype, 'has')
 const standardNames = new Set(STANDARD_NAMES)
 const weakHas = reflectGet(WeakSet.prototype, 'has') as (key: object) => boolean
 const weakAdd = reflectGet(WeakSet.prototype, 'add') as (key: object) => unknown
+/**
+ * The promise prototype and constructor `await` consults, read from an async function's own promise and
+ * not from the global binding, which a host may have replaced before this module loaded.
+ */
+const intrinsicPromisePrototype = getPrototype(
+  (async (): Promise<void> => {
+    // Nothing to await: only the promise this function returns is read.
+  })(),
+)
+/** The `Promise` constructor of the engine, as {@link intrinsicPromisePrototype} names it. */
+export const INTRINSIC_PROMISE = reflectGet(
+  intrinsicPromisePrototype,
+  'constructor',
+) as PromiseConstructor
+/** The engine's own `then`, read at load, to mark a started promise as handled whatever `then` is now. */
+const intrinsicThen = reflectGet(intrinsicPromisePrototype, 'then') as (
+  this: Promise<unknown>,
+  onFulfilled: () => void,
+  onRejected: () => void,
+) => unknown
+function ignore(): void {
+  // A settlement nobody reads: the promise is only being marked as handled.
+}
+
+/**
+ * Marks a started promise as handled with the `then` captured at load, so a refusal that leaves it
+ * behind does not end as an unhandled rejection. A value that is not a native promise is left alone.
+ *
+ * @param work - A promise that has been started.
+ */
+export function markHandled(work: PromiseLike<unknown>): void {
+  try {
+    apply(intrinsicThen as () => unknown, work, [ignore, ignore])
+  } catch {
+    // Not a native promise: its own `then` is the host's, and it is not called here.
+  }
+}
 /** The refusals this module raised, so a caller can tell one from an ordinary validation error. */
 const raised = new WeakSet()
 
@@ -180,7 +220,7 @@ function readBaseline(): void {
   }
   // `await` takes a promise's own resolution only while its `constructor` is the native one; any other
   // value sends it through a `then` lookup. It is a data property that no instrumentation rewrites.
-  capture(Promise.prototype, 'constructor')
+  capture(intrinsicPromisePrototype, 'constructor')
   at = 0
   // Stryker disable next-line EqualityOperator: an index past the list reads the global `undefined` at load and at every check (equivalent).
   while (at < GLOBALS.length) {
@@ -213,6 +253,11 @@ function isPlantedKey(key: string | symbol): boolean {
     return key !== exemptSymbol
   }
   return !apply(setHas as () => unknown, standardNames, [key])
+}
+
+/** One for an own `then` on a carrier that has none at load, which would answer for every value it holds. */
+function carriesThen(carrier: object): number {
+  return hasOwn(carrier, 'then') ? 1 : 0
 }
 
 /** A fresh refusal per call: typed, counts only, and it names neither a key nor a built-in. */
@@ -261,6 +306,7 @@ export function assertCleanRoot(): void {
     }
     at += 1
   }
+  planted += carriesThen(arrayPrototype) + carriesThen(functionPrototype)
   at = 0
   while (at < entries.length) {
     if (differs(item(entries, at))) {

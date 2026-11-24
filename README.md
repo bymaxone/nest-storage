@@ -969,6 +969,7 @@ Every operational line the library writes is an **object** through the Nest `Log
 | `STORAGE_SCAN_INCONCLUSIVE_REJECTED` | warn | `unknown` with `rejectOnUnknown`, or a result outside the contract | `engine`, `status` (when unrecognised), `details` |
 | `STORAGE_SCAN_FAILED` | warn | the scanner threw | `err` |
 | `STORAGE_SCAN_TIMEOUT` | warn | the scan outlasted `scanner.timeoutMs` | `timeoutMs` |
+| `STORAGE_ROOT_GUARD_REFUSED` | warn | a scan was refused because the runtime differs from the one at load | none |
 | `STORAGE_SCAN_CLEANUP_FAILED` | error | the object a scan rejected could not be deleted and is still stored | `storedKey`, `cleanupFailure` |
 | `STORAGE_EXISTS_FAILED` | warn | `exists()` met a failure that is not a 404 and answered `false` | `err` |
 | `STORAGE_DELETE_NOT_FOUND` | warn | `delete()` found no such key (an idempotent no-op) | none |
@@ -1088,7 +1089,7 @@ a validation result and an upload id are read with `await` on a promise built fr
 captured at load, so replacing `Promise.race`, `Promise.resolve`, `Promise.all` or `Promise.prototype.then`
 after load cannot turn an infected or rejected result into an accepted one. A tracing agent that wraps
 `then` and delegates is not refused; a host that replaces `Promise.prototype.constructor` after load
-makes the library refuse every call. A replacement made before the library is imported is not seen.
+makes the library refuse every call. A replacement made before the library is imported is not seen. A scanner or validator dependency that reads `Promise` statics itself is not covered, and neither is a `then` planted and erased again between the entry of a call and the moment the work answers.
 
 ### `keyPrefix` is a namespace, not an access boundary
 

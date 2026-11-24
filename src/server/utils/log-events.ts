@@ -14,6 +14,7 @@ export const STORAGE_LOG_EVENTS = {
   scanInconclusiveRejected: 'STORAGE_SCAN_INCONCLUSIVE_REJECTED',
   scanFailed: 'STORAGE_SCAN_FAILED',
   scanTimeout: 'STORAGE_SCAN_TIMEOUT',
+  rootGuardRefused: 'STORAGE_ROOT_GUARD_REFUSED',
   scanCleanupFailed: 'STORAGE_SCAN_CLEANUP_FAILED',
   existsFailed: 'STORAGE_EXISTS_FAILED',
   deleteNotFound: 'STORAGE_DELETE_NOT_FOUND',

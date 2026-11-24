@@ -99,7 +99,6 @@ function callsFound(): Set<string> {
  */
 const OUTSIDE_METHODS: Record<string, string> = {
   then: 'the hook absorber, which drops a failure, and the idle wrapper, which hands the source its own chunks on; every verdict, id and size is read by `await`',
-  catch: 'drops the rejection of work nobody waits for any more; it carries no verdict',
   toString:
     'called on numbers (`Number.prototype`, in the baseline), never an Error, Date or URLSearchParams',
   get: "called on Map, WeakMap, Reflect and the library's own cache (the first three in the baseline), never a URLSearchParams",
@@ -181,6 +180,25 @@ describe('library built-in calls', () => {
       return [...source.matchAll(/\bPromise\.\w+\(|\.then\(/g)].map((m) => `${file}: ${m[0]}`)
     })
     expect(calls).toEqual([])
+  })
+
+  it('awaits every verdict through `verdictOf` or `settleOrCut`, which check the runtime right before the await', () => {
+    // A bare `await` of a verdict promise has no check between the last look at the runtime and the await,
+    // and an async function that returns a promise without `await` resolves it through `then`.
+    const files = [
+      'services/file-scanner.service.ts',
+      'services/validation.service.ts',
+      'utils/abort-support.ts',
+    ]
+    const bare = files.flatMap((file) => {
+      const source = readFileSync(join(root, file), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '')
+      const pattern =
+        /\bawait\s+(?:this\.)?(?:scanLogged|scanWithinDeadline|runCustomValidators|evaluate|validator\.validate|scanner\.scan)\(|\breturn\s+(?!await\b)(?:this\.)?(?:settleOrCut|scanLogged|scanWithinDeadline|abortable|verdictOf|observer)\b/g
+      return [...source.matchAll(pattern)].map((m) => `${file}: ${m[0]}`)
+    })
+    expect(bare).toEqual([])
   })
 
   it('accepts the realm as loaded', () => {

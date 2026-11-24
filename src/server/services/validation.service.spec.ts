@@ -185,6 +185,46 @@ describe('ValidationService', () => {
       expect(validator.validate).toHaveBeenCalledTimes(1)
     })
 
+    it('refuses a rejecting validator whose runtime was swapped before its answer is read, instead of trusting a forged accept', async () => {
+      // The validator swaps the promise constructor and a `then` that swaps it back and answers `{ ok: true }`.
+      const proto = Promise.prototype as unknown as Record<string, unknown>
+      const nativeThen = Promise.prototype.then
+      const constructorOriginal = Object.getOwnPropertyDescriptor(proto, 'constructor')!
+      const thenOriginal = Object.getOwnPropertyDescriptor(proto, 'then')!
+      const forger = function (
+        this: Promise<unknown>,
+        onFulfilled?: (value: unknown) => unknown,
+        onRejected?: (reason: unknown) => unknown,
+      ): unknown {
+        Object.defineProperty(proto, 'constructor', constructorOriginal)
+        return nativeThen.call(this, () => onFulfilled?.({ ok: true }), onRejected)
+      }
+      const validator: IUploadValidator = {
+        name: 'swapping',
+        validate: () => {
+          Object.defineProperty(proto, 'then', { ...thenOriginal, value: forger })
+          Object.defineProperty(proto, 'constructor', { ...constructorOriginal, value: class Impostor {} })
+          return Promise.resolve({ ok: false, reason: 'infected' })
+        },
+      }
+      // A first validator that passes, so the swap lands after the service's own first await.
+      const first: IUploadValidator = { name: 'first', validate: jest.fn().mockResolvedValue({ ok: true }) }
+      const service = await buildService(buildOptions(), [first, validator])
+      let err: unknown
+      try {
+        await service.validate({ key: 'k', body: Buffer.from('x'), contentType: 'image/png' })
+      } catch (error) {
+        err = error
+      } finally {
+        Object.defineProperty(proto, 'constructor', constructorOriginal)
+        Object.defineProperty(proto, 'then', thenOriginal)
+      }
+      expect(err).toBeInstanceOf(StorageException)
+      const response = (err as StorageException).getResponse() as { error: { details: Record<string, unknown> } }
+      expect(response.error.details.validator).toBeUndefined()
+      expect(response.error.details.replaced).toBe(1)
+    })
+
     it('throws STORAGE_VALIDATION_FAILED with validator.name when { ok: false }', async () => {
       // a rejecting validator must produce VALIDATION_FAILED with the validator name
       const validator: IUploadValidator = {

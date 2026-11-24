@@ -8,7 +8,8 @@ import { CreateMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { assertAbortSignal } from './call-input'
-import { nothing, settleOrCut } from './settle-or-cut'
+import { markHandled } from './prototype-guard'
+import { nothing, settleOrCut, verdictOf } from './settle-or-cut'
 
 /**
  * How long the cleanup of an aborted or failed call may take. It runs with a signal of its own, never
@@ -155,7 +156,7 @@ export function bindToSignal(client: S3Client, signal: AbortSignal): SignalBound
  * @returns The settled value, or `undefined` when `ms` passed first.
  */
 export async function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
-  return settleOrCut<T, undefined>(promise, (cut) => {
+  return await settleOrCut<T, undefined>(promise, (cut) => {
     const timer = setTimeout(() => {
       cut.resolve(undefined)
     }, ms)
@@ -183,14 +184,14 @@ export async function abortable<T>(
   context: Record<string, unknown>,
 ): Promise<T> {
   if (!signal) {
-    return work
+    return await verdictOf(work)
   }
   if (signal.aborted) {
     // No event will come: the work may have started, and aborted the signal, before this wait began.
-    work.catch(() => undefined)
+    markHandled(work)
     throw requestAborted(signal, context)
   }
-  return settleOrCut(work, (cut) => {
+  return await settleOrCut(work, (cut) => {
     const release = new AbortController()
     signal.addEventListener(
       'abort',

@@ -4,7 +4,8 @@
  * @layer server/utils
  */
 import { StorageException } from '../errors/storage-exception'
-import { nothing, settleOrCut, type Cut } from './settle-or-cut'
+import { abortable } from './abort-support'
+import { nothing, settleOrCut, verdictOf, type Cut } from './settle-or-cut'
 
 /** A promise that settles when the test says so, built without a static of `Promise`. */
 function deferred<T>(): {
@@ -81,6 +82,36 @@ describe('settleOrCut', () => {
     ).rejects.toBe(failure)
   })
 
+  it('hands the answer on in a box, so a then planted before the answer is handed on is never called', async () => {
+    /* The planted `then` erases itself and answers clean; only a box without a prototype is never asked for it. */
+    const root = Object.prototype as unknown as Record<string, unknown>
+    const work = deferred<{ status: string }>()
+    const wait = settleOrCut(work.promise, () => () => undefined)
+    queueMicrotask(() => {
+      root.then = (resolve: (value: unknown) => void) => {
+        Reflect.deleteProperty(root, 'then')
+        resolve({ status: 'clean' })
+      }
+    })
+    work.resolve({ status: 'infected' })
+    // No prototype on what the harness hands around: it would read the planted `then` too.
+    const settled = (kind: string, content: unknown): object =>
+      Object.assign(Object.create(null) as object, { kind, content })
+    let outcome: unknown
+    try {
+      outcome = await wait.then(
+        (value) => settled('answer', value),
+        (error: unknown) => settled('refusal', error),
+      )
+    } finally {
+      Reflect.deleteProperty(root, 'then')
+    }
+    expect(outcome).toMatchObject({
+      kind: 'refusal',
+      content: { code: 'STORAGE_VALIDATION_FAILED' },
+    })
+  })
+
   it('refuses an outcome when the runtime changed while the work ran', async () => {
     /* A key planted on the root prototype after the work started refuses the answer. */
     const root = Object.prototype as unknown as Record<string, unknown>
@@ -96,6 +127,89 @@ describe('settleOrCut', () => {
       expect(error).toBeInstanceOf(StorageException)
     } finally {
       Reflect.deleteProperty(root, 'planted')
+    }
+  })
+})
+
+const proto = Promise.prototype as unknown as Record<string, unknown>
+const nativeThen = Promise.prototype.then
+const ownDescriptor = (name: string): PropertyDescriptor =>
+  Object.getOwnPropertyDescriptor(proto, name)!
+class Impostor {}
+
+/** The two entry points that carry a verdict, called the same way. */
+const entryPoints: [string, (work: Promise<string>) => Promise<unknown>][] = [
+  ['verdictOf', (work) => verdictOf(work)],
+  ['settleOrCut', (work) => settleOrCut(work, () => () => undefined)],
+  ['abortable without a signal', (work) => abortable(work, undefined, {})],
+  ['abortable with a signal', (work) => abortable(work, new AbortController().signal, {})],
+]
+
+describe.each(entryPoints)('%s and a runtime that changes around the await', (_name, enter) => {
+  const refusal = { code: 'STORAGE_VALIDATION_FAILED' }
+
+  /** Replaces the constructor of promises, and returns what puts it back. */
+  function replaceConstructor(): () => void {
+    const original = ownDescriptor('constructor')
+    Object.defineProperty(proto, 'constructor', { ...original, value: Impostor })
+    return () => {
+      Object.defineProperty(proto, 'constructor', original)
+    }
+  }
+
+  it('refuses before awaiting, so a then that restores the runtime and forges the answer is never reached', async () => {
+    /* The constructor is replaced before the call; its `then` swaps it back and answers `forged`. */
+    const work = nothing().then(() => 'clean')
+    const original = ownDescriptor('constructor')
+    const thenOriginal = ownDescriptor('then')
+    const forger = function (
+      this: Promise<unknown>,
+      onFulfilled?: (value: unknown) => unknown,
+      onRejected?: (reason: unknown) => unknown,
+    ): unknown {
+      Object.defineProperty(proto, 'constructor', original)
+      return nativeThen.call(this, () => onFulfilled?.('forged'), onRejected)
+    }
+    let outcome: unknown
+    Object.defineProperty(proto, 'then', { ...thenOriginal, value: forger })
+    Object.defineProperty(proto, 'constructor', { ...original, value: Impostor })
+    try {
+      outcome = await enter(work).then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      )
+    } finally {
+      Object.defineProperty(proto, 'constructor', original)
+      Object.defineProperty(proto, 'then', thenOriginal)
+    }
+    expect(outcome).toMatchObject({ error: refusal })
+  })
+
+  it('refuses an answer when the runtime changed while the work ran', async () => {
+    /* The replacement lands after the call started and the work then fulfils. */
+    let restore = (): void => undefined
+    const work = nothing().then(() => {
+      restore = replaceConstructor()
+      return 'clean'
+    })
+    try {
+      await expect(enter(work)).rejects.toMatchObject(refusal)
+    } finally {
+      restore()
+    }
+  })
+
+  it('refuses a failure when the runtime changed while the work ran', async () => {
+    /* The same replacement, then the work rejects: the rejection is not trusted either. */
+    let restore = (): void => undefined
+    const work = nothing().then(() => {
+      restore = replaceConstructor()
+      throw new Error('work failed')
+    })
+    try {
+      await expect(enter(work)).rejects.toMatchObject(refusal)
+    } finally {
+      restore()
     }
   })
 })
