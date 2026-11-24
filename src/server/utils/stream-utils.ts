@@ -8,7 +8,7 @@
 import { PassThrough, Readable } from 'node:stream'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
-import { verdictOf } from './settle-or-cut'
+import { stepOf, verdictOf } from './settle-or-cut'
 import { settles } from './prototype-guard'
 
 /** Every shape accepted as an upload body. */
@@ -173,8 +173,9 @@ async function teeAndPeek(
 
 /**
  * Reads a stream chunk by chunk without `for await`, whose awaits read `constructor` and `then` of every promise
- * the iterator returns: each `next()` goes through {@link verdictOf} instead, which follows it with the captured
- * `then`. The stream is released when `take` stops the read, and not when the stream itself failed or ended.
+ * the iterator returns: each `next()` goes through {@link stepOf} instead, which follows it with the captured
+ * `then` and leaves the root scan to the {@link verdictOf} every caller wraps the whole read in. The stream is
+ * released when `take` stops the read, and not when the stream itself failed or ended.
  *
  * @param source - The stream to read.
  * @param take - Receives each chunk; answers `false` to stop reading.
@@ -186,7 +187,7 @@ async function eachChunk(
   const iterator = (source as AsyncIterable<unknown>)[Symbol.asyncIterator]()
   let more = true
   while (more) {
-    const step = await verdictOf(iterator.next())
+    const step = await stepOf(iterator.next())
     more = step.done !== true && take(step.value)
     if (step.done !== true && !more) {
       await verdictOf(iterator.return?.())

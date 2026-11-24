@@ -78,9 +78,9 @@ export default tseslint.config(
         'error',
         {
           selector:
-            'AwaitExpression > :not(CallExpression[callee.name=/^(verdictOf|settleOrCut|abortable|allOf|pinnedWork)$/])',
+            'AwaitExpression > :not(CallExpression[callee.name=/^(verdictOf|stepOf|settleOrCut|abortable|allOf|pinnedWork)$/])',
           message:
-            'Await a decision-path promise through verdictOf, allOf, settleOrCut or abortable, which follow it with the then captured at load.',
+            'Await a decision-path promise through verdictOf, stepOf, allOf, settleOrCut or abortable, which follow it with the then captured at load.',
         },
         {
           selector: 'ForOfStatement[await=true]',

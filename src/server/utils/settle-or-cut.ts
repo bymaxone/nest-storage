@@ -64,6 +64,27 @@ function settled<T>(work: T | PromiseLike<T>): Promise<Box<T>> {
 }
 
 /**
+ * Awaits one step of a read that an enclosing {@link verdictOf} already guards: the step is followed with the
+ * captured `then` and its answer is refused when it carries a `then`, but the root is not scanned again, so
+ * the scans of a read stay the same however many chunks it has. A key planted while the read runs and left in
+ * place is refused by the scan after the read.
+ *
+ * @param work - The promise of one step.
+ * @returns What `work` answered, unchanged.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when the answer carries a `then`.
+ */
+export function stepOf<T>(work: T | PromiseLike<T>): Promise<T> {
+  return tagged(waitForStep(work))
+}
+
+async function waitForStep<T>(work: T | PromiseLike<T>): Promise<T> {
+  markHandled(work as PromiseLike<unknown>)
+  const wait = settled(work)
+  markOwnHandled(wait)
+  return settles((await wait).value)
+}
+
+/**
  * A copy of how `work` ends, for a party that is not the caller: a native promise of `undefined` that follows
  * `work` with the captured `then`, with its own handled marker, so nothing the party does to the copy reaches
  * the promise the caller awaits.
