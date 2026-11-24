@@ -8,7 +8,7 @@
  * host replaced can run between the check and the await.
  * @layer server/utils
  */
-import { assertCleanRoot, INTRINSIC_PROMISE, markHandled } from './prototype-guard'
+import { assertCleanRoot, boxed, INTRINSIC_PROMISE, markHandled } from './prototype-guard'
 
 /** The engine's `Promise` constructor, captured at load, so a replaced global is not read. */
 const NativePromise: PromiseConstructor = INTRINSIC_PROMISE
@@ -36,12 +36,6 @@ export function nothing(): Promise<undefined> {
 /** What the wait settles with: no prototype, so no `then` is looked up on the answer. */
 interface Box<V> {
   readonly value: V
-}
-
-function boxed<V>(value: V): Box<V> {
-  const box = Object.create(null) as { value: V }
-  box.value = value
-  return box
 }
 
 /** Hands the work's outcome to the wait, a rejection included, and never rejects itself. */

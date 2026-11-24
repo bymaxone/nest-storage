@@ -112,6 +112,39 @@ describe('settleOrCut', () => {
     })
   })
 
+  it('builds the box without reading Object.create, so a replacement that restores itself and forges the answer is never called', async () => {
+    /* `Object.create` is replaced while the work runs; its result is a thenable that puts the original back and answers `forged`. */
+    const original = Object.getOwnPropertyDescriptor(Object, 'create')!
+    const nativeCreate = Object.create.bind(Object) as (
+      prototype: object | null,
+    ) => Record<string, unknown>
+    const forger = (prototype: object | null): object => {
+      if (prototype !== null) {
+        return nativeCreate(prototype)
+      }
+      return {
+        then: (resolve: (value: unknown) => void) => {
+          Object.defineProperty(Object, 'create', original)
+          resolve(Object.assign(nativeCreate(null), { value: 'forged' }))
+        },
+      }
+    }
+    const work = nothing().then(() => {
+      Object.defineProperty(Object, 'create', { ...original, value: forger })
+      return 'clean'
+    })
+    let outcome: unknown
+    try {
+      outcome = await settleOrCut(work, () => () => undefined).then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      )
+    } finally {
+      Object.defineProperty(Object, 'create', original)
+    }
+    expect(outcome).toMatchObject({ error: { code: 'STORAGE_VALIDATION_FAILED' } })
+  })
+
   it('refuses an outcome when the runtime changed while the work ran', async () => {
     /* A key planted on the root prototype after the work started refuses the answer. */
     const root = Object.prototype as unknown as Record<string, unknown>

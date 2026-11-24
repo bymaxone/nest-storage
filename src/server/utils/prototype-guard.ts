@@ -110,6 +110,20 @@ export function markHandled(work: PromiseLike<unknown>): void {
     // Not a native promise: its own `then` is the host's, and it is not called here.
   }
 }
+
+/**
+ * Wraps an answer in an object without a prototype, built with the `create` captured at load, so
+ * neither a replaced `Object.create` nor a `then` on any prototype is consulted when the box is
+ * built or resolved with.
+ *
+ * @param value - The answer to carry.
+ * @returns A prototype-less object whose only property is `value`.
+ */
+export function boxed<V>(value: V): { readonly value: V } {
+  const box = create(null)
+  box.value = value
+  return box as { readonly value: V }
+}
 /** The refusals this module raised, so a caller can tell one from an ordinary validation error. */
 const raised = new WeakSet()
 
