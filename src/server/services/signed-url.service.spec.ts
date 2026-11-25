@@ -399,9 +399,10 @@ describe('SignedUrlService', () => {
       expect(result.requiredHeaders['x-amz-acl']).toBe('public-read')
     })
 
-    it('signs x-amz-acl as a header, and keeps it out of the query, when an ACL is set', async () => {
+    it('passes x-amz-acl to the presigner as a signable and an unhoistable header when an ACL is set', async () => {
       // The caller is told to send x-amz-acl, so it must be signed as a header; hoisted into the query
       // it would be unsigned as a header and the provider would refuse the request that follows the list.
+      // The presigner is mocked here, so this row pins the options it receives; the e2e row checks the URL.
       const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
 
       await service.getUploadUrl({ key: KEY, contentType: 'image/png', publicRead: true })
@@ -415,7 +416,7 @@ describe('SignedUrlService', () => {
     })
 
     it('names no unhoistable header when no ACL is set', async () => {
-      // With nothing to sign as a header, the options stay exactly as they were.
+      // Without an ACL, content-type is the only signed header and no unhoistable header is needed.
       const service = await buildService(buildOptions(), buildMockS3Provider(), buildMockKeyResolver())
 
       await service.getUploadUrl({ key: KEY, contentType: 'image/png' })
