@@ -73,6 +73,23 @@ function putCommand(
   })
 }
 
+/**
+ * The presigner options of an upload URL. `content-type` is named because the presigner leaves it out of the
+ * signature otherwise, and the URL holder could store any type under a key approved for another. An ACL is
+ * signed as a header and kept out of the query, because the caller is told to send it as one.
+ */
+function putPresignOptions(
+  ttl: number,
+  acl: 'public-read' | undefined,
+): { expiresIn: number; signableHeaders: Set<string>; unhoistableHeaders?: Set<string> } {
+  if (acl === undefined) return { expiresIn: ttl, signableHeaders: new Set(['content-type']) }
+  return {
+    expiresIn: ttl,
+    signableHeaders: new Set(['content-type', 'x-amz-acl']),
+    unhoistableHeaders: new Set(['x-amz-acl']),
+  }
+}
+
 /** Refuses a part count that is not an integer from 1 to the provider's maximum. */
 function assertPartCount(parts: number): void {
   if (!Number.isInteger(parts) || parts < 1 || parts > MAX_MULTIPART_PARTS) {
@@ -155,7 +172,9 @@ export class SignedUrlService {
    * every header listed in `requiredHeaders` verbatim — each one is part of the
    * URL signature, so an omitted header yields `SignatureDoesNotMatch`. The map
    * always carries `Content-Type` and additionally lists `x-amz-acl` when an ACL
-   * is signed. The metadata pairs travel in the signed query string, so they are not listed. The `Content-Type`
+   * is signed; that header is signed too (`X-Amz-SignedHeaders` lists it) and is kept
+   * out of the query string, so a PUT that leaves it out or sends another value is
+   * refused. The metadata pairs travel in the signed query string, so they are not listed. The `Content-Type`
    * is signed (`X-Amz-SignedHeaders` lists `content-type`), so a PUT that sends any
    * other type is refused by the provider and nothing is stored.
    *
@@ -168,8 +187,12 @@ export class SignedUrlService {
    *
    * ACL caveat: `publicRead` emits `ACL: public-read`, which returns HTTP 400
    * `AccessControlListNotSupported` on modern AWS S3 buckets (Object Ownership
-   * = "Bucket owner enforced") and is a no-op on Cloudflare R2. Prefer a bucket
-   * policy, CDN, or signed GET URL for public delivery.
+   * = "Bucket owner enforced") and is a no-op on Cloudflare R2. Whether the grant
+   * is public has not been measured on any provider: MinIO does not implement
+   * object ACLs (a PUT with an ACL stores an owner-only one, and PutObjectAcl is
+   * not implemented). A browser PUT needs `x-amz-acl` in the bucket's CORS
+   * `AllowedHeaders` (preflight measured on MinIO; browsers not run). Prefer a
+   * bucket policy, CDN, or signed GET URL for public delivery.
    *
    * @param options - The upload URL options.
    * @returns The presigned URL, its expiry metadata, and required headers.
@@ -204,13 +227,8 @@ export class SignedUrlService {
     try {
       const acl = buildACL(options.publicRead, this.options.defaultPublicRead)
       const command = putCommand(bucket, finalKey, options, acl)
-      // The presigner leaves `content-type` out of the signature unless it is named here; without
-      // it the URL holder could store any type under a key approved for another.
       const url = await verdictOf(
-        getSignedUrl(this.s3Provider.getClient(), command, {
-          expiresIn: ttl,
-          signableHeaders: new Set(['content-type']),
-        }),
+        getSignedUrl(this.s3Provider.getClient(), command, putPresignOptions(ttl, acl)),
       )
       return {
         url,

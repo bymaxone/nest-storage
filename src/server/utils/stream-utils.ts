@@ -9,7 +9,7 @@ import { PassThrough, Readable } from 'node:stream'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { stepOf, verdictOf } from './settle-or-cut'
-import { settles } from './prototype-guard'
+import { assertCleanRoot, settles } from './prototype-guard'
 
 /** Every shape accepted as an upload body. */
 export type UploadBody = Buffer | NodeJS.ReadableStream | Uint8Array
@@ -67,6 +67,8 @@ export async function peekFirstBytes(
     const buf = Buffer.isBuffer(body) ? body : Buffer.from(body)
     return { head: buf.subarray(0, maxBytes), replacementBody: buf }
   }
+  // The tee attaches a data listener to the caller's stream, which starts it flowing, so the root is checked first.
+  assertCleanRoot()
   return await verdictOf(teeAndPeek(body, maxBytes))
 }
 
@@ -184,6 +186,8 @@ async function eachChunk(
   source: NodeJS.ReadableStream,
   take: (chunk: unknown) => boolean,
 ): Promise<void> {
+  // `stepOf` does not scan the root, so the source is opened, and asked for its first chunk, only on a clean one.
+  assertCleanRoot()
   const iterator = (source as AsyncIterable<unknown>)[Symbol.asyncIterator]()
   let more = true
   while (more) {
