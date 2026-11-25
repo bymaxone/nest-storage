@@ -126,6 +126,29 @@ describe('readStream', () => {
     expect((await readStream(source)).length).toBe(0)
     expect(opened).toBe(1)
   })
+
+  it('refuses a changed runtime before peek attaches to the source, so the source is not read', async () => {
+    // peek wires a data listener on the caller's stream, which starts it flowing; the check must come first.
+    const root = Object.prototype as unknown as Record<string, unknown>
+    let reads = 0
+    const source = new Readable({
+      read() {
+        reads += 1
+        this.push(null)
+      },
+    })
+    root.plantedBeforePeek = true
+    try {
+      await expect(peekFirstBytes(source, 1)).rejects.toMatchObject({
+        response: { error: { code: 'STORAGE_VALIDATION_FAILED' } },
+      })
+    } finally {
+      Reflect.deleteProperty(root, 'plantedBeforePeek')
+    }
+    // The source is read on a later tick if a listener was attached, so let one pass before counting.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(reads).toBe(0)
+  })
 })
 
 describe('toUploadBody', () => {
