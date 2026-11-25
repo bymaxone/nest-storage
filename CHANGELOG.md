@@ -32,8 +32,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Known limits
 
-- **A key planted on `Object.prototype` in the middle of a read is unchanged.** The 1.1.22 limit below still holds
-  for it; only a key planted before the first chunk no longer drains the source.
+- **A key planted on `Object.prototype` in the middle of a read is not caught before the source is drained.** Only a
+  key planted before the read starts leaves the source unopened.
 - **Public grant: not measured on any provider.** MinIO does not implement object ACLs: a PUT that carries an ACL
   stores an owner-only one, and `PutObjectAcl` is not implemented, so `publicRead` cannot be shown to grant public
   read there. AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces and Wasabi were not measured. A browser PUT
