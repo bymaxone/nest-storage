@@ -184,10 +184,10 @@ async function eachChunk(
   source: NodeJS.ReadableStream,
   take: (chunk: unknown) => boolean,
 ): Promise<void> {
+  // `stepOf` does not scan the root, so the source is opened, and asked for its first chunk, only on a clean one.
+  assertCleanRoot()
   const iterator = (source as AsyncIterable<unknown>)[Symbol.asyncIterator]()
   let more = true
-  // `stepOf` does not scan the root, so the first request to the source is made only on a clean one.
-  assertCleanRoot()
   while (more) {
     const step = await stepOf(iterator.next())
     more = step.done !== true && take(step.value)

@@ -25,12 +25,15 @@ note on each entry is the compatibility contract — read it, not the number.
   with `publicRead` is now refused, where it used to store the object without the ACL. Send every entry of
   `requiredHeaders`. A URL issued without an ACL is unchanged.
 
-- **A stream read now checks the runtime root before the first `next()` on the source.** The check ran when the read
-  ended, so a key planted on `Object.prototype` before the read was refused only after the source had been read to
-  its end.
+- **A stream read now checks the runtime root before it takes the iterator of the source.** The check ran when the
+  read ended, so a key planted on `Object.prototype` before the read was refused at once while the source was still
+  drained in the background, and a source that opens a resource when its iterator is taken had opened it and not
+  released it. A refused read now leaves the source unopened.
 
 ### Known limits
 
+- **A key planted on `Object.prototype` in the middle of a read is unchanged.** The 1.1.22 limit below still holds
+  for it; only a key planted before the first chunk no longer drains the source.
 - **Public grant: not measured on any provider.** MinIO does not implement object ACLs: a PUT that carries an ACL
   stores an owner-only one, and `PutObjectAcl` is not implemented, so `publicRead` cannot be shown to grant public
   read there. AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces and Wasabi were not measured. A browser PUT
