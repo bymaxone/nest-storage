@@ -84,6 +84,10 @@ note on each entry is the compatibility contract — read it, not the number.
   SDK's own `S3Client.send` runs, which can leave that rejection unhandled. The readiness check reads the clock
   captured at load, and a signal whose `removeEventListener` throws still gets the probe's answer.
 
+  The baseline of `Reflect` is the thirteen functions the language defines on it and where the object points, not
+  every key of it, so a second copy of the `reflect-metadata` polyfill, which defines its own functions on `Reflect`
+  again when it is evaluated, does not make the library refuse. A replaced language function still does.
+
   **Apply to a derived backend:** nothing to change. An application that adds a key to `Object.prototype` (a polyfill
   or a library that extends it) now fails at module start-up and on every storage call with
   `STORAGE_VALIDATION_FAILED`; remove the extension.
