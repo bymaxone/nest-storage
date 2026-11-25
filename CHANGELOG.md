@@ -13,7 +13,7 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
-## [1.1.22] - 2026-11-21
+## [1.1.22] - 2026-11-25
 
 ### Fixed
 
@@ -118,6 +118,10 @@ note on each entry is the compatibility contract — read it, not the number.
   property added to `Object.prototype`, say), an `upload()` refused at its start never owns its body: a `Readable`
   passed as `body` is not destroyed, and the caller must close it. A refusal raised after the call began, like any
   other rejection, destroys the stream.
+
+- **A refused buffered read goes on to the end of the body.** With `bodyIdleTimeoutMs: 0` and no `maxBytes`, a runtime
+  the guard refuses makes `downloadBuffer()` reject, but the read keeps pulling chunks until the source ends and then
+  drops them. The default idle guard and `maxBytes` bound it.
 
 ## [1.1.21] - 2026-11-21
 
