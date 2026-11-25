@@ -173,4 +173,67 @@ describe('Storage E2E — signed URLs', () => {
       await longLived.close()
     }
   })
+
+  describe('a PUT URL that carries an ACL signs the x-amz-acl header', () => {
+    // The ACL is part of the contract: the caller is told to send `x-amz-acl`, so the header is
+    // signed with the URL. The suite proves that header contract. It does not assert a public
+    // grant: MinIO does not implement object ACLs, so the stored ACL is owner-only whatever is sent.
+    const upload = (key: string, extra: Record<string, unknown> = {}) =>
+      signedUrls.getUploadUrl({ key, contentType: 'text/plain', ttlSeconds: 60, publicRead: true, ...extra })
+
+    it('lists x-amz-acl among the signed headers and not in the query', async () => {
+      const { url } = await upload('e2e/acl-signed-headers.txt')
+      const params = new URL(url).searchParams
+      expect((params.get('X-Amz-SignedHeaders') ?? '').split(';')).toEqual(
+        expect.arrayContaining(['content-type', 'host', 'x-amz-acl']),
+      )
+      expect(params.has('x-amz-acl')).toBe(false)
+    })
+
+    it('stores an upload sent with exactly the headers it asked for', async () => {
+      const key = 'e2e/acl-exact.txt'
+      const { url, requiredHeaders } = await upload(key)
+      expect(Object.keys(requiredHeaders).sort()).toEqual(['Content-Type', 'x-amz-acl'])
+      const response = await fetch(url, { method: 'PUT', headers: requiredHeaders, body: 'acl-exact' })
+      expect(response.status).toBe(200)
+      expect((await storage.head(key)).contentType).toBe('text/plain')
+    })
+
+    it('stores an upload with metadata sent with exactly the headers it asked for', async () => {
+      const key = 'e2e/acl-metadata.txt'
+      const { url, requiredHeaders } = await upload(key, { metadata: { color: 'red' } })
+      const response = await fetch(url, { method: 'PUT', headers: requiredHeaders, body: 'acl-metadata' })
+      expect(response.status).toBe(200)
+      expect((await storage.head(key)).metadata).toEqual({ color: 'red' })
+    })
+
+    it('refuses an upload that leaves the x-amz-acl header out, and stores nothing', async () => {
+      const key = 'e2e/acl-omitted.txt'
+      const { url } = await upload(key)
+      const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: 'x' })
+      expect(response.status).toBeGreaterThanOrEqual(400)
+      await expect(storage.head(key)).rejects.toMatchObject({ code: 'STORAGE_OBJECT_NOT_FOUND' })
+    })
+
+    it('refuses an upload that sends another x-amz-acl value, and stores nothing', async () => {
+      const key = 'e2e/acl-other-value.txt'
+      const { url } = await upload(key)
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'text/plain', 'x-amz-acl': 'private' },
+        body: 'x',
+      })
+      expect(response.status).toBeGreaterThanOrEqual(400)
+      await expect(storage.head(key)).rejects.toMatchObject({ code: 'STORAGE_OBJECT_NOT_FOUND' })
+    })
+
+    it('leaves a URL without an ACL as it was: Content-Type alone, no x-amz-acl signed', async () => {
+      const key = 'e2e/no-acl.txt'
+      const { url, requiredHeaders } = await upload(key, { publicRead: false })
+      expect(requiredHeaders).toEqual({ 'Content-Type': 'text/plain' })
+      expect((new URL(url).searchParams.get('X-Amz-SignedHeaders') ?? '').split(';')).not.toContain('x-amz-acl')
+      const response = await fetch(url, { method: 'PUT', headers: requiredHeaders, body: 'no-acl' })
+      expect(response.status).toBe(200)
+    })
+  })
 })
