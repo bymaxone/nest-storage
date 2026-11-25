@@ -29,6 +29,25 @@ const STANDARD_NAMES = [
 ]
 /** The Buffer functions the library calls live. */
 const BUFFER_CALLS = ['from', 'alloc', 'concat', 'byteLength', 'isBuffer']
+/**
+ * The functions the language puts on `Reflect`. Not the whole object: a second copy of the metadata polyfill
+ * defines its own functions on `Reflect` again whenever it is evaluated, and no decision reads one of those.
+ */
+const REFLECT_CALLS = [
+  'apply',
+  'construct',
+  'defineProperty',
+  'deleteProperty',
+  'get',
+  'getOwnPropertyDescriptor',
+  'getPrototypeOf',
+  'has',
+  'isExtensible',
+  'ownKeys',
+  'preventExtensions',
+  'set',
+  'setPrototypeOf',
+]
 const FIELDS = ['value', 'get', 'set', 'writable', 'enumerable', 'configurable']
 /** Global bindings compared by the value they resolve to. */
 const GLOBALS = [
@@ -401,7 +420,6 @@ function baselineTargets(): object[] {
     String,
     String.prototype,
     RegExp.prototype,
-    Reflect,
     Map.prototype,
     Set.prototype,
     WeakMap.prototype,
@@ -437,8 +455,17 @@ function readBaseline(): void {
   }
   // Not the whole of Buffer: its pool size is a setting a host may tune, and no decision reads it.
   at = 0
-  while (at < BUFFER_CALLS.length) {
+  const bufferEnd = BUFFER_CALLS.length
+  while (at !== bufferEnd) {
     capture(Buffer, item(BUFFER_CALLS, at))
+    at += 1
+  }
+  // Where `Reflect` itself points, and each function the language defines on it.
+  capture(Reflect, PARENT)
+  at = 0
+  const reflectEnd = REFLECT_CALLS.length
+  while (at !== reflectEnd) {
+    capture(Reflect, item(REFLECT_CALLS, at))
     at += 1
   }
   // `await` takes a promise's own resolution only while its `constructor` is the native one; any other

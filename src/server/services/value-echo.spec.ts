@@ -53,7 +53,7 @@ async function failure(run: () => Promise<unknown>): Promise<{ text: string; det
 }
 
 describe('the strings an error carries', () => {
-  let moduleRef: TestingModule
+  let moduleRef: TestingModule | undefined
   let storage: StorageService
 
   beforeAll(async () => {
@@ -63,7 +63,7 @@ describe('the strings an error carries', () => {
   })
 
   afterAll(async () => {
-    await moduleRef.close()
+    await moduleRef?.close()
     jest.restoreAllMocks()
   })
 

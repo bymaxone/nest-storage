@@ -33,7 +33,7 @@ jobs:
       # mutants, which takes more than an hour, and the cache is saved only when the job
       # succeeds, so a run that lands on the ceiling is lost. The job is CANCELLED rather
       # than failed when it lands, which reads as an infrastructure blip instead of a budget.
-      mutation-timeout-minutes: 120
+      mutation-timeout-minutes: 180
 
   verify:
     name: Verify build + size

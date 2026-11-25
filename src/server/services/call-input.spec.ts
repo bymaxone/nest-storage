@@ -95,7 +95,7 @@ async function outcome(run: () => unknown): Promise<{ code: unknown; status: unk
 }
 
 describe('a per-call input of the wrong kind', () => {
-  let moduleRef: TestingModule
+  let moduleRef: TestingModule | undefined
   let services: Services
 
   beforeAll(async () => {
@@ -108,7 +108,7 @@ describe('a per-call input of the wrong kind', () => {
   })
 
   afterAll(async () => {
-    await moduleRef.close()
+    await moduleRef?.close()
   })
 
   describe.each(bucketCalls)('%s: the bucket', (_method, call) => {
