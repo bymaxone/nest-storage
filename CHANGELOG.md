@@ -13,6 +13,18 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A signed PUT URL issued with `publicRead` now signs the `x-amz-acl` header it tells the caller to send.**
+  `getUploadUrl` listed `x-amz-acl` in `requiredHeaders`, but the URL moved it into the query and signed
+  `content-type;host`, so a PUT that sent exactly the listed headers was refused (measured on MinIO: 400
+  `AccessDenied`, "headers present in the request which were not signed") and nothing was stored. The header is now
+  signed and kept out of the query, so a PUT that sends every listed header is accepted.
+
+  **Apply to a derived backend:** a client that ignored `requiredHeaders` and sent `Content-Type` alone to a URL issued
+  with `publicRead` is now refused, where it used to store the object without the ACL. The fix is one line: send every
+  entry of `requiredHeaders`. A URL issued without an ACL is unchanged.
+
 ## [1.1.22] - 2026-11-25
 
 ### Fixed
@@ -134,12 +146,10 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Known limits
 
-- **A signed PUT with an ACL cannot be sent with `x-amz-acl` as a header on MinIO.** `getUploadUrl` with `publicRead`
-  lists `x-amz-acl` in `requiredHeaders`, but the presigned URL carries it in the query and signs only
-  `content-type;host`. Measured on MinIO (`pgsty/silo:RELEASE.2026-10-26T00-00-00Z`): a PUT that sends `Content-Type`
-  and `x-amz-acl` as told is refused with 400 `AccessDenied` ("headers present in the request which were not
-  signed") and stores nothing; a PUT that sends `Content-Type` alone returns 200 and the stored object has no
-  public grant. AWS S3 was not tested. Send `Content-Type` only, or do not use `publicRead`.
+- **Public grant: not measured on any provider.** MinIO does not implement object ACLs: a PUT that carries an ACL
+  stores an owner-only one, and `PutObjectAcl` is not implemented, so `publicRead` cannot be shown to grant public
+  read there. AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces and Wasabi were not measured. A browser PUT
+  needs `x-amz-acl` in the bucket's CORS `AllowedHeaders` (preflight measured on MinIO; browsers not run).
 
 - **A call the runtime guard refuses does not touch the body.** When the runtime differs from what it was at load (a
   property added to `Object.prototype`, say), an `upload()` refused at its start never owns its body: a `Readable`
