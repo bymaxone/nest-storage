@@ -4,8 +4,7 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
-# Read-only at the workflow level: the job below names the two grants it needs, and a job added later
-# starts with no more than this.
+# The default for a job that declares no permissions of its own; the job below declares its own.
 permissions:
   contents: read
 
