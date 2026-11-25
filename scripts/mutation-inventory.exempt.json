@@ -54,5 +54,17 @@
   {
     "file": "src/server/utils/progress-hook.process.spec.ts",
     "reason": "Transpiles the progress helpers to a temporary directory and runs them in a child node process that counts unhandled rejections; the code it exercises runs outside the instrumented process, so it can kill no mutant."
+  },
+  {
+    "file": "src/server/utils/prototype-guard.source.spec.ts",
+    "reason": "Reads src/server/utils/prototype-guard.ts as text and scans it with the TypeScript compiler API; it executes no code of it, and under Stryker that text is the instrumented copy, which the scan is not written to read; the mutation run leaves it out by name pattern in jest.stryker.config.ts. Leaving it out can only show a survivor, never hide one."
+  },
+  {
+    "file": "src/server/utils/library-builtins.source.spec.ts",
+    "reason": "Compares the text of the library sources with its baseline of built-in calls; the instrumented copy Stryker runs breaks that comparison, so the mutation run leaves it out by name pattern in jest.stryker.config.ts. The file also imports assertCleanRoot from ./prototype-guard for one row, which the other prototype-guard specs run in the mutation run. Leaving it out can only show a survivor, never hide one."
+  },
+  {
+    "file": "src/mutation-inventory-parity.spec.ts",
+    "reason": "Reads jest.stryker.config.ts, the exempt list and the file tree as text and imports no module of src/ that a mutant could change, so no mutant selects it."
   }
 ]
