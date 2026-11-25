@@ -57,6 +57,16 @@ describe('S3ClientProvider', () => {
     expect(creds.sessionToken).toBe('t')
   })
 
+  it('should leave out an empty session token, which the provider would send as a header', async () => {
+    // An empty token is "none": it must not reach the resolved credentials as an empty string.
+    const provider = makeProvider({
+      credentials: { accessKeyId: 'k', secretAccessKey: 's', sessionToken: '' },
+    })
+    provider.onModuleInit()
+    const creds = await provider.getClient().config.credentials()
+    expect(creds.sessionToken).toBeUndefined()
+  })
+
   it('should skip creation and stay unconfigured when credentials are missing', () => {
     // hasCredentials false branch — warn and return.
     const provider = makeProvider({ credentials: { accessKeyId: '', secretAccessKey: '' } })
