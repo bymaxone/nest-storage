@@ -9,7 +9,7 @@ import { PassThrough, Readable } from 'node:stream'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { stepOf, verdictOf } from './settle-or-cut'
-import { settles } from './prototype-guard'
+import { assertCleanRoot, settles } from './prototype-guard'
 
 /** Every shape accepted as an upload body. */
 export type UploadBody = Buffer | NodeJS.ReadableStream | Uint8Array
@@ -186,6 +186,8 @@ async function eachChunk(
 ): Promise<void> {
   const iterator = (source as AsyncIterable<unknown>)[Symbol.asyncIterator]()
   let more = true
+  // `stepOf` does not scan the root, so the first request to the source is made only on a clean one.
+  assertCleanRoot()
   while (more) {
     const step = await stepOf(iterator.next())
     more = step.done !== true && take(step.value)
