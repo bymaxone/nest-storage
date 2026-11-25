@@ -28,7 +28,8 @@ note on each entry is the compatibility contract — read it, not the number.
 - **A stream read now checks the runtime root before it takes the iterator of the source.** The check ran when the
   read ended, so a key planted on `Object.prototype` before the read was refused at once while the source was still
   drained in the background, and a source that opens a resource when its iterator is taken had opened it and not
-  released it. A refused read now leaves the source unopened.
+  released it. A refused read now leaves the source unopened, and so does a refused first-bytes peek, which attached
+  its listener to the stream before the check.
 
 ### Known limits
 

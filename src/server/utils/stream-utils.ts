@@ -67,6 +67,8 @@ export async function peekFirstBytes(
     const buf = Buffer.isBuffer(body) ? body : Buffer.from(body)
     return { head: buf.subarray(0, maxBytes), replacementBody: buf }
   }
+  // The tee attaches a data listener to the caller's stream, which starts it flowing, so the root is checked first.
+  assertCleanRoot()
   return await verdictOf(teeAndPeek(body, maxBytes))
 }
 
