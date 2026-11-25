@@ -306,7 +306,7 @@ BymaxStorageModule.forRoot({
 `publicRead: true` (or `defaultPublicRead: true` in the config) sends `ACL: 'public-read'` on PutObject. However:
 
 - **Modern AWS S3 buckets** (Object Ownership = "Bucket owner enforced", the default since April 2023) return **HTTP 400 `AccessControlListNotSupported`** when an ACL header is present.
-- **Cloudflare R2** ignores ACLs entirely — `publicRead: true` is a **silent no-op**; configure a Custom Domain in the R2 dashboard for public delivery.
+- **Cloudflare R2**: what it does with the ACL was **not measured**, so do not rely on `publicRead: true` there; configure a Custom Domain in the R2 dashboard for public delivery.
 
 For public access on either provider, use a **bucket policy**, a **CDN**, or **signed URLs** rather than ACLs.
 
@@ -986,7 +986,7 @@ Every operational line the library writes is an **object** through the Nest `Log
 - **Share state between replicas.** The idempotency cache is per instance.
 - **Complete or abort a presigned multipart upload.** The client sends the part ETags to `completeUrl`
   and aborts with its own signed request ([Presigned Multipart](#presigned-multipart)).
-- **Make ACLs work everywhere.** `publicRead` fails on modern AWS S3 and is a no-op on R2
+- **Make ACLs work everywhere.** `publicRead` fails on modern AWS S3 and is not measured on R2
   ([Public Access / ACLs](#public-access--acls)).
 - **Lock lifecycle writes.** Changes are read-modify-write and not atomic.
 - **Wrap every S3 operation.** Provider-specific calls go through the raw `S3Client`
@@ -1181,7 +1181,7 @@ This is the index.
 | Method                   | Signature                                                                     | Notes                                                         |
 | ------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `getDownloadUrl`         | `(options: SignedGetUrlOptions) => Promise<SignedUrlResult>`                  | GET presign                                                   |
-| `getUploadUrl`           | `(options: SignedPutUrlOptions) => Promise<SignedUrlResult>`                  | PUT presign; signs `Content-Type` and returns the `requiredHeaders` |
+| `getUploadUrl`           | `(options: SignedPutUrlOptions) => Promise<SignedUrlResult>`                  | PUT presign; signs `Content-Type` (and `x-amz-acl` with `publicRead`) and returns the `requiredHeaders` |
 | `getMultipartUploadUrls` | `(options: MultipartUploadUrlsOptions) => Promise<MultipartUploadUrlsResult>` | One signed URL per part, plus the upload id and the completion URL                   |
 
 ### `BucketLifecycleService`

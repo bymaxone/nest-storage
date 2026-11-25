@@ -255,7 +255,7 @@ export interface BymaxStorageModuleOptions {
    * Apply ACL `public-read` on uploads. Default: false. NOTE: modern AWS S3 buckets
    * disable ACLs (Object Ownership = "Bucket owner enforced", the default for new
    * buckets since April 2023), so sending an ACL on PutObject returns HTTP 400
-   * `AccessControlListNotSupported`; Cloudflare R2 ignores ACLs entirely. For public
+   * `AccessControlListNotSupported`; the effect on Cloudflare R2 was not measured. For public
    * access prefer a bucket policy, a CDN, or signed URLs — see §16.1 / §16.2.
    */
   defaultPublicRead?: boolean
@@ -397,7 +397,7 @@ const options = providerRecipes.cloudflareR2({
 }
 ```
 
-**Cloudflare R2:** (R2 ignores ACLs — configure Custom Domain in the R2 dashboard)
+**Cloudflare R2:** (ACL effect on R2 not measured — configure Custom Domain in the R2 dashboard)
 
 ```typescript
 {

@@ -37,7 +37,7 @@ export interface BymaxStorageModuleOptions {
   cdnBaseUrl?: string
   /**
    * Apply ACL `public-read` on uploads. Default: `false`. Fails with HTTP 400
-   * on modern AWS S3 (ACLs disabled) and is a no-op on R2 — prefer bucket
+   * on modern AWS S3 (ACLs disabled); not measured on R2 — prefer bucket
    * policy / CDN / signed URLs.
    */
   defaultPublicRead?: boolean
