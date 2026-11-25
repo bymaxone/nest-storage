@@ -73,6 +73,23 @@ function putCommand(
   })
 }
 
+/**
+ * The presigner options of an upload URL. `content-type` is named because the presigner leaves it out of the
+ * signature otherwise, and the URL holder could store any type under a key approved for another. An ACL is
+ * signed as a header and kept out of the query, because the caller is told to send it as one.
+ */
+function putPresignOptions(
+  ttl: number,
+  acl: 'public-read' | undefined,
+): { expiresIn: number; signableHeaders: Set<string>; unhoistableHeaders?: Set<string> } {
+  if (acl === undefined) return { expiresIn: ttl, signableHeaders: new Set(['content-type']) }
+  return {
+    expiresIn: ttl,
+    signableHeaders: new Set(['content-type', 'x-amz-acl']),
+    unhoistableHeaders: new Set(['x-amz-acl']),
+  }
+}
+
 /** Refuses a part count that is not an integer from 1 to the provider's maximum. */
 function assertPartCount(parts: number): void {
   if (!Number.isInteger(parts) || parts < 1 || parts > MAX_MULTIPART_PARTS) {
@@ -210,16 +227,8 @@ export class SignedUrlService {
     try {
       const acl = buildACL(options.publicRead, this.options.defaultPublicRead)
       const command = putCommand(bucket, finalKey, options, acl)
-      // The presigner leaves `content-type` out of the signature unless it is named here; without
-      // it the URL holder could store any type under a key approved for another.
       const url = await verdictOf(
-        getSignedUrl(this.s3Provider.getClient(), command, {
-          expiresIn: ttl,
-          signableHeaders: new Set(acl === undefined ? ['content-type'] : ['content-type', 'x-amz-acl']),
-          // The caller is told to send the ACL as a header, so it is signed as one; left to the
-          // presigner it would move into the query and the header would be refused as unsigned.
-          ...(acl === undefined ? {} : { unhoistableHeaders: new Set(['x-amz-acl']) }),
-        }),
+        getSignedUrl(this.s3Provider.getClient(), command, putPresignOptions(ttl, acl)),
       )
       return {
         url,
