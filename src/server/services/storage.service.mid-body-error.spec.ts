@@ -46,8 +46,8 @@ describe('a download body that fails after its headers', () => {
   /** What the stand-in does after it has sent part of the body. */
   let afterPartialBody: 'reset' | 'silence' = 'reset'
   let bodyStarted = false
-  /** Set when the test is over, so a poll or a timer it started ends with it and cannot fire in a later test. */
-  let testOver = false
+  /** One per test, replaced by the next, so a poll holding its own cannot see a later test reset it. */
+  let life = { over: false }
   let abortTimer: NodeJS.Timeout | undefined
   let moduleRef: TestingModule | undefined
   const sockets = new Set<Socket>()
@@ -92,11 +92,11 @@ describe('a download body that fails after its headers', () => {
   beforeEach(() => {
     afterPartialBody = 'reset'
     bodyStarted = false
-    testOver = false
+    life = { over: false }
   })
 
   afterEach(async () => {
-    testOver = true
+    life.over = true
     clearTimeout(abortTimer)
     jest.restoreAllMocks()
     await moduleRef?.close()
@@ -139,9 +139,10 @@ describe('a download body that fails after its headers', () => {
   /** Aborts once the body has started, so the signal and not the timeout is what ends the call. */
   function abortWhenStarted(): AbortSignal {
     const controller = new AbortController()
-    until(() => bodyStarted || testOver, 'the first bytes of the body were sent')
+    const mine = life
+    until(() => bodyStarted || mine.over, 'the first bytes of the body were sent')
       .then(() => {
-        if (testOver) return
+        if (mine.over) return
         abortTimer = setTimeout(() => {
           controller.abort()
         }, 50)
