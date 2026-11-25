@@ -93,9 +93,9 @@ note on each entry is the compatibility contract — read it, not the number.
   `Number.prototype.toFixed`, `Object.freeze`, `Object.hasOwn` or `Array.prototype.findLast`, a deleted `Math.cbrt` and
   a non-writable `Object.freeze` are each refused; a property **added** to one of them after load (a new key on `Math`,
   `Object`, `Array.prototype`, `Map.prototype`, `Symbol`, `JSON` and others) is **not** refused, except `then` on
-  `Array.prototype`, `Function.prototype` and `Buffer.prototype`, and any key on `Object.prototype`. A function replaced and then
-  put back is not refused. Not compared, so replacing them is not refused: `Date`, `Intl`, the statics and `then` of
-  `Promise`, `setTimeout`, `console`, `Atomics`, `structuredClone`, `Error.captureStackTrace`, and the `Buffer` statics
+  `Array.prototype`, `Function.prototype`, `Buffer.prototype`, `Uint8Array.prototype` and the typed-array prototype, and any key on `Object.prototype`. A function replaced and then
+  put back is not refused. Not compared, so replacing them is not refused: `Date`, `Intl`, `Promise.resolve`, `Promise.all`, `Promise.race`, `Promise.prototype.then` and `catch` (`Promise[Symbol.species]` is
+  compared and refused), `setTimeout`, `console`, `Atomics`, `structuredClone`, `Error.captureStackTrace`, and the `Buffer` statics
   other than the five above (`Buffer.compare`, `Buffer.isEncoding`, `Buffer.poolSize`).
 
   The baseline of `Reflect` is the functions the language defines on it and where the object points, not
