@@ -25,6 +25,9 @@ note on each entry is the compatibility contract — read it, not the number.
   with `publicRead` is now refused, where it used to store the object without the ACL. The fix is one line: send every
   entry of `requiredHeaders`. A URL issued without an ACL is unchanged.
 
+- **A stream read now checks the runtime root before the first chunk is requested.** The check ran when the read
+  ended, so a key planted on `Object.prototype` before the read was refused only after the source had been read once.
+
 ## [1.1.22] - 2026-11-25
 
 ### Fixed
