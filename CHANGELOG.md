@@ -53,8 +53,9 @@ note on each entry is the compatibility contract — read it, not the number.
   and configuration name off the object it is handed, so a name planted on the root prototype could become a header,
   a signed query name, a credential or the request host. The library now refuses to build the client, and refuses
   every attempt of every command (a retry included, a presigned URL included), while the root prototype carries a
-  string or symbol key outside the standard set, a root property's descriptor has changed since load, or a built-in
-  the library calls has been replaced since load. The refusal is `STORAGE_VALIDATION_FAILED`, carries counts and a
+  string or symbol key outside the standard set, a root property's descriptor has changed since load, or a property
+  of the built-ins listed below differs from its value at load when the library checks, whether or not the library
+  calls it. The refusal is `STORAGE_VALIDATION_FAILED`, carries counts and a
   fixed reason, names no key or built-in, reaches the caller unchanged (`exists()` rethrows it), and nothing is handed
   to the HTTP handler. A replacement made before the library is imported is not seen.
 
@@ -84,13 +85,28 @@ note on each entry is the compatibility contract — read it, not the number.
   SDK's own `S3Client.send` runs, which can leave that rejection unhandled. The readiness check reads the clock
   captured at load, and a signal whose `removeEventListener` throws still gets the probe's answer.
 
+  The built-ins compared are every own property of `Object`, `Function.prototype`, `Array` and its prototype, `String`
+  and its prototype, `RegExp.prototype`, the prototypes of `Map`, `Set`, `WeakMap` and `WeakSet`, `Symbol` and its
+  prototype, `Number` and its prototype, `Math`, `JSON`, `ArrayBuffer`, `Buffer.prototype`, `Uint8Array.prototype`, the
+  typed-array prototype, `URL.prototype` and the iterator prototypes (the shared one, and the array, string, map and set ones), plus `Buffer.from`,
+  `alloc`, `concat`, `byteLength` and `isBuffer`. Measured on this build: a replaced `Math.cbrt`,
+  `Number.prototype.toFixed`, `Object.freeze`, `Object.hasOwn` or `Array.prototype.findLast`, a deleted `Math.cbrt` and
+  a non-writable `Object.freeze` are each refused; a property **added** to one of them after load (a new key on `Math`,
+  `Object`, `Array.prototype`, `Map.prototype`, `Symbol`, `JSON` and others) is **not** refused, except `then` on
+  `Array.prototype`, `Function.prototype`, `Buffer.prototype`, `Uint8Array.prototype` and the typed-array prototype, and any key on `Object.prototype`. A function replaced and then
+  put back is not refused. Not compared, so replacing them is not refused: `Date`, `Intl`, `Promise.resolve`, `Promise.all`, `Promise.race`, `Promise.prototype.then` and `catch` (`Promise[Symbol.species]` is
+  compared and refused), `setTimeout`, `console`, `Atomics`, `structuredClone`, `Error.captureStackTrace`, and the `Buffer` statics
+  other than the five above (`Buffer.compare`, `Buffer.isEncoding`, `Buffer.poolSize`).
+
   The baseline of `Reflect` is the functions the language defines on it and where the object points, not
   every key of it, so a second copy of the `reflect-metadata` polyfill, which defines its own functions on `Reflect`
   again when it is evaluated, does not make the library refuse. A replaced language function still does.
 
   **Apply to a derived backend:** nothing to change. An application that adds a key to `Object.prototype` (a polyfill
   or a library that extends it) now fails at module start-up and on every storage call with
-  `STORAGE_VALIDATION_FAILED`; remove the extension.
+  `STORAGE_VALIDATION_FAILED`; remove the extension. A polyfill that replaces a listed built-in (a `core-js`-style
+  one that overwrites `Array.prototype.findLast` or `Object.hasOwn`) is refused when it loads after the library; load
+  it before the library.
 
 ### Changed
 
@@ -117,6 +133,13 @@ note on each entry is the compatibility contract — read it, not the number.
   request it sent.
 
 ### Known limits
+
+- **A signed PUT with an ACL cannot be sent with `x-amz-acl` as a header on MinIO.** `getUploadUrl` with `publicRead`
+  lists `x-amz-acl` in `requiredHeaders`, but the presigned URL carries it in the query and signs only
+  `content-type;host`. Measured on MinIO (`pgsty/silo:RELEASE.2026-10-26T00-00-00Z`): a PUT that sends `Content-Type`
+  and `x-amz-acl` as told is refused with 400 `AccessDenied` ("headers present in the request which were not
+  signed") and stores nothing; a PUT that sends `Content-Type` alone returns 200 and the stored object has no
+  public grant. AWS S3 was not tested. Send `Content-Type` only, or do not use `publicRead`.
 
 - **A call the runtime guard refuses does not touch the body.** When the runtime differs from what it was at load (a
   property added to `Object.prototype`, say), an `upload()` refused at its start never owns its body: a `Readable`
