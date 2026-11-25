@@ -16,6 +16,7 @@ import { S3Client, type S3ClientConfig } from '@aws-sdk/client-s3'
 import { BYMAX_STORAGE_OPTIONS } from '../bymax-storage.constants'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import { emit } from '../utils/log-event'
+import { assertCleanRoot } from '../utils/prototype-guard'
 import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 
 /**
@@ -28,7 +29,9 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(S3ClientProvider.name)
   private client: S3Client | undefined
 
-  constructor(@Inject(BYMAX_STORAGE_OPTIONS) private readonly options: ResolvedBymaxStorageOptions) {}
+  constructor(
+    @Inject(BYMAX_STORAGE_OPTIONS) private readonly options: ResolvedBymaxStorageOptions,
+  ) {}
 
   onModuleInit(): void {
     if (!this.options.hasCredentials) {
@@ -92,17 +95,12 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
   }
 
   private createClient(): S3Client {
+    assertCleanRoot()
     const config: S3ClientConfig = {
       endpoint: this.options.endpoint,
       region: this.options.region,
       forcePathStyle: this.options.forcePathStyle,
-      credentials: {
-        accessKeyId: this.options.credentials.accessKeyId,
-        secretAccessKey: this.options.credentials.secretAccessKey,
-        ...(this.options.credentials.sessionToken
-          ? { sessionToken: this.options.credentials.sessionToken }
-          : {}),
-      },
+      credentials: this.credentials(),
       maxAttempts: this.options.maxAttempts,
       // `requestTimeout` bounds one attempt, from sending the request until the response
       // headers arrive; the SDK only throws a `TimeoutError` (mapped to
@@ -123,6 +121,34 @@ export class S3ClientProvider implements OnModuleInit, OnApplicationShutdown {
       event: STORAGE_LOG_EVENTS.clientReady,
       message: 'S3Client initialized',
     })
-    return new S3Client(config)
+    const client = new S3Client(config)
+    // Runs once per attempt, after the retry step, so a retry is refused too.
+    guardClient(client)
+    return client
   }
+
+  /** Null-prototype, so nothing planted on the root reaches the SDK's reads of it. */
+  private credentials(): NonNullable<S3ClientConfig['credentials']> {
+    const { accessKeyId, secretAccessKey, sessionToken } = this.options.credentials
+    return Object.assign(Object.create(null) as object, {
+      accessKeyId,
+      secretAccessKey,
+      sessionToken: sessionToken === undefined || sessionToken === '' ? undefined : sessionToken,
+    }) as NonNullable<S3ClientConfig['credentials']>
+  }
+}
+
+/** Refuses each attempt of each command while the root prototype is dirty; a retry is one more attempt. */
+function guardClient(client: S3Client): void {
+  const guard =
+    <Args, Result>(next: (args: Args) => Promise<Result>) =>
+    (args: Args): Promise<Result> => {
+      assertCleanRoot()
+      return next(args)
+    }
+  client.middlewareStack.addRelativeTo(guard, {
+    name: 'rootPrototypeGuard',
+    relation: 'after',
+    toMiddleware: 'retryMiddleware',
+  })
 }

@@ -27,6 +27,16 @@ describe('assertMaxBytes', () => {
     }).not.toThrow()
   })
 
+  it.each(['10', 10n, null, true, {}])('refuses %p, which is not a number', (value) => {
+    // A caller from plain JS can pass anything; only an integer of at least 1 bounds a body.
+    expect(refusal(() => {
+      assertMaxBytes(value as unknown as number)
+    })).toEqual({
+      code: 'STORAGE_VALIDATION_FAILED',
+      details: { reason: 'maxBytes must be an integer >= 1' },
+    })
+  })
+
   it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])('refuses %p', (value) => {
     // Zero, negative, fractional and non-finite limits cannot bound a body.
     expect(refusal(() => {

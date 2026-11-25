@@ -6,6 +6,12 @@
  * @layer server/services
  */
 jest.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: jest.fn() }))
+// These rows prove the second layer: what the services read from a request and from the options ignores
+// a planted key. The guard that refuses first is covered by its own specs, so it is left out here.
+jest.mock('../utils/prototype-guard', () => ({
+  ...jest.requireActual<object>('../utils/prototype-guard'),
+  assertCleanRoot: jest.fn(),
+}))
 
 import type {
   CopyObjectCommand,
@@ -48,7 +54,11 @@ function plant(values: Record<string, unknown>): () => void {
 async function resolve(options: Record<string, unknown>): Promise<ResolvedBymaxStorageOptions> {
   const moduleRef = await Test.createTestingModule({
     imports: [BymaxStorageModule.forRoot(options as unknown as BymaxStorageModuleOptions)],
-  }).compile()
+  })
+    // The client provider refuses a planted root before it builds a client; this spec reads the resolved options.
+    .overrideProvider(S3ClientProvider)
+    .useValue({ isConfigured: () => true, getClient: () => ({}), getClientOrNull: () => null })
+    .compile()
   return moduleRef.get<ResolvedBymaxStorageOptions>(BYMAX_STORAGE_OPTIONS)
 }
 

@@ -7,6 +7,7 @@ import { CLEANUP_DEADLINE_MS } from './abort-support'
 import { emit, type LogSink } from './log-event'
 import { STORAGE_LOG_EVENTS } from './log-events'
 import { failureError } from './provider-failure-log'
+import { verdictOf } from './settle-or-cut'
 
 /**
  * What happened to the multipart upload after a failure; empty when none had been created. It names no
@@ -43,9 +44,11 @@ export async function closeMultipartUpload(
   try {
     // A deadline of its own, never the caller's signal: that one may be what ended the upload, and an
     // aborted signal would cancel this request and leave the parts stored.
-    await client.send(
-      new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId }),
-      { abortSignal: AbortSignal.timeout(CLEANUP_DEADLINE_MS) },
+    await verdictOf(
+      client.send(
+        new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId }),
+        { abortSignal: AbortSignal.timeout(CLEANUP_DEADLINE_MS) },
+      ),
     )
     return { abort: 'completed' }
   } catch (err) {
@@ -66,7 +69,8 @@ export async function closeMultipartUpload(
  * @param bucket - The bucket of the upload.
  * @param key - The final object key.
  * @param created - The id the create answers with, or `undefined` if it fails; it never rejects.
- * @param onFailure - Told what a failed abort threw, for the caller's logs.
+ * @param onFailure - Told what a failed abort threw, or what the runtime refused while the cleanup was waiting,
+ *   for the caller's logs; a throw from it is swallowed because nobody awaits this path.
  */
 export function closeWhenCreated(
   client: S3Client,
@@ -75,7 +79,30 @@ export function closeWhenCreated(
   created: Promise<string | undefined>,
   onFailure?: (err: unknown) => void,
 ): void {
-  void created.then((uploadId) => closeMultipartUpload(client, bucket, key, uploadId, onFailure))
+  void closeAfter(client, bucket, key, created, onFailure)
+}
+
+/**
+ * Waits for the id and closes that upload; the id is read by `await`, which a replaced `then` does not reach.
+ * Nothing awaits this, so it never rejects: a refusal from the runtime goes to `onFailure`.
+ */
+async function closeAfter(
+  client: S3Client,
+  bucket: string,
+  key: string,
+  created: Promise<string | undefined>,
+  onFailure: ((err: unknown) => void) | undefined,
+): Promise<void> {
+  try {
+    await verdictOf(closeMultipartUpload(client, bucket, key, await verdictOf(created), onFailure))
+  } catch (err) {
+    try {
+      onFailure?.(err)
+    } catch {
+      // The sink is the caller's: when it throws too, there is nowhere left to report to, and this path is
+      // detached, so a rejection here would end the process rather than reach anyone.
+    }
+  }
 }
 
 /**

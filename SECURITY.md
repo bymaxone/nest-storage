@@ -93,6 +93,26 @@ If you build a custom configuration instead of using a recipe, you must add this
 
 ---
 
+## Threat model: same-process code
+
+Code that runs in the same process as this library is trusted, as it is in Node itself: your application, its
+dependencies, and everything you hand to the module as a callback or plug-in. The runtime checks the library
+makes on built-ins and on the promises a verdict travels on are best-effort hardening against a change that lands by accident or
+late, such as a polyfill or an instrumentation agent. They are not a security boundary, and code that is
+hostile and in the same process can defeat them. Keep untrusted code out of the process, or isolate it.
+
+Known limits:
+
+- A host callback runs after the last check and can change what the call goes on to report.
+- A `then` or a `Promise[Symbol.species]` that is planted and erased again inside one call is not seen.
+- A replacement made before the library is imported is not seen, and a dependency that reads `Promise` statics
+  itself is not covered.
+- `StorageService.exists()` and `StorageService.downloadBuffer()` return their own promise, not a pinned one, so a
+  `then` or `constructor` replaced on `Promise.prototype` after load is refused on those two calls, but the
+  refusal reaches the caller through the replaced member, which can report success.
+
+---
+
 ## Sensitive Code Paths
 
 The following files have elevated security relevance and warrant close review on any change:

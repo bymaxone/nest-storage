@@ -5,6 +5,8 @@
  */
 import { HttpStatus } from '@nestjs/common'
 import { mapAwsError } from './aws-error-mapper'
+import { StorageException } from './storage-exception'
+import { assertCleanRoot } from '../utils/prototype-guard'
 
 interface MappedDetails {
   awsCode?: string
@@ -15,6 +17,22 @@ interface MappedDetails {
 }
 
 describe('mapAwsError', () => {
+  it('should hand the root prototype refusal through unchanged and wrap any other StorageException', () => {
+    // Only a refusal the guard raised keeps its code; an ordinary StorageException is still mapped.
+    Object.defineProperty(Object.prototype, 'ACL', { value: 'x', configurable: true })
+    let refusal: unknown
+    try {
+      assertCleanRoot()
+    } catch (err) {
+      refusal = err
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'ACL')
+    }
+    expect(mapAwsError(refusal, { op: 'head' })).toBe(refusal)
+    const other = new StorageException('STORAGE_VALIDATION_FAILED')
+    expect(mapAwsError(other)).not.toBe(other)
+  })
+
   it('should map a NotFound name to STORAGE_OBJECT_NOT_FOUND', () => {
     // First condition true via the error name.
     const e = mapAwsError({ name: 'NotFound' })

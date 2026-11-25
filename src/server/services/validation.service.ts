@@ -14,6 +14,8 @@ import { assertMimeAllowed } from '../utils/mime-allowed'
 import { assertHeaderValues, assertMetadata } from '../utils/header-value'
 import { assertIntegerInput } from '../utils/numeric-input'
 import { readOptionalField } from '../utils/read-once'
+import { verdictOf } from '../utils/settle-or-cut'
+import { settles } from '../utils/prototype-guard'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 
@@ -33,7 +35,8 @@ interface ValidationInput {
 export class ValidationService {
   constructor(
     @Inject(BYMAX_STORAGE_OPTIONS) private readonly options: ResolvedBymaxStorageOptions,
-    @Inject(BYMAX_STORAGE_UPLOAD_VALIDATORS) private readonly validators: readonly IUploadValidator[],
+    @Inject(BYMAX_STORAGE_UPLOAD_VALIDATORS)
+    private readonly validators: readonly IUploadValidator[],
   ) {}
 
   /**
@@ -54,7 +57,7 @@ export class ValidationService {
   async validate(input: ValidationInput): Promise<{ body: UploadBody }> {
     this.checkHeaders(input)
     this.checkSize(input.size)
-    const body = await this.runCustomValidators(input)
+    const body = await verdictOf(this.runCustomValidators(input))
     return { body }
   }
 
@@ -66,7 +69,10 @@ export class ValidationService {
    * @throws StorageException `STORAGE_MIME_NOT_ALLOWED` or `STORAGE_VALIDATION_FAILED`.
    */
   checkHeaders(
-    input: Pick<ValidationInput, 'contentType' | 'cacheControl' | 'contentDisposition' | 'kmsKeyId' | 'metadata'>,
+    input: Pick<
+      ValidationInput,
+      'contentType' | 'cacheControl' | 'contentDisposition' | 'kmsKeyId' | 'metadata'
+    >,
   ): void {
     assertMimeAllowed(this.options.validation?.mimeWhitelist, input.contentType)
     assertHeaderValues({
@@ -102,17 +108,19 @@ export class ValidationService {
     let body: UploadBody = input.body
     for (const validator of this.validators) {
       const readBytes = async (maxBytes: number): Promise<Buffer> => {
-        const { head, replacementBody } = await peekFirstBytes(body, maxBytes)
+        const { head, replacementBody } = await verdictOf(peekFirstBytes(body, maxBytes))
         body = replacementBody
-        return head
+        return settles(head)
       }
-      const result = await validator.validate({
-        key: input.key,
-        contentType: input.contentType,
-        ...(input.size !== undefined ? { size: input.size } : {}),
-        ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
-        readBytes,
-      })
+      const result = await verdictOf(
+        validator.validate({
+          key: input.key,
+          contentType: input.contentType,
+          ...(input.size !== undefined ? { size: input.size } : {}),
+          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+          readBytes,
+        }),
+      )
       // Each field once, and not one that only the root prototype supplies: a result without `ok` is not an `ok`.
       const ok = readOptionalField(result, 'ok')
       if (!ok) {
@@ -122,6 +130,6 @@ export class ValidationService {
         })
       }
     }
-    return body
+    return settles(body)
   }
 }

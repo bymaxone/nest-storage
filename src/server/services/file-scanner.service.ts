@@ -17,6 +17,8 @@ import { emit } from '../utils/log-event'
 import { STORAGE_LOG_EVENTS } from '../utils/log-events'
 import { failureError } from '../utils/provider-failure-log'
 import { readOptionalField } from '../utils/read-once'
+import { isRootRefusal } from '../utils/prototype-guard'
+import { settleOrCut, verdictOf } from '../utils/settle-or-cut'
 import { StorageObserver } from '../observability/storage-observer'
 
 /** What the log line holds when the details cannot be turned into text. */
@@ -147,7 +149,9 @@ export class FileScannerService {
     }
     const scanner = this.scanner
     const run = (): Promise<FileScanResult> => this.evaluate(scanner, input, caller)
-    return this.observer === undefined ? run() : this.observer.scan(input.mode, run)
+    return await verdictOf(
+      this.observer === undefined ? run() : this.observer.scan(input.mode, run),
+    )
   }
 
   /** Runs the scanner and applies the library's policy to what it answered. */
@@ -156,12 +160,14 @@ export class FileScannerService {
     input: ScanInput,
     caller: Record<string, unknown>,
   ): Promise<FileScanResult> {
-    const result = await this.scanLogged(scanner, input, caller)
+    const result = await verdictOf(this.scanLogged(scanner, input, caller))
     // Each field of what the scanner answered is its own: a key only the root prototype supplies is not a field.
     const status = readOptionalField(result, 'status')
     const engine = scannerLabel(readOptionalField(result, 'engine'))
     const threat = scannerLabel(readOptionalField(result, 'threat'))
-    const details = scannerDetailsForLog(readOptionalField(result, 'details') as Record<string, unknown> | undefined)
+    const details = scannerDetailsForLog(
+      readOptionalField(result, 'details') as Record<string, unknown> | undefined,
+    )
 
     if (status === 'clean') {
       return result as FileScanResult
@@ -194,7 +200,11 @@ export class FileScannerService {
    * `unknown` with `rejectOnUnknown`, or a result outside the contract (no result, a status that is not
    * exactly one of the three): the object is not known to be clean, so it is not stored.
    */
-  private rejectInconclusive(status: unknown, engine: string | undefined, details: { details?: string }): never {
+  private rejectInconclusive(
+    status: unknown,
+    engine: string | undefined,
+    details: { details?: string },
+  ): never {
     const unrecognised = status !== 'unknown'
     emit(this.logger, 'warn', {
       event: STORAGE_LOG_EVENTS.scanInconclusiveRejected,
@@ -219,9 +229,14 @@ export class FileScannerService {
     caller: Record<string, unknown>,
   ): Promise<ScannerOutcome> {
     try {
-      return await this.scanWithinDeadline(scanner, input, caller)
+      return await verdictOf(this.scanWithinDeadline(scanner, input, caller))
     } catch (err) {
-      if (!(err instanceof StorageException)) {
+      if (isRootRefusal(err)) {
+        emit(this.logger, 'warn', {
+          event: STORAGE_LOG_EVENTS.rootGuardRefused,
+          message: 'The runtime differs from the one the library loaded in; the scan was refused',
+        })
+      } else if (!(err instanceof StorageException)) {
         emit(this.logger, 'warn', {
           event: STORAGE_LOG_EVENTS.scanFailed,
           message: 'Scanner failed',
@@ -244,17 +259,16 @@ export class FileScannerService {
   ): Promise<ScannerOutcome> {
     const timeoutMs = this.options.scanner?.timeoutMs ?? DEFAULT_SCANNER_TIMEOUT_MS
     const controller = new AbortController()
-    let timer: NodeJS.Timeout | undefined
-    const deadline = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
+    return await settleOrCut(scanner.scan({ ...input, signal: controller.signal }), (cut) => {
+      const timer = setTimeout(() => {
         emit(this.logger, 'warn', {
           event: STORAGE_LOG_EVENTS.scanTimeout,
           message: 'Scan timed out',
           timeoutMs,
         })
         // The rejection comes first: a scanner that settles inside its abort listener queues its outcome
-        // ahead of anything queued after the abort, and would win the race over the deadline.
-        reject(
+        // behind it, and the deadline's rejection has already ended the wait.
+        cut.reject(
           new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, {
             ...caller,
             phase: 'scan',
@@ -263,11 +277,9 @@ export class FileScannerService {
         )
         controller.abort()
       }, timeoutMs)
+      return () => {
+        clearTimeout(timer)
+      }
     })
-    try {
-      return await Promise.race([scanner.scan({ ...input, signal: controller.signal }), deadline])
-    } finally {
-      clearTimeout(timer)
-    }
   }
 }

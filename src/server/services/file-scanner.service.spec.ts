@@ -331,6 +331,34 @@ describe('FileScannerService', () => {
         warnSpy.mockRestore()
       })
 
+      it('is logged as a refused runtime, with the fixed line and no scanner-failure line, when a key is planted while it runs', async () => {
+        // The guard refuses the scan once the scanner returns; that refusal is ours, not the scanner's, so it has its own event.
+        const root = Object.prototype as { zzPlantedDuringScan?: string }
+        const impl: IFileScanner = {
+          scan: jest.fn(async (): Promise<FileScanResult> => {
+            root.zzPlantedDuringScan = 'x'
+            return await Promise.resolve({ status: 'clean', engine: 'clamav' })
+          }),
+        }
+        const service = await buildService(buildOptions({ impl }), impl)
+        const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+        let err: unknown
+        try {
+          err = await service.scan(SCAN_INPUT).catch((e: unknown) => e)
+        } finally {
+          delete root.zzPlantedDuringScan
+        }
+
+        expect(err).toBeInstanceOf(StorageException)
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+        expect(entryAt(warnSpy)).toEqual({
+          event: 'STORAGE_ROOT_GUARD_REFUSED',
+          message: 'The runtime differs from the one the library loaded in; the scan was refused',
+        })
+        warnSpy.mockRestore()
+      })
+
       it('does not log the deadline as a scanner failure: it has its own line, and only that one', async () => {
         const impl: IFileScanner = { scan: jest.fn(() => new Promise<FileScanResult>(() => undefined)) }
         const service = await buildService(buildOptions({ impl, timeoutMs: 10 }), impl)

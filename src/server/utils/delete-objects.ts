@@ -6,6 +6,8 @@ import { DeleteObjectsCommand, type S3Client } from '@aws-sdk/client-s3'
 import type { DeleteManyResult, FailedDeletion } from '../interfaces/delete-many-options.interface'
 import { providerFailureReason } from '../errors/provider-failure'
 import { logProviderFailure } from './provider-failure-log'
+import { isRootRefusal } from './prototype-guard'
+import { verdictOf } from './settle-or-cut'
 
 /**
  * Deletes one chunk (at most 1000 keys). Per-key outcomes come from the response, with the provider's
@@ -26,12 +28,14 @@ export async function deleteObjectsChunk(
   const deleted: string[] = []
   const failed: FailedDeletion[] = []
   try {
-    const response = await client.send(
-      new DeleteObjectsCommand({
-        Bucket: bucket,
-        // `Quiet: false` returns both successes and per-key errors.
-        Delete: { Objects: chunk.map((key) => ({ Key: key })), Quiet: false },
-      }),
+    const response = await verdictOf(
+      client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          // `Quiet: false` returns both successes and per-key errors.
+          Delete: { Objects: chunk.map((key) => ({ Key: key })), Quiet: false },
+        }),
+      ),
     )
     for (const ok of response.Deleted ?? []) {
       if (ok.Key !== undefined) {
@@ -48,6 +52,10 @@ export async function deleteObjectsChunk(
       }
     }
   } catch (err) {
+    // The library's own refusal is not a per-key failure; the caller must see it.
+    if (isRootRefusal(err)) {
+      throw err
+    }
     // The whole request failed: a fixed word, never what the driver or the provider wrote.
     logProviderFailure(err, { op: 'deleteMany' })
     const reason = providerFailureReason(err)

@@ -18,6 +18,7 @@ import {
   toUploadBody,
   type UploadBody,
 } from './stream-utils'
+import { verdictOf } from './settle-or-cut'
 
 /**
  * Brings an untyped body to bytes: a string becomes its UTF-8 bytes and an `ArrayBuffer` or other
@@ -86,7 +87,7 @@ export async function bufferStreamForScan(
         'Pre-upload scanning of a stream needs validation.maxSizeBytes to bound the buffer; set it or use scanner mode post-upload',
     })
   }
-  const buffered = await readStreamUpTo(body, maxSizeBytes)
+  const buffered = await verdictOf(readStreamUpTo(body, maxSizeBytes))
   if (buffered === undefined) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
       ...context,

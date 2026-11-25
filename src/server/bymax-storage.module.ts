@@ -44,6 +44,7 @@ import { StorageTracing } from './observability/storage-tracing'
 import { IdempotencyCache } from './utils/idempotency-cache'
 import { emit } from './utils/log-event'
 import { STORAGE_LOG_EVENTS } from './utils/log-events'
+import { verdictOf } from './utils/settle-or-cut'
 
 /** Refuses what made the options unreadable with the library's own code, keeping the host's error as the cause. */
 function refuseUnreadable(error: unknown): never {
@@ -75,7 +76,7 @@ async function resolveProducedOptions(
   produce: () => BymaxStorageModuleOptions | Promise<BymaxStorageModuleOptions>,
 ): Promise<ResolvedBymaxStorageOptions> {
   try {
-    return resolveOptions(await produce())
+    return resolveOptions(await verdictOf(produce()))
   } catch (error) {
     return refuseUnreadable(error)
   }

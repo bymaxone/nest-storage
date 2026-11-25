@@ -10,6 +10,7 @@ import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constant
 import type { ObjectMetadata } from '../../shared/types/storage-types'
 import { mapBodyReadFailure } from './download-body'
 import { destroyStream, readStream, readStreamUpTo } from './stream-utils'
+import { verdictOf } from './settle-or-cut'
 
 /**
  * Refuses a `maxBytes` that is not an integer of at least 1, before any request is made.
@@ -18,8 +19,8 @@ import { destroyStream, readStream, readStreamUpTo } from './stream-utils'
  * @throws StorageException `STORAGE_VALIDATION_FAILED` naming `maxBytes`.
  */
 export function assertMaxBytes(maxBytes: number | undefined): void {
-  // Stryker disable next-line ConditionalExpression: `Number.isInteger` is false for every value that is not a number, so the `typeof` test refuses nothing the next one does not (equivalent).
-  if (maxBytes !== undefined && (typeof maxBytes !== 'number' || !Number.isInteger(maxBytes) || maxBytes < 1)) {
+  // `Number.isInteger` is false for every value that is not a number, so no separate type test is needed.
+  if (maxBytes !== undefined && (!Number.isInteger(maxBytes) || maxBytes < 1)) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
       reason: 'maxBytes must be an integer >= 1',
     })
@@ -34,13 +35,13 @@ async function readBody(
   context: Record<string, unknown>,
 ): Promise<Buffer> {
   if (maxBytes === undefined) {
-    return readStream(stream)
+    return await verdictOf(readStream(stream))
   }
   if (metadata.size > maxBytes) {
     destroyStream(stream)
     throw sizeLimitException(maxBytes, 'max', { ...context, contentLength: metadata.size })
   }
-  const buffer = await readStreamUpTo(stream, maxBytes)
+  const buffer = await verdictOf(readStreamUpTo(stream, maxBytes))
   if (buffer === undefined) {
     throw sizeLimitException(maxBytes, 'max', context)
   }
@@ -70,7 +71,7 @@ export async function readDownloadBody(
 ): Promise<Buffer> {
   const context = { ...caller, op: 'downloadBuffer' }
   try {
-    return await readBody(stream, metadata, maxBytes, context)
+    return await verdictOf(readBody(stream, metadata, maxBytes, context))
   } catch (err) {
     throw mapBodyReadFailure(err, signal, context)
   }

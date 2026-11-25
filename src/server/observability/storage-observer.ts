@@ -5,6 +5,8 @@
  */
 import { Inject, Injectable } from '@nestjs/common'
 import { absorb } from '../utils/absorb'
+import { assertCleanRoot, dispatch, rejectedWith, tagged } from '../utils/prototype-guard'
+import { verdictOf } from '../utils/settle-or-cut'
 import { StorageMetricsTally } from './storage-metrics-tally'
 import { outcomeOf, scanVerdictOfError, type StorageOperation } from './storage-operations'
 import { StorageTracing, type StorageSpanAttributes, type StorageSpanName } from './storage-tracing'
@@ -56,7 +58,7 @@ export class StorageObserver {
       const startedAt = process.hrtime.bigint()
       let result: T
       try {
-        result = await run()
+        result = await verdictOf(run())
       } catch (error) {
         absorb(() => {
           this.tally.operation(operation, outcomeOf(error), secondsSince(startedAt))
@@ -70,7 +72,7 @@ export class StorageObserver {
       return result
     }
     return options.span === undefined
-      ? counted()
+      ? tagged(counted())
       : this.tracing.span(options.span, options.attributes ?? {}, counted, options.describe)
   }
 
@@ -86,7 +88,7 @@ export class StorageObserver {
   ): Promise<T> {
     const counted = async (): Promise<T> => {
       try {
-        const result = await run()
+        const result = await verdictOf(run())
         absorb(() => {
           this.tally.scan(result.status === 'unknown' ? 'unknown' : 'clean')
         })
@@ -121,8 +123,24 @@ export function Observed<T = unknown>(
   return (_target, _key, descriptor) => {
     const original = descriptor.value as (...args: unknown[]) => Promise<T>
     descriptor.value = function (this: Observing, ...args: unknown[]): Promise<T> {
-      const run = (): Promise<T> => original.apply(this, args)
-      return this.observer === undefined ? run() : this.observer.observe(operation, run, options)
+      // The runtime is checked before anything dispatches, and the method is called with the `apply`
+      // captured at load: a replaced `Function.prototype.apply` would otherwise answer without the method
+      // body, and its own guard, ever running.
+      const run = (): Promise<T> => {
+        assertCleanRoot()
+        return dispatch(original, this, args)
+      }
+      // Tagged on the way out: the method's synchronous start, a host's validator or tracer included, has
+      // run by now, and the caller's await reads the promise's `constructor` next.
+      try {
+        assertCleanRoot()
+        return tagged(
+          this.observer === undefined ? run() : this.observer.observe(operation, run, options),
+        )
+      } catch (error) {
+        // Tagged like the success path: the refusal is awaited by the same caller, through the same `constructor`.
+        return tagged(rejectedWith<T>(error))
+      }
     }
   }
 }

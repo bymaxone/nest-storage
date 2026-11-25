@@ -65,6 +65,37 @@ export default tseslint.config(
     },
   },
   {
+    // Every await on a library path goes through a hop that follows the work with the `then` captured at load
+    // and hands back a promise with a pinned own constructor. A bare `await` reads the `constructor` of what it
+    // awaits at that moment, and a promise whose constructor is not the engine's is resolved through the live
+    // `then`; a host hook that ran just before could have planted either. `return await` is required so a
+    // returned promise is awaited, never resolved through `then` by the async function's own return.
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/return-await': ['error', 'always'],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'AwaitExpression > :not(CallExpression[callee.name=/^(verdictOf|stepOf|settleOrCut|abortable|allOf|pinnedWork)$/])',
+          message:
+            'Await a decision-path promise through verdictOf, stepOf, allOf, settleOrCut or abortable, which follow it with the then captured at load.',
+        },
+        {
+          selector: 'ForOfStatement[await=true]',
+          message:
+            'Read an async iterator step by step, awaiting each next() through verdictOf: for await awaits every step bare.',
+        },
+      ],
+    },
+  },
+  {
+    // The hop primitives await promises they built themselves, pinned and handled one line before.
+    files: ['src/server/utils/settle-or-cut.ts'],
+    rules: { 'no-restricted-syntax': 'off' },
+  },
+  {
     files: ['**/*.spec.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',

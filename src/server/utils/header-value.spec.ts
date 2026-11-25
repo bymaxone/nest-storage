@@ -267,4 +267,24 @@ describe('copyMetadata', () => {
       })
     }
   })
+
+  it('refuses to trust a toString slot that is an accessor, even with a value planted on the root prototype', async () => {
+    const original = Object.getOwnPropertyDescriptor(Object.prototype, 'toString')!
+    Object.defineProperty(Object.prototype, 'toString', { get: () => original.value as unknown, configurable: true })
+    Object.defineProperty(Object.prototype, 'value', { value: () => '[object Object]', configurable: true })
+    let assertLoaded: typeof assertMetadata | undefined
+    try {
+      await jest.isolateModulesAsync(async () => {
+        jest.doMock('../errors/storage-exception', () => ({ StorageException }))
+        assertLoaded = (await import('./header-value')).assertMetadata
+      })
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'value')
+      Object.defineProperty(Object.prototype, 'toString', original)
+    }
+
+    expect(() => {
+      assertLoaded?.(new Map([['a', 'b']]) as never)
+    }).toThrow(StorageException)
+  })
 })

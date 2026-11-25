@@ -215,6 +215,22 @@ describe('stream-utils', () => {
       expect(await collect(replacementBody as NodeJS.ReadableStream)).toBe('hi')
     })
 
+    it('collects every chunk of a body shorter than maxBytes that arrives in separate reads', async () => {
+      /* The head collector must keep reading after its first chunk: with the chunks written apart it answers 'ab', not 'a'. */
+      const source = new Readable({ read() {} })
+      const peeking = peekFirstBytes(source, 10)
+      source.push(Buffer.from('a'))
+      await tick()
+      source.push(Buffer.from('b'))
+      await tick()
+      source.push(null)
+
+      const { head, replacementBody } = await peeking
+
+      expect(head.toString()).toBe('ab')
+      expect(await collect(replacementBody as NodeJS.ReadableStream)).toBe('ab')
+    })
+
     it('stops peeking after maxBytes but keeps streaming later chunks', async () => {
       // A later chunk is skipped on the peek side but still reaches the upload side.
       const { head, replacementBody } = await peekFirstBytes(
@@ -453,6 +469,47 @@ describe('stream-utils', () => {
       source.destroy(new Error('boom'))
 
       await expect(readStreamUpTo(source, 10)).rejects.toThrow('boom')
+    })
+
+    describe('releasing an iterator by hand', () => {
+      /** A source whose iterator hands out `chunks`, then ends, and counts the calls of `return`. */
+      function counted(chunks: Buffer[]): { source: NodeJS.ReadableStream; released: () => number } {
+        let released = 0
+        let at = 0
+        const iterator = {
+          next: (): Promise<IteratorResult<Buffer>> =>
+            Promise.resolve(
+              at < chunks.length
+                ? { done: false, value: chunks[at++]! }
+                : { done: true, value: undefined },
+            ),
+          return: (): Promise<IteratorResult<Buffer>> => {
+            released += 1
+            return Promise.resolve({ done: true, value: undefined })
+          },
+        }
+        const source = { [Symbol.asyncIterator]: () => iterator } as unknown as NodeJS.ReadableStream
+        return { source, released: () => released }
+      }
+
+      it('does not release an iterator that ended by itself', async () => {
+        /* Releasing is for a read that stopped early; a finished iterator is left alone. */
+        const { source, released } = counted([Buffer.from('ab')])
+
+        const body = await readStreamUpTo(source, 10)
+
+        expect(body?.toString()).toBe('ab')
+        expect(released()).toBe(0)
+      })
+
+      it('releases an iterator once when the read stops early', async () => {
+        const { source, released } = counted([Buffer.from('abc'), Buffer.from('def')])
+
+        const body = await readStreamUpTo(source, 4)
+
+        expect(body).toBeUndefined()
+        expect(released()).toBe(1)
+      })
     })
   })
 })

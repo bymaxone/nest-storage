@@ -335,6 +335,108 @@ describe('guardIdleBody', () => {
     expect(JSON.stringify((thrown as { response: unknown }).response)).not.toContain('SENTINEL')
   })
 
+  it('destroys the stream with the mapped error when the caller supplied a mapping', async () => {
+    // A source that fails is reported through the caller's own mapping, not as the raw failure.
+    const source = new Readable({ read() {} })
+    setImmediate(() => source.destroy(new Error('raw')))
+    const wrapper = withIdleTimeout(source, 1000, (error) => new Error(`mapped:${error.message}`))
+    wrapper.resume()
+    const failure = await new Promise<Error>((resolve) => wrapper.once('error', resolve))
+
+    expect(failure.message).toBe('mapped:raw')
+  })
+
+  it('ignores a step that arrives after the idle error has ended the stream', async () => {
+    // The source answers once the clock has already cut the wait, so the late bytes go nowhere.
+    let answer: (step: IteratorResult<Buffer>) => void = () => undefined
+    const source = new Readable({ read() {} })
+    source[Symbol.asyncIterator] = (() => ({
+      next: () =>
+        new Promise<IteratorResult<Buffer>>((resolve) => {
+          answer = resolve
+        }),
+    })) as unknown as (typeof source)[typeof Symbol.asyncIterator]
+    const received: string[] = []
+    const wrapper = withIdleTimeout(source, 10)
+    wrapper.on('data', (chunk: Buffer) => received.push(chunk.toString()))
+    const failure = await new Promise<unknown>((resolve) => wrapper.once('error', resolve))
+    answer({ done: false, value: Buffer.from('late') })
+    await tick()
+
+    expect(failure).toBeInstanceOf(SourceIdleError)
+    expect(received).toEqual([])
+  })
+
+  it('hands on no bytes and fails the stream when a built-in was replaced while the step was in flight', async () => {
+    // The runtime is checked right before the bytes are pushed, so a replaced built-in is refused there.
+    const original = Buffer.isBuffer
+    const source = Readable.from(
+      (async function* (): AsyncGenerator<Buffer> {
+        await tick()
+        Buffer.isBuffer = ((value: unknown) => original(value)) as typeof Buffer.isBuffer
+        yield Buffer.from('late')
+      })(),
+    )
+    const received: string[] = []
+    let failure: unknown
+    try {
+      const wrapper = withIdleTimeout(source, 1000)
+      wrapper.on('data', (chunk: Buffer) => received.push(chunk.toString()))
+      await new Promise<void>((resolve) => {
+        wrapper.once('error', (error: unknown) => {
+          failure = error
+        })
+        wrapper.once('close', resolve)
+      })
+    } finally {
+      Buffer.isBuffer = original
+    }
+
+    expect(received).toEqual([])
+    expect(failure).toBeInstanceOf(Error)
+  })
+
+  it('hands on the bytes the source delivered when Promise.prototype.then was replaced to rewrite them', async () => {
+    // A host replaces `then` after load so that a step read through it carries other bytes: the wrapper follows
+    // the source with the `then` captured at load, so the rewrite never runs.
+    const source = Readable.from([Buffer.from('validated-clean')])
+    const original = Promise.prototype.then
+    const rewrite = (value: unknown): unknown => {
+      const step = value as { done?: boolean; value?: unknown } | undefined
+      return step?.done === false && Buffer.isBuffer(step.value)
+        ? { done: false, value: Buffer.from('MZ-malicious') }
+        : value
+    }
+    Promise.prototype.then = function replaced(
+      this: Promise<unknown>,
+      onFulfilled?: unknown,
+      onRejected?: unknown,
+    ) {
+      const wrapped =
+        typeof onFulfilled === 'function'
+          ? (value: unknown): unknown => (onFulfilled as (v: unknown) => unknown)(rewrite(value))
+          : onFulfilled
+      return original.call(this, wrapped as undefined, onRejected as undefined)
+    } as typeof Promise.prototype.then
+    const received: string[] = []
+    let failure: unknown
+    try {
+      const wrapper = withIdleTimeout(source, 1000)
+      wrapper.on('data', (chunk: Buffer) => received.push(chunk.toString()))
+      await new Promise<void>((resolve) => {
+        wrapper.once('error', (error: unknown) => {
+          failure = error
+        })
+        wrapper.once('close', resolve)
+      })
+    } finally {
+      Promise.prototype.then = original
+    }
+
+    expect(received).toEqual(['validated-clean'])
+    expect(failure).toBeUndefined()
+  })
+
   it('wraps a stream when the guard is on', () => {
     const source = new Readable({ read() {} })
 
@@ -343,5 +445,113 @@ describe('guardIdleBody', () => {
     expect(guarded).not.toBe(source)
     expect(guarded).toBeInstanceOf(Readable)
     source.destroy()
+  })
+})
+
+describe('withIdleTimeout and a step that settles twice or after the cut', () => {
+  function sourceAnswering(next: () => unknown): Readable {
+    const source = new Readable({ read() {} })
+    source[Symbol.asyncIterator] = (() => ({
+      next,
+    })) as unknown as (typeof source)[typeof Symbol.asyncIterator]
+    return source
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('hands on no bytes that arrive after the idle error', async () => {
+    // The wait ended with the idle error, so a step that comes after it is not pushed into the wrapper.
+    const push = jest.spyOn(Readable.prototype, 'push')
+    let answer: (step: IteratorResult<Buffer>) => void = () => undefined
+    const wrapper = withIdleTimeout(
+      sourceAnswering(
+        () =>
+          new Promise<IteratorResult<Buffer>>((resolve) => {
+            answer = resolve
+          }),
+      ),
+      10,
+    )
+    wrapper.on('data', () => undefined)
+    await new Promise<unknown>((resolve) => wrapper.once('error', resolve))
+    answer({ done: false, value: Buffer.from('late') })
+    await tick()
+
+    expect(push).not.toHaveBeenCalledWith(Buffer.from('late'))
+  })
+
+  it('maps the failure once when the source fails after the idle error', async () => {
+    // The second failure is the source's own, arriving late: it is not reported through the mapping again.
+    let fail: (reason: unknown) => void = () => undefined
+    const toError = jest.fn((error: Error) => error)
+    const wrapper = withIdleTimeout(
+      sourceAnswering(
+        () =>
+          new Promise<IteratorResult<Buffer>>((_resolve, reject) => {
+            fail = reject
+          }),
+      ),
+      10,
+      toError,
+    )
+    wrapper.on('data', () => undefined)
+    await new Promise<unknown>((resolve) => wrapper.once('error', resolve))
+    fail(new Error('late failure'))
+    await tick()
+
+    expect(toError).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a failure that follows the bytes of the same step', async () => {
+    // A thenable that answers with a value and then with a failure is honoured once, by its first answer.
+    const toError = jest.fn((error: Error) => error)
+    const received: string[] = []
+    let asked = 0
+    const wrapper = withIdleTimeout(
+      sourceAnswering(() => {
+        asked += 1
+        if (asked > 1) return new Promise<never>(() => undefined)
+        return {
+          then(
+            onValue: (step: IteratorResult<Buffer>) => void,
+            onError: (reason: unknown) => void,
+          ) {
+            onValue({ done: false, value: Buffer.from('first') })
+            onError(new Error('second answer'))
+          },
+        }
+      }),
+      1000,
+      toError,
+    )
+    wrapper.on('data', (chunk: Buffer) => received.push(chunk.toString()))
+    wrapper.on('error', () => undefined)
+    await tick()
+    wrapper.destroy()
+
+    expect(received).toEqual(['first'])
+    expect(toError).not.toHaveBeenCalled()
+  })
+
+  it('ignores bytes that follow the failure of the same step', async () => {
+    // The order is reversed: the failure comes first and ends the stream, so the bytes after it go nowhere.
+    const push = jest.spyOn(Readable.prototype, 'push')
+    const wrapper = withIdleTimeout(
+      sourceAnswering(() => ({
+        then(onValue: (step: IteratorResult<Buffer>) => void, onError: (reason: unknown) => void) {
+          onError(new Error('first answer'))
+          onValue({ done: false, value: Buffer.from('second') })
+        },
+      })),
+      1000,
+    )
+    wrapper.on('data', () => undefined)
+    const failure = await new Promise<unknown>((resolve) => wrapper.once('error', resolve))
+    await tick()
+
+    expect((failure as Error).message).toBe('first answer')
+    expect(push).not.toHaveBeenCalledWith(Buffer.from('second'))
   })
 })

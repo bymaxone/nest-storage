@@ -5,6 +5,7 @@
  */
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
+import { assertCleanRoot } from '../utils/prototype-guard'
 import { Observed, StorageObserver } from './storage-observer'
 import { StorageMetricsTally } from './storage-metrics-tally'
 import { StorageTracing } from './storage-tracing'
@@ -225,5 +226,47 @@ describe('@Observed', () => {
 
     expect(tally.snapshot().operations.list.success).toBe(1)
     expect(tally.snapshot().operations.copy.not_found).toBe(1)
+  })
+
+  describe('with Function.prototype.apply replaced after load', () => {
+    class Guarded {
+      entered = 0
+
+      constructor(protected readonly observer?: StorageObserver) {}
+
+      @Observed('head')
+      method(): Promise<string> {
+        this.entered += 1
+        assertCleanRoot()
+        return Promise.resolve('real')
+      }
+    }
+
+    async function outcomeWithForgedApply(service: Guarded): Promise<unknown> {
+      const original = Object.getOwnPropertyDescriptor(Function.prototype, 'apply')!
+      Object.defineProperty(Function.prototype, 'apply', {
+        ...original,
+        value: () => Promise.resolve('forged'),
+      })
+      try {
+        return await service.method().then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
+        )
+      } finally {
+        Object.defineProperty(Function.prototype, 'apply', original)
+      }
+    }
+
+    it.each([
+      ['no observer', undefined],
+      ['an observer', observer().observer],
+    ])('refuses the call and never answers for the method, with %s', async (_name, held) => {
+      /* The forged answer must not come back, and the refusal is the library's own typed error. */
+      const service = new Guarded(held)
+      const outcome = await outcomeWithForgedApply(service)
+      expect(outcome).toMatchObject({ error: { code: 'STORAGE_VALIDATION_FAILED' } })
+      expect(service.entered).toBe(0)
+    })
   })
 })

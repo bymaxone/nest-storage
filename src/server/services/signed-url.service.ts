@@ -16,7 +16,12 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { BYMAX_STORAGE_OPTIONS } from '../bymax-storage.constants'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
-import type { SignedGetUrlOptions, SignedPutUrlOptions, MultipartUploadUrlsOptions, MultipartUploadUrlsResult } from '../interfaces/signed-url-options.interface'
+import type {
+  SignedGetUrlOptions,
+  SignedPutUrlOptions,
+  MultipartUploadUrlsOptions,
+  MultipartUploadUrlsResult,
+} from '../interfaces/signed-url-options.interface'
 import type { SignedUrlResult } from '../../shared/types/signed-url-types'
 import { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
@@ -31,6 +36,53 @@ import { callDetails, callerFields } from '../utils/call-details'
 import { clampTtl } from '../utils/ttl-clamp'
 import { assertMimeAllowed } from '../utils/mime-allowed'
 import { assertHeaderValues, assertMetadata, copyMetadata } from '../utils/header-value'
+import { assertCleanRoot } from '../utils/prototype-guard'
+import { allOf, stepOf, verdictOf } from '../utils/settle-or-cut'
+
+/** The `GetObject` a download URL signs, with the response overrides the caller asked for. */
+function getCommand(
+  bucket: string,
+  key: string,
+  options: Pick<SignedGetUrlOptions, 'responseContentDisposition' | 'responseContentType'>,
+): GetObjectCommand {
+  return new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ...(options.responseContentDisposition !== undefined
+      ? { ResponseContentDisposition: options.responseContentDisposition }
+      : {}),
+    ...(options.responseContentType !== undefined
+      ? { ResponseContentType: options.responseContentType }
+      : {}),
+  })
+}
+
+/** The `PutObject` an upload URL signs. */
+function putCommand(
+  bucket: string,
+  key: string,
+  options: Pick<SignedPutUrlOptions, 'contentType' | 'metadata'>,
+  acl: 'public-read' | undefined,
+): PutObjectCommand {
+  return new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: options.contentType,
+    ACL: acl,
+    ...(options.metadata !== undefined ? { Metadata: options.metadata } : {}),
+  })
+}
+
+/** Refuses a part count that is not an integer from 1 to the provider's maximum. */
+function assertPartCount(parts: number): void {
+  if (!Number.isInteger(parts) || parts < 1 || parts > MAX_MULTIPART_PARTS) {
+    throw new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT, undefined, {
+      reason: `parts must be an integer from 1 to ${String(MAX_MULTIPART_PARTS)}`,
+      // Only a number is repeated: any other value is the caller's to keep.
+      ...(Number.isFinite(parts) ? { provided: parts } : {}),
+    })
+  }
+}
 
 /** S3 allows part numbers 1 to 10 000 in one multipart upload. */
 const MAX_MULTIPART_PARTS = 10_000
@@ -57,6 +109,7 @@ export class SignedUrlService {
    */
   @Observed('get_download_url', { span: 'storage.download_url' })
   async getDownloadUrl(request: SignedGetUrlOptions): Promise<SignedUrlResult> {
+    assertCleanRoot()
     this.assertConfigured()
     // One read of each field: the header check and the signature must see the same values.
     const options = readOnce(request, [
@@ -78,21 +131,22 @@ export class SignedUrlService {
       this.options.signedUrls.maxTtlSeconds,
     )
     try {
-      const command = new GetObjectCommand({
-        Bucket: bucket,
-        Key: finalKey,
-        ...(options.responseContentDisposition !== undefined
-          ? { ResponseContentDisposition: options.responseContentDisposition }
-          : {}),
-        ...(options.responseContentType !== undefined
-          ? { ResponseContentType: options.responseContentType }
-          : {}),
-      })
-      const url = await getSignedUrl(this.s3Provider.getClient(), command, { expiresIn: ttl })
-      return { url, expiresAt: new Date(Date.now() + ttl * 1000), method: 'GET', requiredHeaders: {} }
+      const command = getCommand(bucket, finalKey, options)
+      const url = await verdictOf(
+        getSignedUrl(this.s3Provider.getClient(), command, { expiresIn: ttl }),
+      )
+      return {
+        url,
+        expiresAt: new Date(Date.now() + ttl * 1000),
+        method: 'GET',
+        requiredHeaders: {},
+      }
     } catch (err) {
       if (err instanceof StorageException) throw err
-      throw mapAwsError(err, callDetails('getDownloadUrl', { key: options.key, bucket: options.bucket }))
+      throw mapAwsError(
+        err,
+        callDetails('getDownloadUrl', { key: options.key, bucket: options.bucket }),
+      )
     }
   }
 
@@ -125,6 +179,7 @@ export class SignedUrlService {
    */
   @Observed('get_upload_url')
   async getUploadUrl(request: SignedPutUrlOptions): Promise<SignedUrlResult> {
+    assertCleanRoot()
     this.assertConfigured()
     // One read of each field: the whitelist check and the signature must see the same content type.
     const options = readOnce(request, [
@@ -148,19 +203,15 @@ export class SignedUrlService {
     )
     try {
       const acl = buildACL(options.publicRead, this.options.defaultPublicRead)
-      const command = new PutObjectCommand({
-        Bucket: bucket,
-        Key: finalKey,
-        ContentType: options.contentType,
-        ACL: acl,
-        ...(options.metadata !== undefined ? { Metadata: options.metadata } : {}),
-      })
+      const command = putCommand(bucket, finalKey, options, acl)
       // The presigner leaves `content-type` out of the signature unless it is named here; without
       // it the URL holder could store any type under a key approved for another.
-      const url = await getSignedUrl(this.s3Provider.getClient(), command, {
-        expiresIn: ttl,
-        signableHeaders: new Set(['content-type']),
-      })
+      const url = await verdictOf(
+        getSignedUrl(this.s3Provider.getClient(), command, {
+          expiresIn: ttl,
+          signableHeaders: new Set(['content-type']),
+        }),
+      )
       return {
         url,
         expiresAt: new Date(Date.now() + ttl * 1000),
@@ -169,7 +220,10 @@ export class SignedUrlService {
       }
     } catch (err) {
       if (err instanceof StorageException) throw err
-      throw mapAwsError(err, callDetails('getUploadUrl', { key: options.key, bucket: options.bucket }))
+      throw mapAwsError(
+        err,
+        callDetails('getUploadUrl', { key: options.key, bucket: options.bucket }),
+      )
     }
   }
 
@@ -206,19 +260,16 @@ export class SignedUrlService {
    * @throws StorageException `STORAGE_MIME_NOT_ALLOWED` when `validation.mimeWhitelist` is set and excludes `contentType`.
    */
   @Observed('get_multipart_upload_urls')
-  async getMultipartUploadUrls(request: MultipartUploadUrlsOptions): Promise<MultipartUploadUrlsResult> {
+  async getMultipartUploadUrls(
+    request: MultipartUploadUrlsOptions,
+  ): Promise<MultipartUploadUrlsResult> {
+    assertCleanRoot()
     this.assertConfigured()
     // One read of each field: the whitelist check and the signature must see the same content type.
     const options = readOnce(request, ['key', 'bucket', 'contentType', 'parts', 'ttlSeconds'])
     assertMimeAllowed(this.options.validation?.mimeWhitelist, options.contentType)
     assertHeaderValues({ contentType: options.contentType })
-    if (!Number.isInteger(options.parts) || options.parts < 1 || options.parts > MAX_MULTIPART_PARTS) {
-      throw new StorageException(STORAGE_ERROR_CODES.STORAGE_INVALID_PART_COUNT, undefined, {
-        reason: `parts must be an integer from 1 to ${String(MAX_MULTIPART_PARTS)}`,
-        // Only a number is repeated: any other value is the caller's to keep.
-        ...(Number.isFinite(options.parts) ? { provided: options.parts } : {}),
-      })
-    }
+    assertPartCount(options.parts)
     const finalKey = this.keyResolver.normalize(options.key)
     const bucket = this.resolveBucket(options.bucket)
     const ttl = clampTtl(
@@ -232,7 +283,7 @@ export class SignedUrlService {
         Key: finalKey,
         ContentType: options.contentType,
       })
-      const createResp = await this.s3Provider.getClient().send(createCmd)
+      const createResp = await verdictOf(this.s3Provider.getClient().send(createCmd))
       const uploadId = createResp.UploadId
       if (!uploadId) {
         throw new StorageException(STORAGE_ERROR_CODES.STORAGE_PROVIDER_ERROR, undefined, {
@@ -240,7 +291,9 @@ export class SignedUrlService {
           ...callerFields({ key: options.key, bucket: options.bucket }),
         })
       }
-      return await this.presignMultipartParts({ finalKey, bucket, uploadId, parts: options.parts, ttl })
+      return await verdictOf(
+        this.presignMultipartParts({ finalKey, bucket, uploadId, parts: options.parts, ttl }),
+      )
     } catch (err) {
       if (err instanceof StorageException) throw err
       throw mapAwsError(
@@ -263,16 +316,26 @@ export class SignedUrlService {
     const opts = { expiresIn: ttl }
 
     const partNums = Array.from({ length: parts }, (_, i) => i + 1)
-    const partUrls = await Promise.all(
+    const partUrls = await allOf(
       partNums.map(async (partNumber) => {
-        const cmd = new UploadPartCommand({ Bucket: bucket, Key: finalKey, UploadId: uploadId, PartNumber: partNumber })
-        const url = await getSignedUrl(client, cmd, opts)
+        const cmd = new UploadPartCommand({
+          Bucket: bucket,
+          Key: finalKey,
+          UploadId: uploadId,
+          PartNumber: partNumber,
+        })
+        // A part is followed, not scanned: the whole batch is guarded, and a scan per part grows with the parts.
+        const url = await stepOf(getSignedUrl(client, cmd, opts))
         return { partNumber, url }
       }),
     )
 
-    const completeCmd = new CompleteMultipartUploadCommand({ Bucket: bucket, Key: finalKey, UploadId: uploadId })
-    const completeUrl = await getSignedUrl(client, completeCmd, opts)
+    const completeCmd = new CompleteMultipartUploadCommand({
+      Bucket: bucket,
+      Key: finalKey,
+      UploadId: uploadId,
+    })
+    const completeUrl = await verdictOf(getSignedUrl(client, completeCmd, opts))
 
     return { uploadId, partUrls, completeUrl }
   }

@@ -18,6 +18,19 @@ function indicatorOver(checkBucket: jest.Mock): StorageHealthIndicator {
   return new StorageHealthIndicator({ checkBucket } as unknown as StorageService)
 }
 
+/**
+ * An indicator from a copy of the module loaded now, so a fake clock installed first is the clock the module
+ * captured: the live one is read once, at load, and never again.
+ */
+async function indicatorUnderFakeClock(checkBucket: jest.Mock): Promise<StorageHealthIndicator> {
+  let made: StorageHealthIndicator | undefined
+  await jest.isolateModulesAsync(async () => {
+    const fresh = await import('./storage-health')
+    made = new fresh.StorageHealthIndicator({ checkBucket } as unknown as StorageService)
+  })
+  return made as unknown as StorageHealthIndicator
+}
+
 describe('StorageHealthIndicator', () => {
   afterEach(() => {
     jest.useRealTimers()
@@ -86,7 +99,7 @@ describe('StorageHealthIndicator', () => {
       .fn()
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('x'))
-    const indicator = indicatorOver(checkBucket)
+    const indicator = await indicatorUnderFakeClock(checkBucket)
 
     await expect(indicator.check()).resolves.toEqual({ status: 'up' })
     jest.setSystemTime(1_000_000 + STORAGE_HEALTH_CACHE_MS - 1)
@@ -166,7 +179,7 @@ describe('StorageHealthIndicator', () => {
   it('leaves no abort listener on a long-lived signal, however many checks it was given to', async () => {
     jest.useFakeTimers({ now: 1_000_000 })
     const checkBucket = jest.fn().mockResolvedValue(undefined)
-    const indicator = indicatorOver(checkBucket)
+    const indicator = await indicatorUnderFakeClock(checkBucket)
     const host = new AbortController()
 
     for (let round = 0; round < 25; round += 1) {
@@ -207,5 +220,67 @@ describe('StorageHealthIndicator', () => {
 
     expect(getEventListeners(gone.signal, 'abort')).toHaveLength(0)
     finish()
+  })
+  it('stays down when Promise.prototype.then is replaced after load to answer a refusal as success', async () => {
+    // The verdict is chained with the `then` captured at load, so a host that replaced it afterwards, to run the
+    // success handler when the bucket refused, does not make the bucket `up`. The replacement acts only on the
+    // bucket's own promise, so the test runner's use of `then` is left alone.
+    let refused: Promise<never> | undefined
+    const checkBucket = jest.fn(() => {
+      refused = Promise.reject(new Error('refused'))
+      return refused
+    })
+    const original = Promise.prototype.then
+    Promise.prototype.then = function replaced(
+      this: Promise<unknown>,
+      onFulfilled?: (value: unknown) => unknown,
+      onRejected?: (reason: unknown) => unknown,
+    ) {
+      const flip = this === refused && onRejected !== undefined
+      return original.call(this, onFulfilled, flip ? () => onFulfilled?.(undefined) : onRejected)
+    } as typeof Promise.prototype.then
+    let result: unknown
+    try {
+      result = await indicatorOver(checkBucket).check(new AbortController().signal)
+    } finally {
+      Promise.prototype.then = original
+    }
+
+    expect(result).toEqual({ status: 'down' })
+  })
+
+  it('hands back a promise with its own fixed constructor, for each of the three ways a check answers', async () => {
+    // A caller's `await` reads `constructor` first: an own, read-only one that is the engine's `Promise` keeps a
+    // `then` or a `constructor` a host replaced on the prototype out of the way the verdict reaches the caller.
+    const pending = indicatorOver(jest.fn().mockResolvedValue(undefined)).check(
+      new AbortController().signal,
+    )
+    const cached = indicatorOver(jest.fn().mockResolvedValue(undefined))
+    await cached.check(new AbortController().signal)
+    const again = cached.check(new AbortController().signal)
+    const aborted = indicatorOver(jest.fn().mockResolvedValue(undefined)).check(AbortSignal.abort())
+
+    for (const answer of [pending, again, aborted]) {
+      expect(Object.getOwnPropertyDescriptor(answer, 'constructor')).toMatchObject({
+        value: Promise,
+        writable: false,
+        configurable: false,
+      })
+    }
+    await Promise.all([pending, again, aborted])
+  })
+
+  it('stays down for an aborted caller when Promise.resolve is replaced after load to answer up', async () => {
+    const checkBucket = jest.fn().mockResolvedValue(undefined)
+    const original = Promise.resolve
+    Promise.resolve = (() => original.call(Promise, 'up')) as typeof Promise.resolve
+    let result: unknown
+    try {
+      result = await indicatorOver(checkBucket).check(AbortSignal.abort())
+    } finally {
+      Promise.resolve = original
+    }
+
+    expect(result).toEqual({ status: 'down' })
   })
 })

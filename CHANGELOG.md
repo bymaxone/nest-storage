@@ -49,6 +49,45 @@ note on each entry is the compatibility contract — read it, not the number.
   **Apply to a derived backend:** a client that copies `requiredHeaders` onto its PUT needs no change; one that read
   `x-amz-meta-*` entries from it reads the pairs from what it passed as `metadata`.
 
+- **A key planted on `Object.prototype` can no longer reach the S3 client.** The AWS SDK reads every optional input
+  and configuration name off the object it is handed, so a name planted on the root prototype could become a header,
+  a signed query name, a credential or the request host. The library now refuses to build the client, and refuses
+  every attempt of every command (a retry included, a presigned URL included), while the root prototype carries a
+  string or symbol key outside the standard set, a root property's descriptor has changed since load, or a built-in
+  the library calls has been replaced since load. The refusal is `STORAGE_VALIDATION_FAILED`, carries counts and a
+  fixed reason, names no key or built-in, reaches the caller unchanged (`exists()` rethrows it), and nothing is handed
+  to the HTTP handler. A replacement made before the library is imported is not seen.
+
+  A scan verdict, a validation result and a multipart upload id are read with `await` on a promise built from the
+  `Promise` constructor captured at load, with no `Promise.race`, `Promise.resolve`, `Promise.all` or `then` on the
+  path, so replacing one of them after load does not turn an infected or rejected result into an accepted
+  one. These checks are best-effort hardening, not a security boundary: code in the same process is trusted (see
+  SECURITY.md, "Threat model: same-process code"). The `constructor` of the promise prototype joins the baseline, and a host that replaces it makes the library
+  refuse every call.
+
+  Every `await` on a decision path goes through one hop: the work is followed with the `then` captured at load, the root check runs
+  right before the await and again after it on the fulfilment and the rejection path, and the promise the hop hands back carries a `constructor` of its own, so a `constructor` or a `then` a host plants
+  while its own code runs is never read by the caller's await. A lint rule keeps a bare `await` out of the sources. The tracer receives a copy of the span's start, never the
+  promise the library awaits. Not covered: a scanner or validator dependency that reads
+  `Promise` statics itself, a replaced `setTimeout` or `clearTimeout` (the library's timers read the live ones), and a
+  `then` planted and erased again between the entry of a call and the moment the work answers. A host that replaces
+  the `constructor` slot of `Promise.prototype` before the module loads is refused at load unless the slot still holds
+  the engine's own function as a plain value.
+
+  A value an async function hands on (a buffer, a stream, a head a validator read, a span's result) is checked for a
+  `then` on itself and on every prototype above it, because the return of an async function reads `then` there; a
+  stream is read step by step through the same hop instead of with `for await`, and the readiness check follows the
+  bucket probe through the promise's own constructor. A Proxy anywhere above the value is refused, because its
+  `get` trap could answer a `then` the walk never saw; the `[[Prototype]]` of each guarded built-in and
+  `Promise[Symbol.species]` join the baseline, so a host that re-points one or replaces the species makes the
+  library refuse every call. Not covered: a species that replaces itself and then erases itself again while the AWS
+  SDK's own `S3Client.send` runs, which can leave that rejection unhandled. The readiness check reads the clock
+  captured at load, and a signal whose `removeEventListener` throws still gets the probe's answer.
+
+  **Apply to a derived backend:** nothing to change. An application that adds a key to `Object.prototype` (a polyfill
+  or a library that extends it) now fails at module start-up and on every storage call with
+  `STORAGE_VALIDATION_FAILED`; remove the extension.
+
 ### Changed
 
 - **An upload source that is not a `Readable` is adapted when the idle guard is off.** With `uploadIdleTimeoutMs: 0` a
@@ -72,6 +111,13 @@ note on each entry is the compatibility contract — read it, not the number.
 
   **Apply to a derived backend:** a client that read parameters out of `details.contentType` reads them from the
   request it sent.
+
+### Known limits
+
+- **A call the runtime guard refuses does not touch the body.** When the runtime differs from what it was at load (a
+  property added to `Object.prototype`, say), an `upload()` refused at its start never owns its body: a `Readable`
+  passed as `body` is not destroyed, and the caller must close it. A refusal raised after the call began, like any
+  other rejection, destroys the stream.
 
 ## [1.1.21] - 2026-11-21
 

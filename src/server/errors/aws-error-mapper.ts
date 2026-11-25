@@ -6,6 +6,7 @@
  */
 import { HttpStatus } from '@nestjs/common'
 import { StorageException } from './storage-exception'
+import { isRootRefusal } from '../utils/prototype-guard'
 import { logProviderFailure } from '../utils/provider-failure-log'
 import { providerFailureReason, providerFailureStatus } from './provider-failure'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
@@ -88,6 +89,8 @@ function mapAnsweredStatus(
  * @returns A typed `StorageException` carrying observability metadata.
  */
 export function mapAwsError(err: unknown, context?: Record<string, unknown>): StorageException {
+  // The library's own refusal (raised inside a send) keeps its code and status.
+  if (isRootRefusal(err)) return err as StorageException
   const e = (err ?? {}) as AwsLikeError
   const httpStatus = e.$metadata?.httpStatusCode
   const awsCode = awsCodeOf(err)

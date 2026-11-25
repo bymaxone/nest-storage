@@ -9,9 +9,13 @@ import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constant
 import { StorageException } from '../errors/storage-exception'
 
 // Taken when the module loads, so that replacing `Object.prototype.toString` later changes nothing here.
-const objectToString = Object.getOwnPropertyDescriptor(Object.prototype, 'toString')?.value as (
-  this: unknown,
-) => string
+const toStringSlot = Object.getOwnPropertyDescriptor(Object.prototype, 'toString')
+// A descriptor is an ordinary object: `value` is read only when the descriptor has it, never off the root prototype.
+const objectToString = (
+  toStringSlot !== undefined && Object.hasOwn(toStringSlot, 'value')
+    ? toStringSlot.value
+    : undefined
+) as (this: unknown) => string
 
 /** RFC 9110 field-value characters this library accepts: tab, space and printable ASCII. */
 const HEADER_VALUE = /^[\t \x21-\x7E]*$/

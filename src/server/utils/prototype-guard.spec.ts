@@ -1,0 +1,476 @@
+/**
+ * @fileoverview Rows for the root prototype guard: planted string and symbol keys, changed
+ * descriptors of the standard names, and built-ins replaced after the module loaded.
+ * @layer server/utils
+ */
+import { StorageException } from '../errors/storage-exception'
+import type * as Guard from './prototype-guard'
+import { assertCleanRoot, isRootRefusal } from './prototype-guard'
+
+const root = Object.prototype as unknown as Record<string | symbol, unknown>
+
+/** Global bindings the guard compares by the value they resolve to, other than those with their own row. */
+const BOUND_GLOBALS = [
+  'Object',
+  'Function',
+  'Array',
+  'String',
+  'RegExp',
+  'Symbol',
+  'Reflect',
+  'Map',
+  'WeakMap',
+  'Error',
+  'TypeError',
+  'Number',
+  'Math',
+  'JSON',
+  'Boolean',
+  'Uint8Array',
+  'ArrayBuffer',
+  'process',
+  'URL',
+]
+
+function refusal(): StorageException {
+  try {
+    assertCleanRoot()
+  } catch (error) {
+    return error as StorageException
+  }
+  throw new Error('the guard accepted a dirty root')
+}
+
+describe('assertCleanRoot', () => {
+  it('accepts the root as the runtime created it', () => {
+    // Nothing planted: the test runner's own symbol key is exempt and every descriptor is the original.
+    expect(() => {
+      assertCleanRoot()
+    }).not.toThrow()
+  })
+
+  it.each(['ACL', 'Bucket', 'sessionToken', 'endpointProvider', 'protocol', 'then', 'x'])(
+    'refuses a string key %s planted on the root, naming no key',
+    (key) => {
+      Object.defineProperty(Object.prototype, key, { value: 1, configurable: true, writable: true })
+      try {
+        const error = refusal()
+        expect(error).toBeInstanceOf(StorageException)
+        expect(error.code).toBe('STORAGE_VALIDATION_FAILED')
+        expect(JSON.stringify(error.getResponse())).not.toContain(key)
+      } finally {
+        Reflect.deleteProperty(Object.prototype, key)
+      }
+    },
+  )
+
+  it('refuses an enumerable key assigned on the root', () => {
+    // Plain assignment is the reachable plant: it is enumerable, so a `for in` merge copies it.
+    Object.defineProperty(Object.prototype, 'Tagging', {
+      value: 'a=b',
+      configurable: true,
+      writable: true,
+      enumerable: true,
+    })
+    try {
+      expect(refusal().code).toBe('STORAGE_VALIDATION_FAILED')
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'Tagging')
+    }
+  })
+
+  it('refuses a symbol key other than the runner own', () => {
+    const planted = Symbol('planted')
+    root[planted] = 1
+    try {
+      expect(refusal().code).toBe('STORAGE_VALIDATION_FAILED')
+    } finally {
+      Reflect.deleteProperty(Object.prototype, planted)
+    }
+  })
+
+  it('refuses a symbol key whose description is empty', () => {
+    const planted = Symbol()
+    root[planted] = 1
+    try {
+      expect(refusal().code).toBe('STORAGE_VALIDATION_FAILED')
+    } finally {
+      Reflect.deleteProperty(Object.prototype, planted)
+    }
+  })
+
+  it.each(['hasOwnProperty', 'toString', 'constructor', 'valueOf', 'isPrototypeOf'])(
+    'refuses the standard name %s overwritten with another value',
+    (name) => {
+      const original = descriptorOf(Object.prototype, name)
+      Object.defineProperty(Object.prototype, name, { ...original, value: () => 'planted' })
+      try {
+        expect(refusal().code).toBe('STORAGE_VALIDATION_FAILED')
+      } finally {
+        Object.defineProperty(Object.prototype, name, original)
+      }
+    },
+  )
+
+  it('refuses a standard name made read-only or non-enumerable-flag-changed', () => {
+    const original = descriptorOf(Object.prototype, 'toString')
+    Object.defineProperty(Object.prototype, 'toString', { ...original, enumerable: true })
+    try {
+      expect(refusal().code).toBe('STORAGE_VALIDATION_FAILED')
+    } finally {
+      Object.defineProperty(Object.prototype, 'toString', original)
+    }
+  })
+
+  it('refuses a standard name replaced by an accessor', () => {
+    const original = descriptorOf(Object.prototype, 'valueOf')
+    Object.defineProperty(Object.prototype, 'valueOf', {
+      get: () => original.value as unknown,
+      configurable: true,
+    })
+    try {
+      expect(refusal().code).toBe('STORAGE_VALIDATION_FAILED')
+    } finally {
+      Object.defineProperty(Object.prototype, 'valueOf', original)
+    }
+  })
+
+  it('refuses a standard name that was deleted', () => {
+    const original = descriptorOf(Object.prototype, 'toLocaleString')
+    Reflect.deleteProperty(Object.prototype, 'toLocaleString')
+    try {
+      expect(refusal().code).toBe('STORAGE_VALIDATION_FAILED')
+    } finally {
+      Object.defineProperty(Object.prototype, 'toLocaleString', original)
+    }
+  })
+
+  it('reads a planted descriptor field through the own check, not through the descriptor prototype', () => {
+    // A key planted on the root makes every descriptor object appear to carry it; the guard is
+    // already refusing, and it must also not throw anything but the refusal while it reads fields.
+    Object.defineProperty(Object.prototype, 'get', {
+      get() {
+        throw new Error('planted getter was read')
+      },
+      configurable: true,
+    })
+    try {
+      expect(refusal().code).toBe('STORAGE_VALIDATION_FAILED')
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'get')
+    }
+  })
+
+  describe('built-ins replaced after the module loaded', () => {
+    const iterator = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]())) as object
+    const setIterator = Object.getPrototypeOf(new Set()[Symbol.iterator]()) as object
+    const mapIterator = Object.getPrototypeOf(new Map()[Symbol.iterator]()) as object
+    const replaced: [string, () => () => void][] = [
+      ['Object.hasOwn', () => swap(Object, 'hasOwn', () => true)],
+      [
+        'Object.getOwnPropertyDescriptor',
+        () => swap(Object, 'getOwnPropertyDescriptor', () => undefined),
+      ],
+      ['Object.keys', () => swap(Object, 'keys', () => [])],
+      ['Reflect.ownKeys', () => swap(Reflect, 'ownKeys', () => [])],
+      ['Reflect.apply', () => swap(Reflect, 'apply', () => false)],
+      ['Reflect.get', () => swap(Reflect, 'get', () => undefined)],
+      ['Set.prototype.has', () => swap(Set.prototype, 'has', () => true)],
+      ['Map.prototype.get', () => swap(Map.prototype, 'get', () => undefined)],
+      ['Array.prototype.some', () => swap(Array.prototype, 'some', () => false)],
+      ['Array.prototype.map', () => swap(Array.prototype, 'map', () => [])],
+      [
+        'Array.prototype[Symbol.iterator]',
+        () => swap(Array.prototype, Symbol.iterator, wrapped(Array.prototype[Symbol.iterator])),
+      ],
+      ['String.prototype.indexOf', () => swap(String.prototype, 'indexOf', () => -1)],
+      [
+        'String.prototype[Symbol.iterator]',
+        () => swap(String.prototype, Symbol.iterator, () => [][Symbol.iterator]()),
+      ],
+      ['RegExp.prototype[Symbol.replace]', () => swap(RegExp.prototype, Symbol.replace, () => '')],
+      ['RegExp.prototype[Symbol.split]', () => swap(RegExp.prototype, Symbol.split, () => [])],
+      ['RegExp.prototype.test', () => swap(RegExp.prototype, 'test', () => true)],
+      [
+        'the iterator prototype',
+        () =>
+          swap(iterator, Symbol.iterator, function (this: unknown) {
+            return this
+          }),
+      ],
+      ['Function.prototype.bind', () => swap(Function.prototype, 'bind', () => () => false)],
+      ['Function.prototype.apply', () => swap(Function.prototype, 'apply', () => false)],
+      [
+        'Symbol.prototype description',
+        () => swapGetter(Symbol.prototype, 'description', () => 'planted'),
+      ],
+      ['Number.isInteger', () => swap(Number, 'isInteger', () => true)],
+      ['Number.isFinite', () => swap(Number, 'isFinite', () => true)],
+      ['Math.min', () => swap(Math, 'min', () => 0)],
+      ['JSON.stringify', () => swap(JSON, 'stringify', () => '')],
+      ['Buffer.byteLength', () => swap(Buffer, 'byteLength', () => 0)],
+      ['Buffer.concat', () => swap(Buffer, 'concat', () => Buffer.alloc(0))],
+      ['Buffer.isBuffer', () => swap(Buffer, 'isBuffer', () => true)],
+      ['Buffer.from', () => swap(Buffer, 'from', () => Buffer.alloc(0))],
+      ['Buffer.alloc', () => swap(Buffer, 'alloc', () => Buffer.alloc(0))],
+      ['encodeURIComponent', () => swapGlobal('encodeURIComponent', () => '')],
+      ['ArrayBuffer.isView', () => swap(ArrayBuffer, 'isView', () => true)],
+      ['the Set iterator prototype', () => swap(setIterator, 'next', () => ({ done: true }))],
+      ['the Map iterator prototype', () => swap(mapIterator, 'next', () => ({ done: true }))],
+      [
+        'Buffer.prototype.subarray',
+        () => swap(Buffer.prototype as object, 'subarray', () => Buffer.alloc(0)),
+      ],
+      [
+        'the typed array prototype subarray',
+        () =>
+          swap(
+            Object.getPrototypeOf(Uint8Array.prototype) as object,
+            'subarray',
+            () => new Uint8Array(0),
+          ),
+      ],
+      [
+        'the typed array prototype length',
+        () => swapGetter(Object.getPrototypeOf(Uint8Array.prototype) as object, 'length', () => 0),
+      ],
+      ['the URL username getter', () => swapGetter(URL.prototype, 'username', () => '')],
+      ['the URL password getter', () => swapGetter(URL.prototype, 'password', () => '')],
+      [
+        'Promise.prototype.constructor',
+        () => swap(Promise.prototype, 'constructor', class Other {}),
+      ],
+      ['the Set binding', () => swapGlobal('Set', class Other {})],
+      ['the Buffer binding', () => swapGlobal('Buffer', class Other {})],
+      ...BOUND_GLOBALS.map((name): [string, () => () => void] => [
+        `the ${name} binding`,
+        () => swapGlobal(name, class Other {}),
+      ]),
+      ['the __proto__ setter', () => swapSetter(Object.prototype, '__proto__', () => undefined)],
+      ['the writable flag of Math.abs', () => flag(Math, 'abs', { writable: false })],
+    ]
+
+    it.each(replaced)(
+      'refuses with a count of replaced built-ins when %s is replaced',
+      (_name, install) => {
+        // The replacement can break the assertion library itself, so the verdict is read after it is undone.
+        const restore = install()
+        let error: StorageException | undefined
+        try {
+          assertCleanRoot()
+        } catch (thrown) {
+          error = thrown as StorageException
+        } finally {
+          restore()
+        }
+        expect(error?.code).toBe('STORAGE_VALIDATION_FAILED')
+        const details = (
+          error?.getResponse() as { error: { details: { planted: number; replaced: number } } }
+        ).error.details
+        expect(details.replaced).toBeGreaterThan(0)
+        expect(details.planted).toBe(0)
+      },
+    )
+
+    it('says which of the two conditions refused, in the reason', () => {
+      const reasonOf = (error: StorageException): unknown =>
+        (error.getResponse() as { error: { details: { reason: string } } }).error.details.reason
+      const restore = swap(Math, 'min', () => 0)
+      let replacedError: StorageException
+      try {
+        replacedError = refusal()
+      } finally {
+        restore()
+      }
+      const replacedReason = reasonOf(replacedError)
+      Object.defineProperty(Object.prototype, 'ACL', {
+        value: 1,
+        configurable: true,
+        writable: true,
+      })
+      try {
+        expect(replacedReason).toBe('a built-in was replaced after the library loaded')
+        expect(reasonOf(refusal())).toBe(
+          'the root object prototype carries a key the library did not find at load',
+        )
+      } finally {
+        Reflect.deleteProperty(Object.prototype, 'ACL')
+      }
+    })
+
+    it('still names a planted key by count when a built-in is replaced too', () => {
+      const restore = swap(Object, 'hasOwn', () => true)
+      Object.defineProperty(Object.prototype, 'ACL', {
+        value: 'public-read',
+        configurable: true,
+        writable: true,
+      })
+      try {
+        const details = (refusal().getResponse() as { error: { details: { planted: number } } })
+          .error.details
+        expect(details.planted).toBe(1)
+      } finally {
+        Reflect.deleteProperty(Object.prototype, 'ACL')
+        restore()
+      }
+    })
+  })
+
+  it('accepts a host that tunes a documented setting of a captured global after the library loaded', () => {
+    // Settings, not functions any decision calls: the pool size and the stack trace depth.
+    const pool = Buffer.poolSize
+    const depth = Error.stackTraceLimit
+    Buffer.poolSize = 1024
+    Error.stackTraceLimit = 5
+    try {
+      expect(() => {
+        assertCleanRoot()
+      }).not.toThrow()
+    } finally {
+      Buffer.poolSize = pool
+      Error.stackTraceLimit = depth
+    }
+  })
+
+  it('refuses at every use when a built-in could not be read at load', async () => {
+    // A guard that could not take its baseline cannot vouch for the runtime, so it fails closed.
+    const original = Reflect.ownKeys
+    Reflect.ownKeys = (target: object) => {
+      if (target === Function.prototype) {
+        throw new Error('unreadable')
+      }
+      return original(target)
+    }
+    let loaded: typeof Guard | undefined
+    try {
+      await jest.isolateModulesAsync(async () => {
+        loaded = await import('./prototype-guard')
+      })
+    } finally {
+      Reflect.ownKeys = original
+    }
+    let thrown: unknown
+    try {
+      loaded?.assertCleanRoot()
+    } catch (error) {
+      thrown = error
+    }
+    // The isolated registry has its own exception class, so the code is what identifies it.
+    expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+  })
+
+  it('recognises only a refusal the guard raised', () => {
+    // A validation failure about a caller's input, and any non-object, are not root refusals.
+    Object.defineProperty(Object.prototype, 'ACL', { value: 1, configurable: true, writable: true })
+    let raised: unknown
+    try {
+      raised = refusal()
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'ACL')
+    }
+    expect(isRootRefusal(raised)).toBe(true)
+    expect(isRootRefusal(new StorageException('STORAGE_VALIDATION_FAILED'))).toBe(false)
+    expect(isRootRefusal(null)).toBe(false)
+    expect(isRootRefusal('STORAGE_VALIDATION_FAILED')).toBe(false)
+    expect(isRootRefusal(undefined)).toBe(false)
+  })
+
+  it('builds a fresh refusal on every call, carrying counts and no key', () => {
+    Object.defineProperty(Object.prototype, 'ACL', {
+      value: 'public-read',
+      configurable: true,
+      writable: true,
+    })
+    try {
+      const first = refusal()
+      const second = refusal()
+      expect(first).not.toBe(second)
+      expect(JSON.stringify(first.getResponse())).not.toContain('ACL')
+      expect(JSON.stringify(first.getResponse())).toContain('"planted":1')
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'ACL')
+    }
+  })
+
+  // Keep this the last row of the file: it cannot be undone, and the guard of this realm refuses afterwards.
+  it('refuses a built-in made non-configurable after the module loaded', async () => {
+    let loaded: typeof Guard | undefined
+    await jest.isolateModulesAsync(async () => {
+      loaded = await import('./prototype-guard')
+    })
+    Object.defineProperty(Math, 'floor', { configurable: false })
+    let thrown: unknown
+    try {
+      loaded?.assertCleanRoot()
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
+  })
+})
+
+const define = Object.defineProperty.bind(Object)
+
+function swapSetter(target: object, name: string, value: () => unknown): () => void {
+  const original = descriptorOf(target, name)
+  Object.defineProperty(target, name, { ...original, set: value })
+  return () => {
+    Object.defineProperty(target, name, original)
+  }
+}
+
+/** Changes one flag of a property; `configurable: false` cannot be undone, so only a property no other row uses. */
+function flag(target: object, name: string, change: PropertyDescriptor): () => void {
+  const original = descriptorOf(target, name)
+  Object.defineProperty(target, name, { ...original, ...change })
+  return () => {
+    try {
+      Object.defineProperty(target, name, original)
+    } catch {
+      // A property made non-configurable stays so; its value and flags are otherwise unchanged.
+    }
+  }
+}
+
+function wrapped(original: (this: unknown) => unknown): () => unknown {
+  return function (this: unknown) {
+    return original.call(this)
+  }
+}
+
+function swapGlobal(name: string, value: unknown): () => void {
+  const original = descriptorOf(globalThis, name)
+  define(globalThis, name, {
+    value,
+    configurable: true,
+    writable: true,
+    enumerable: original.enumerable === true,
+  })
+  return () => {
+    define(globalThis, name, original)
+  }
+}
+
+function swap(target: object, name: PropertyKey, value: unknown): () => void {
+  const original = descriptorOf(target, name)
+  Object.defineProperty(target, name, { ...original, value })
+  return () => {
+    Object.defineProperty(target, name, original)
+  }
+}
+
+function swapGetter(target: object, name: string, value: () => unknown): () => void {
+  const original = descriptorOf(target, name)
+  Object.defineProperty(target, name, { ...original, get: value })
+  return () => {
+    Object.defineProperty(target, name, original)
+  }
+}
+
+function descriptorOf(target: object, name: PropertyKey): PropertyDescriptor {
+  const descriptor = Object.getOwnPropertyDescriptor(target, name)
+  if (descriptor === undefined) {
+    throw new Error(`no own property ${String(name)}`)
+  }
+  return descriptor
+}

@@ -100,6 +100,62 @@ describe('closeMultipartUpload', () => {
 
     expect(onFailure).toHaveBeenCalledWith(failure)
   })
+
+  it('closeWhenCreated reports a runtime refusal to onFailure and leaves no unhandled rejection', async () => {
+    const send = jest.fn().mockResolvedValue({})
+    const onFailure = jest.fn()
+    const unhandled: unknown[] = []
+    const listener = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', listener)
+    let release: (id: string) => void = () => undefined
+    const created = new Promise<string | undefined>((resolve) => {
+      release = resolve
+    })
+
+    closeWhenCreated(clientThatAnswers(send), 'b', 'k', created, onFailure)
+    Object.defineProperty(Object.prototype, 'plantedBeforeTheIdAnswers', {
+      value: 1,
+      configurable: true,
+    })
+    try {
+      release('u1')
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      await new Promise<void>((resolve) => setImmediate(resolve))
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'plantedBeforeTheIdAnswers')
+      process.off('unhandledRejection', listener)
+    }
+
+    expect(unhandled).toEqual([])
+    expect(onFailure).toHaveBeenCalledTimes(1)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('closeWhenCreated survives an onFailure that throws while reporting a refusal', async () => {
+    const unhandled: unknown[] = []
+    const listener = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', listener)
+    const onFailure = jest.fn(() => {
+      throw new Error('sink down')
+    })
+
+    closeWhenCreated(
+      clientThatAnswers(jest.fn().mockRejectedValue(new Error('refused'))),
+      'b',
+      'k',
+      Promise.resolve('u1'),
+      onFailure,
+    )
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    process.off('unhandledRejection', listener)
+
+    expect(unhandled).toEqual([])
+  })
 })
 
 describe('abortFailureLogger', () => {
@@ -113,7 +169,9 @@ describe('abortFailureLogger', () => {
   it('warns with the event, library text and what the abort threw under err, and no key', () => {
     const logger = sink()
 
-    abortFailureLogger(logger)(Object.assign(new Error('SENTINEL-PROVIDER-TEXT'), { name: 'ServiceUnavailable' }))
+    abortFailureLogger(logger)(
+      Object.assign(new Error('SENTINEL-PROVIDER-TEXT'), { name: 'ServiceUnavailable' }),
+    )
 
     expect(logger.warn).toHaveBeenCalledTimes(1)
     const entry = logger.warn.mock.calls[0]?.[0] as Record<string, unknown> & { err: Error }

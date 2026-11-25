@@ -8,6 +8,8 @@ import { CreateMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { assertAbortSignal } from './call-input'
+import { markHandled, tagged } from './prototype-guard'
+import { nothing, settleOrCut, verdictOf } from './settle-or-cut'
 
 /**
  * How long the cleanup of an aborted or failed call may take. It runs with a signal of its own, never
@@ -21,7 +23,12 @@ function reasonName(signal: AbortSignal): string {
   const reason: unknown = signal.reason
   // Not `instanceof Error`: a DOMException (the default reason, and a timeout's) can come from
   // another realm and is not one, yet it carries the name.
-  if (typeof reason === 'object' && reason !== null && 'name' in reason && typeof reason.name === 'string') {
+  if (
+    typeof reason === 'object' &&
+    reason !== null &&
+    'name' in reason &&
+    typeof reason.name === 'string'
+  ) {
     return reason.name
   }
   return 'AbortError'
@@ -68,7 +75,9 @@ export function throwIfAborted(
  * @param signal - The caller's signal, if any.
  * @returns `{ abortSignal }`, or `undefined`.
  */
-export function sendOptions(signal: AbortSignal | undefined): { abortSignal: AbortSignal } | undefined {
+export function sendOptions(
+  signal: AbortSignal | undefined,
+): { abortSignal: AbortSignal } | undefined {
   return signal ? { abortSignal: signal } : undefined
 }
 
@@ -96,6 +105,18 @@ export interface SignalBoundClient {
   createdUploadId: () => Promise<string | undefined>
 }
 
+/** The upload id a `CreateMultipartUpload` answered with, or `undefined` if it failed; never rejects. */
+async function uploadIdOf(
+  sent: Promise<{ UploadId?: string | undefined }>,
+): Promise<string | undefined> {
+  try {
+    return (await verdictOf(sent)).UploadId
+  } catch {
+    // A refused or failed create has no upload id to hand on.
+  }
+  return undefined
+}
+
 /**
  * Wraps a client so that every request sent through it ends when `signal` aborts, which
  * `@aws-sdk/lib-storage` does not do by itself: its `abort()` only rejects `done()` and leaves the
@@ -108,20 +129,16 @@ export interface SignalBoundClient {
  * @returns The wrapped client and a way to read the upload id the create returned.
  */
 export function bindToSignal(client: S3Client, signal: AbortSignal): SignalBoundClient {
-  let created: Promise<string | undefined> = Promise.resolve(undefined)
+  let created: Promise<string | undefined> = nothing()
   const bound = new Proxy(client, {
     get(target, property) {
       if (property !== 'send') {
-        const value: unknown = Reflect.get(target, property, target)
-        return value
+        return (target as unknown as Record<string | symbol, unknown>)[property]
       }
       return (command: Parameters<S3Client['send']>[0], options?: object) => {
         if (command instanceof CreateMultipartUploadCommand) {
           const sent = target.send(command, options)
-          created = sent.then(
-            (response) => response.UploadId,
-            () => undefined,
-          )
+          created = uploadIdOf(sent)
           return sent
         }
         return target.send(command, { ...options, abortSignal: signal })
@@ -139,17 +156,14 @@ export function bindToSignal(client: S3Client, signal: AbortSignal): SignalBound
  * @returns The settled value, or `undefined` when `ms` passed first.
  */
 export async function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
-  let timer: NodeJS.Timeout | undefined
-  const late = new Promise<undefined>((resolve) => {
-    timer = setTimeout(() => {
-      resolve(undefined)
+  return await settleOrCut<T, undefined>(promise, (cut) => {
+    const timer = setTimeout(() => {
+      cut.resolve(undefined)
     }, ms)
+    return () => {
+      clearTimeout(timer)
+    }
   })
-  try {
-    return await Promise.race([promise, late])
-  } finally {
-    clearTimeout(timer)
-  }
 }
 
 /**
@@ -164,37 +178,41 @@ export async function within<T>(promise: Promise<T>, ms: number): Promise<T | un
  * @returns `work`'s outcome, its own rejection reason unchanged, or a rejection with
  *   `STORAGE_REQUEST_ABORTED` once the signal aborted.
  */
-export async function abortable<T>(
+export function abortable<T>(
+  work: Promise<T>,
+  signal: AbortSignal | undefined,
+  context: Record<string, unknown>,
+): Promise<T> {
+  return tagged(waitUnlessAborted(work, signal, context))
+}
+
+async function waitUnlessAborted<T>(
   work: Promise<T>,
   signal: AbortSignal | undefined,
   context: Record<string, unknown>,
 ): Promise<T> {
   if (!signal) {
-    return work
+    return await verdictOf(work)
   }
   if (signal.aborted) {
     // No event will come: the work may have started, and aborted the signal, before this wait began.
-    work.catch(() => undefined)
+    markHandled(work)
     throw requestAborted(signal, context)
   }
-  const release = new AbortController()
-  const aborted = new Promise<never>((_resolve, reject) => {
+  return await settleOrCut(work, (cut) => {
+    const release = new AbortController()
     signal.addEventListener(
       'abort',
       () => {
-        reject(requestAborted(signal, context))
+        cut.reject(requestAborted(signal, context))
       },
-      // Stryker disable next-line BooleanLiteral: `release.abort()` in the `finally` removes the listener, and a signal aborts once, so `once` is not observable (equivalent).
+      // Stryker disable next-line BooleanLiteral: `release.abort()` removes the listener, and a signal aborts once, so `once` is not observable (equivalent).
       { once: true, signal: release.signal },
     )
+    return () => {
+      release.abort()
+    }
   })
-  try {
-    return await Promise.race([work, aborted])
-  } finally {
-    release.abort()
-    // If the signal won, whatever `work` rejects with later is of no interest to anyone.
-    work.catch(() => undefined)
-  }
 }
 
 /**

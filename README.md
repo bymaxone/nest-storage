@@ -368,7 +368,7 @@ Uploads are automatically routed to multipart when `size >= multipart.thresholdB
 
 **A stream's declared size must be true.** A stream below the multipart threshold is sent as one request that carries `Content-Length` set to `size`, and a provider stores an object as soon as it has received that many bytes. So a body longer than `size` is refused with `STORAGE_SIZE_EXCEEDED` (`details.declaredSize`) before its last byte is sent, and a body shorter than `size` with `STORAGE_VALIDATION_FAILED` (`details.field: 'size'`, `details.declaredSize` and `details.receivedSize`); either way the request is abandoned and nothing is stored. A stream on the multipart path is still refused when it is longer than `size`; a shorter one is uploaded as it is. With a pre-upload scanner the stream is read into memory first, and the same rules apply to the length that was read. A `size` that is not a whole number of at least `0` fails with `STORAGE_VALIDATION_FAILED` before any request.
 
-**The library owns a `Readable` once you pass it to `upload()`**, as with `stream.pipeline`. When the upload is rejected for any reason, the stream is destroyed without an error, which releases the file handle or socket behind it: a listener on the stream sees `'close'`, and the failure is the rejection of `upload()`. A call answered from the idempotency cache destroys the stream unread. Do not reuse a stream you passed in; open a new one to retry. No listener on the stream is needed to avoid an unhandled `'error'` event.
+**The library owns a `Readable` once you pass it to `upload()`**, as with `stream.pipeline`. When the upload is rejected for any reason, the stream is destroyed without an error, which releases the file handle or socket behind it: a listener on the stream sees `'close'`, and the failure is the rejection of `upload()`. A call answered from the idempotency cache destroys the stream unread. Do not reuse a stream you passed in; open a new one to retry. No listener on the stream is needed to avoid an unhandled `'error'` event. The one exception is a call the runtime guard refuses at its start, because the runtime differs from what it was at load (for example code in the same process added a property to `Object.prototype`): it is refused before the library owns the body, so the stream is untouched and you still own it.
 
 ### Idempotency
 
@@ -969,6 +969,7 @@ Every operational line the library writes is an **object** through the Nest `Log
 | `STORAGE_SCAN_INCONCLUSIVE_REJECTED` | warn | `unknown` with `rejectOnUnknown`, or a result outside the contract | `engine`, `status` (when unrecognised), `details` |
 | `STORAGE_SCAN_FAILED` | warn | the scanner threw | `err` |
 | `STORAGE_SCAN_TIMEOUT` | warn | the scan outlasted `scanner.timeoutMs` | `timeoutMs` |
+| `STORAGE_ROOT_GUARD_REFUSED` | warn | a scan was refused because the runtime differs from the one at load | none |
 | `STORAGE_SCAN_CLEANUP_FAILED` | error | the object a scan rejected could not be deleted and is still stored | `storedKey`, `cleanupFailure` |
 | `STORAGE_EXISTS_FAILED` | warn | `exists()` met a failure that is not a 404 and answered `false` | `err` |
 | `STORAGE_DELETE_NOT_FOUND` | warn | `delete()` found no such key (an idempotent no-op) | none |
@@ -1077,6 +1078,18 @@ operation context the call site supplies: the operation and the `key`, `bucket` 
 passed (see _What `details` repeats_). Neither the text of the provider nor anything the host configured is
 in it. An object key you passed still reaches whatever consumes the exception, so if a key is itself
 sensitive in your deployment, do not log the envelope verbatim.
+
+### The runtime must stay as the library found it
+
+The library compares the built-ins its decisions read with how they were when it loaded, and refuses
+every public call and every attempt of every command with `STORAGE_VALIDATION_FAILED` (counts only, no
+name) while one differs: a key on `Object.prototype`, a replaced standard method, or a replaced
+`Promise` member the verdicts depend on (the `constructor` of the promise prototype). A scan verdict,
+a validation result and an upload id are read with `await` on a promise built from the constructor
+captured at load, so replacing `Promise.race`, `Promise.resolve`, `Promise.all` or `Promise.prototype.then`
+after load does not turn an infected or rejected result into an accepted one. These checks are best-effort hardening, not a security boundary: code in the same process is trusted (see [SECURITY.md](./SECURITY.md), "Threat model: same-process code"). A tracing agent that wraps
+`then` and delegates is not refused; a host that replaces `Promise.prototype.constructor` after load
+makes the library refuse every call. A replacement made before the library is imported is not seen, except that a `constructor` slot of the promise prototype that is not the engine's own function as a plain value makes the module refuse to load. A scanner or validator dependency that reads `Promise` statics itself is not covered, and neither is a `then` planted and erased again between the entry of a call and the moment the work answers.
 
 ### `keyPrefix` is a namespace, not an access boundary
 
