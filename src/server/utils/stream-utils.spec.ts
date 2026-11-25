@@ -65,6 +65,30 @@ describe('readStream', () => {
     // Nothing delivered is zero bytes, not an error.
     expect((await readStream(Readable.from([]))).length).toBe(0)
   })
+
+  it('refuses a changed runtime before it reads the first chunk from the source', async () => {
+    // The root is checked when the read starts, so a key planted on Object.prototype stops the call
+    // before the source is asked for anything, instead of after it has been read.
+    const root = Object.prototype as unknown as Record<string, unknown>
+    let reads = 0
+    const source = {
+      [Symbol.asyncIterator]: () => ({
+        next: () => {
+          reads += 1
+          return Promise.resolve({ done: true, value: undefined })
+        },
+      }),
+    } as unknown as NodeJS.ReadableStream
+    root.plantedBeforeRead = true
+    try {
+      await expect(readStream(source)).rejects.toMatchObject({
+        response: { error: { code: 'STORAGE_VALIDATION_FAILED' } },
+      })
+    } finally {
+      Reflect.deleteProperty(root, 'plantedBeforeRead')
+    }
+    expect(reads).toBe(0)
+  })
 })
 
 describe('toUploadBody', () => {
