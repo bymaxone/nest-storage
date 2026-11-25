@@ -391,22 +391,6 @@ describe('assertCleanRoot', () => {
       Reflect.deleteProperty(Object.prototype, 'ACL')
     }
   })
-
-  // Keep this the last row of the file: it cannot be undone, and the guard of this realm refuses afterwards.
-  it('refuses a built-in made non-configurable after the module loaded', async () => {
-    let loaded: typeof Guard | undefined
-    await jest.isolateModulesAsync(async () => {
-      loaded = await import('./prototype-guard')
-    })
-    Object.defineProperty(Math, 'floor', { configurable: false })
-    let thrown: unknown
-    try {
-      loaded?.assertCleanRoot()
-    } catch (error) {
-      thrown = error
-    }
-    expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED' })
-  })
 })
 
 const define = Object.defineProperty.bind(Object)

@@ -44,6 +44,7 @@ describe('providerRecipes.digitalOceanSpaces', () => {
     expect(config.endpoint).toBe('https://nyc3.digitaloceanspaces.com')
     expect(config.publicBaseUrl).toBe('https://b.nyc3.digitaloceanspaces.com')
     expect(config.cdnBaseUrl).toBe('https://b.nyc3.cdn.digitaloceanspaces.com')
+    expect(config.forcePathStyle).toBe(false)
     expect(config.defaultPublicRead).toBe(true)
     expect(config.requestChecksumCalculation).toBe('WHEN_REQUIRED')
     expect(config.responseChecksumValidation).toBe('WHEN_REQUIRED')
@@ -115,6 +116,7 @@ describe('providerRecipes.wasabi', () => {
     // Wasabi rejects the SDK's default integrity headers.
     const config = providerRecipes.wasabi({ region: 'us-east-1', bucket: 'b', ...CREDS })
     expect(config.endpoint).toBe('https://s3.us-east-1.wasabisys.com')
+    expect(config.forcePathStyle).toBe(false)
     expect(config.publicBaseUrl).toBe('https://b.s3.us-east-1.wasabisys.com')
     expect(config.requestChecksumCalculation).toBe('WHEN_REQUIRED')
   })

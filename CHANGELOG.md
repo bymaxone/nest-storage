@@ -22,7 +22,7 @@ note on each entry is the compatibility contract — read it, not the number.
   signed and kept out of the query, so a PUT that sends every listed header is accepted.
 
   **Apply to a derived backend:** a client that ignored `requiredHeaders` and sent `Content-Type` alone to a URL issued
-  with `publicRead` is now refused, where it used to store the object without the ACL. Send every entry of
+  with `publicRead` is now refused, where it used to be accepted. Send every entry of
   `requiredHeaders`. A URL issued without an ACL is unchanged.
 
 - **A stream read now checks the runtime root before it takes the iterator of the source.** The check ran when the

@@ -25,6 +25,13 @@ describe('projectProviderFailure', () => {
     })
   })
 
+  it('reads no field off a function, which has a name of its own', () => {
+    // A function is not an object by `typeof`; read as one, its own `name` would be logged as the error's name.
+    function boom(): void {}
+
+    expect(projectProviderFailure(boom)).not.toHaveProperty('name')
+  })
+
   it('leaves out a field the error does not have or holds as another kind, and takes a null or a string as the message', () => {
     expect(projectProviderFailure(null)).toEqual({ message: 'null' })
     expect(projectProviderFailure('boom')).toEqual({ message: 'boom' })
