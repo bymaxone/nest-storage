@@ -29,7 +29,7 @@ interface Bound {
 
 let storage: StorageService
 let signed: SignedUrlService
-let moduleRef: TestingModule
+let moduleRef: TestingModule | undefined
 
 const body = (): Buffer => Buffer.from('x')
 
@@ -186,7 +186,7 @@ describe('public API: caller strings bound for a header', () => {
   })
 
   afterAll(async () => {
-    await moduleRef.close()
+    await moduleRef?.close()
   })
 
   beforeEach(() => {
