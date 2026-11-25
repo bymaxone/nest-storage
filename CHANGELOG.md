@@ -54,8 +54,8 @@ note on each entry is the compatibility contract — read it, not the number.
   a signed query name, a credential or the request host. The library now refuses to build the client, and refuses
   every attempt of every command (a retry included, a presigned URL included), while the root prototype carries a
   string or symbol key outside the standard set, a root property's descriptor has changed since load, or a property
-  of the built-ins listed below has been replaced, deleted or redefined since load, whether or not the library calls
-  it. The refusal is `STORAGE_VALIDATION_FAILED`, carries counts and a
+  of the built-ins listed below differs from its value at load when the library checks, whether or not the library
+  calls it. The refusal is `STORAGE_VALIDATION_FAILED`, carries counts and a
   fixed reason, names no key or built-in, reaches the caller unchanged (`exists()` rethrows it), and nothing is handed
   to the HTTP handler. A replacement made before the library is imported is not seen.
 
@@ -88,7 +88,7 @@ note on each entry is the compatibility contract — read it, not the number.
   The built-ins compared are every own property of `Object`, `Function.prototype`, `Array` and its prototype, `String`
   and its prototype, `RegExp.prototype`, the prototypes of `Map`, `Set`, `WeakMap` and `WeakSet`, `Symbol` and its
   prototype, `Number` and its prototype, `Math`, `JSON`, `ArrayBuffer`, `Buffer.prototype`, `Uint8Array.prototype`, the
-  typed-array prototype, `URL.prototype` and the array, string, map and set iterator prototypes, plus `Buffer.from`,
+  typed-array prototype, `URL.prototype` and the iterator prototypes (the shared one, and the array, string, map and set ones), plus `Buffer.from`,
   `alloc`, `concat`, `byteLength` and `isBuffer`. Measured on this build: a replaced `Math.cbrt`,
   `Number.prototype.toFixed`, `Object.freeze`, `Object.hasOwn` or `Array.prototype.findLast`, a deleted `Math.cbrt` and
   a non-writable `Object.freeze` are each refused; a property **added** to one of them after load (a new key on `Math`,
