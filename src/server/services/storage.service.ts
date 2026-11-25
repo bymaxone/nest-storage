@@ -134,8 +134,8 @@ export class StorageService {
    * the stream is destroyed (without an error: the SDK forwards a stream's error to wrappers
    * that nothing listens to), which releases the file handle or socket behind it; a cache hit
    * destroys it unread. A stream consumed by a successful upload ends on its own.
-   * A call the runtime guard refuses (a property added to `Object.prototype` after load) never
-   * owns the body: the caller still does.
+   * A call the runtime guard refuses at its start (a property added to `Object.prototype` after
+   * load) never owns the body: the caller still does.
    *
    * @param options - The upload request.
    * @returns The upload result.
