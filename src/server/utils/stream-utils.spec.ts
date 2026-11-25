@@ -50,7 +50,9 @@ async function waitUntil(predicate: () => boolean, maxTicks = 100): Promise<void
 describe('readStream', () => {
   it('reads Buffer chunks to one Buffer', async () => {
     // The whole stream, in order.
-    expect((await readStream(Readable.from([Buffer.from('ab'), Buffer.from('cd')]))).toString()).toBe('abcd')
+    expect(
+      (await readStream(Readable.from([Buffer.from('ab'), Buffer.from('cd')]))).toString(),
+    ).toBe('abcd')
   })
 
   it('reads string chunks as their bytes', async () => {
@@ -89,6 +91,41 @@ describe('readStream', () => {
     }
     expect(reads).toBe(0)
   })
+
+  it('refuses a changed runtime before it takes the iterator, so a source that opens a resource there is not opened', async () => {
+    // A source may open a resource in Symbol.asyncIterator() and release it in next() or return(); taking the
+    // iterator first and refusing afterwards would leave that resource opened and never released.
+    const root = Object.prototype as unknown as Record<string, unknown>
+    let opened = 0
+    const source = {
+      [Symbol.asyncIterator]: () => {
+        opened += 1
+        return { next: () => Promise.resolve({ done: true, value: undefined }) }
+      },
+    } as unknown as NodeJS.ReadableStream
+    root.plantedBeforeIterator = true
+    try {
+      await expect(readStream(source)).rejects.toMatchObject({
+        response: { error: { code: 'STORAGE_VALIDATION_FAILED' } },
+      })
+    } finally {
+      Reflect.deleteProperty(root, 'plantedBeforeIterator')
+    }
+    expect(opened).toBe(0)
+  })
+
+  it('opens the source once and reads it to its end on a clean runtime', async () => {
+    // The order pin: the check does not stop a clean read from taking the iterator exactly once.
+    let opened = 0
+    const source = {
+      [Symbol.asyncIterator]: () => {
+        opened += 1
+        return { next: () => Promise.resolve({ done: true, value: undefined }) }
+      },
+    } as unknown as NodeJS.ReadableStream
+    expect((await readStream(source)).length).toBe(0)
+    expect(opened).toBe(1)
+  })
 })
 
 describe('toUploadBody', () => {
@@ -115,55 +152,103 @@ describe('toUploadBody', () => {
     ['an array of chunks', [Buffer.from('a'), Buffer.from('b')]],
     ['a plain object', { data: 'abc' }],
     ['a number', 42],
-    ['an async iterable that is not a stream', { [Symbol.asyncIterator]: () => ({ next: () => Promise.resolve({ done: true, value: undefined }) }) }],
-  ])('refuses %s with STORAGE_VALIDATION_FAILED naming the body, not a multipart failure', (_label, value) => {
-    let thrown: unknown
-    try {
-      toUploadBody(value)
-    } catch (error) {
-      thrown = error
-    }
-
-    expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
-    expect((thrown as { getResponse(): unknown }).getResponse()).toMatchObject({
-      error: {
-        details: {
-          field: 'body',
-          reason: 'body must be a Buffer, Uint8Array, ArrayBuffer, string or readable stream',
-        },
+    [
+      'an async iterable that is not a stream',
+      {
+        [Symbol.asyncIterator]: () => ({
+          next: () => Promise.resolve({ done: true, value: undefined }),
+        }),
       },
-    })
-  })
+    ],
+  ])(
+    'refuses %s with STORAGE_VALIDATION_FAILED naming the body, not a multipart failure',
+    (_label, value) => {
+      let thrown: unknown
+      try {
+        toUploadBody(value)
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+      expect((thrown as { getResponse(): unknown }).getResponse()).toMatchObject({
+        error: {
+          details: {
+            field: 'body',
+            reason: 'body must be a Buffer, Uint8Array, ArrayBuffer, string or readable stream',
+          },
+        },
+      })
+    },
+  )
 
   it.each([
     ['an object with only a pipe function', { pipe: (): void => undefined }],
     ['a WHATWG ReadableStream', new ReadableStream()],
-    ['an object with pipe and on but no once', { pipe: (): void => undefined, on: (): void => undefined }],
-    ['an object with pipe and once but no on', { pipe: (): void => undefined, once: (): void => undefined }],
+    [
+      'an object with pipe and on but no once',
+      { pipe: (): void => undefined, on: (): void => undefined },
+    ],
+    [
+      'an object with pipe and once but no on',
+      { pipe: (): void => undefined, once: (): void => undefined },
+    ],
     [
       'an object with pipe, once, pause and resume but no on',
-      { pipe: (): void => undefined, once: (): void => undefined, pause: (): void => undefined, resume: (): void => undefined },
+      {
+        pipe: (): void => undefined,
+        once: (): void => undefined,
+        pause: (): void => undefined,
+        resume: (): void => undefined,
+      },
     ],
     [
       'an object with pipe, on, pause and resume but no once',
-      { pipe: (): void => undefined, on: (): void => undefined, pause: (): void => undefined, resume: (): void => undefined },
+      {
+        pipe: (): void => undefined,
+        on: (): void => undefined,
+        pause: (): void => undefined,
+        resume: (): void => undefined,
+      },
     ],
-    ['an object with pipe, on and once but no pause or resume', { pipe: (): void => undefined, on: (): void => undefined, once: (): void => undefined }],
-    ['an object with pipe, on, once and pause but no resume', { pipe: (): void => undefined, on: (): void => undefined, once: (): void => undefined, pause: (): void => undefined }],
-    ['an object with pipe, on, once and resume but no pause', { pipe: (): void => undefined, on: (): void => undefined, once: (): void => undefined, resume: (): void => undefined }],
-  ])('refuses %s with STORAGE_VALIDATION_FAILED naming the body, not a raw TypeError', (_label, value) => {
-    let thrown: unknown
-    try {
-      toUploadBody(value)
-    } catch (error) {
-      thrown = error
-    }
+    [
+      'an object with pipe, on and once but no pause or resume',
+      { pipe: (): void => undefined, on: (): void => undefined, once: (): void => undefined },
+    ],
+    [
+      'an object with pipe, on, once and pause but no resume',
+      {
+        pipe: (): void => undefined,
+        on: (): void => undefined,
+        once: (): void => undefined,
+        pause: (): void => undefined,
+      },
+    ],
+    [
+      'an object with pipe, on, once and resume but no pause',
+      {
+        pipe: (): void => undefined,
+        on: (): void => undefined,
+        once: (): void => undefined,
+        resume: (): void => undefined,
+      },
+    ],
+  ])(
+    'refuses %s with STORAGE_VALIDATION_FAILED naming the body, not a raw TypeError',
+    (_label, value) => {
+      let thrown: unknown
+      try {
+        toUploadBody(value)
+      } catch (error) {
+        thrown = error
+      }
 
-    expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
-    expect((thrown as { getResponse(): unknown }).getResponse()).toMatchObject({
-      error: { details: { field: 'body' } },
-    })
-  })
+      expect(thrown).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+      expect((thrown as { getResponse(): unknown }).getResponse()).toMatchObject({
+        error: { details: { field: 'body' } },
+      })
+    },
+  )
 
   it('leaves a Buffer, a Uint8Array and a stream as they are', () => {
     // The accepted shapes pass through by identity.
@@ -497,7 +582,10 @@ describe('stream-utils', () => {
 
     describe('releasing an iterator by hand', () => {
       /** A source whose iterator hands out `chunks`, then ends, and counts the calls of `return`. */
-      function counted(chunks: Buffer[]): { source: NodeJS.ReadableStream; released: () => number } {
+      function counted(chunks: Buffer[]): {
+        source: NodeJS.ReadableStream
+        released: () => number
+      } {
         let released = 0
         let at = 0
         const iterator = {
@@ -512,7 +600,9 @@ describe('stream-utils', () => {
             return Promise.resolve({ done: true, value: undefined })
           },
         }
-        const source = { [Symbol.asyncIterator]: () => iterator } as unknown as NodeJS.ReadableStream
+        const source = {
+          [Symbol.asyncIterator]: () => iterator,
+        } as unknown as NodeJS.ReadableStream
         return { source, released: () => released }
       }
 
