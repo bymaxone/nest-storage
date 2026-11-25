@@ -26,17 +26,6 @@ function detailsOf(error: unknown): Record<string, unknown> {
   return body.error?.details ?? {}
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
-
-/** Waits until `condition` holds; gives up before the test limit, so the failure names what never happened. */
-async function until(condition: () => boolean, description: string): Promise<void> {
-  const giveUpAt = Date.now() + 10_000
-  while (!condition()) {
-    if (Date.now() > giveUpAt) throw new Error(`never happened: ${description}`)
-    await sleep(10)
-  }
-}
-
 // A call that is never ended by the failure under test waits for this limit, and ends the test with it.
 jest.setTimeout(15_000)
 
@@ -45,15 +34,17 @@ describe('a download body that fails after its headers', () => {
   let port: number
   /** What the stand-in does after it has sent part of the body. */
   let afterPartialBody: 'reset' | 'silence' = 'reset'
-  let bodyStarted = false
-  /** One per test, replaced by the next, so a poll holding its own cannot see a later test reset it. */
-  let life = { over: false }
+  /** Settles when the stand-in has sent the first bytes of the body; one per test, so nothing from an earlier test can settle a later one. */
+  let bodyStarted: Promise<void>
+  let markBodyStarted: () => void = () => undefined
   let abortTimer: NodeJS.Timeout | undefined
   let moduleRef: TestingModule | undefined
   const sockets = new Set<Socket>()
 
   beforeAll(async () => {
     server = createServer((req, res) => {
+      // The marker of the test that sent this request, so a late write cannot settle a later test's.
+      const mark = markBodyStarted
       req.resume()
       req.on('end', () => {
         res.writeHead(200, {
@@ -61,7 +52,7 @@ describe('a download body that fails after its headers', () => {
           'content-type': 'application/octet-stream',
         })
         res.write(Buffer.alloc(SENT_BYTES, 1), () => {
-          bodyStarted = true
+          mark()
           if (afterPartialBody === 'reset') {
             setTimeout(() => {
               res.socket?.destroy()
@@ -91,12 +82,12 @@ describe('a download body that fails after its headers', () => {
 
   beforeEach(() => {
     afterPartialBody = 'reset'
-    bodyStarted = false
-    life = { over: false }
+    bodyStarted = new Promise<void>((resolve) => {
+      markBodyStarted = resolve
+    })
   })
 
   afterEach(async () => {
-    life.over = true
     clearTimeout(abortTimer)
     jest.restoreAllMocks()
     await moduleRef?.close()
@@ -139,15 +130,11 @@ describe('a download body that fails after its headers', () => {
   /** Aborts once the body has started, so the signal and not the timeout is what ends the call. */
   function abortWhenStarted(): AbortSignal {
     const controller = new AbortController()
-    const mine = life
-    until(() => bodyStarted || mine.over, 'the first bytes of the body were sent')
-      .then(() => {
-        if (mine.over) return
-        abortTimer = setTimeout(() => {
-          controller.abort()
-        }, 50)
-      })
-      .catch(() => undefined)
+    void bodyStarted.then(() => {
+      abortTimer = setTimeout(() => {
+        controller.abort()
+      }, 50)
+    })
     return controller.signal
   }
 
