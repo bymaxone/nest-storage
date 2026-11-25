@@ -455,14 +455,16 @@ function readBaseline(): void {
   }
   // Not the whole of Buffer: its pool size is a setting a host may tune, and no decision reads it.
   at = 0
-  while (at < BUFFER_CALLS.length) {
+  const bufferEnd = BUFFER_CALLS.length
+  while (at !== bufferEnd) {
     capture(Buffer, item(BUFFER_CALLS, at))
     at += 1
   }
   // Where `Reflect` itself points, and each function the language defines on it.
   capture(Reflect, PARENT)
   at = 0
-  while (at < REFLECT_CALLS.length) {
+  const reflectEnd = REFLECT_CALLS.length
+  while (at !== reflectEnd) {
     capture(Reflect, item(REFLECT_CALLS, at))
     at += 1
   }
