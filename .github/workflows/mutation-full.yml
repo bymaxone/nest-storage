@@ -34,18 +34,18 @@ jobs:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
       inventory: enforce
-      # The ceiling is per shard job. A single runner would have needed about 140 minutes for the whole
-      # run (the 120-minute job was cancelled at 85% of its mutants), so a shard, a quarter of the
-      # mutants plus its own dry run, needs about 40 to 60 minutes, and 150 leaves about twice that
-      # worst case: hosted runner speed varies about 1.5x on the same work. A
-      # run the ceiling cancels leaves no score and no baseline for the week, while an over-wide
-      # ceiling costs only the minutes it uses and nothing blocks on this job.
-      timeout-minutes: 150
-      # Four shards of two workers each. A mutant costs the time of the tests that cover it, so the run
+      # The ceiling is per shard job. The shards of the last cold run took 137.9, 93.9 and 96.2 minutes, and
+      # the fourth, with the most static mutants (595 against 324 to 422) and the slowest dry run (78.6 s
+      # against about 40 s), was cancelled at 150. The plan balances shards by weight, not by static
+      # mutants, so the spread is wide. Eight shards and 355 minutes are the sizes the sibling libraries
+      # use. A run the ceiling cancels leaves no score and no baseline,
+      # while an over-wide ceiling costs only the minutes it uses and nothing blocks on this job.
+      timeout-minutes: 355
+      # Eight shards of two workers each. A mutant costs the time of the tests that cover it, so the run
       # grows with the real-time waits of those specs (sockets, idle and deadline timers) and is split
-      # across four runners instead of given a longer one. A worker grows to several GiB over a long
+      # across runners instead of given a longer one. A worker grows to several GiB over a long
       # run and the hosted runner has 16 GB, so two workers and their parent are what one runner holds.
       # The count and the concurrency are passed here, not written into stryker.config.json, which
       # the per-push incremental job and local runs share.
-      shards: 4
+      shards: 8
       concurrency: 2
