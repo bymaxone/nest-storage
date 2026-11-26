@@ -240,6 +240,12 @@ describe('a refused download', () => {
     expect({ cancelled }).toEqual({ cancelled: true })
   })
 
+  it('destroys a stream body that also has a cancel of its own', async () => {
+    const body = Object.assign(new PassThrough(), { cancel: (): void => undefined })
+    await refused(body)
+    expect(body.destroyed).toBe(true)
+  })
+
   it('leaves a body that holds nothing to release', async () => {
     expect(await refused(new Blob(['abc']))).toEqual([])
   })
