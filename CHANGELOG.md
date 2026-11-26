@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.24] - 2026-11-26
+
 ### Fixed
 
 - **A download refused after the provider answered now destroys the body it holds.** When the runtime check refused
@@ -22,6 +24,9 @@ note on each entry is the compatibility contract — read it, not the number.
 - **A rejected promise from a stream's `destroy()` that the library calls no longer goes unhandled.**
 - **Documentation: Cloudflare R2 and `publicRead`.** The text called the ACL a silent no-op there; it was not
   measured. The `getUploadUrl` row also names the `x-amz-acl` header it signs with `publicRead`.
+
+**Apply to a derived backend:** nothing to change. In the declarations, `ObservedOptions`, the options type of the
+observer the services hold as a protected member, gains an optional `answerStream`. The barrel does not export it.
 
 ### Changed
 
@@ -1470,4 +1475,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.21]: https://github.com/bymaxone/nest-storage/compare/v1.1.20...v1.1.21
 [1.1.22]: https://github.com/bymaxone/nest-storage/compare/v1.1.21...v1.1.22
 [1.1.23]: https://github.com/bymaxone/nest-storage/compare/v1.1.22...v1.1.23
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.23...HEAD
+[1.1.24]: https://github.com/bymaxone/nest-storage/compare/v1.1.23...v1.1.24
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.24...HEAD
