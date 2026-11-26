@@ -3,6 +3,7 @@
  * ends in a rejection does not leave its connection open.
  * @layer server/utils
  */
+import { absorb } from './absorb'
 import { follow } from './prototype-guard'
 import { destroyStream } from './stream-utils'
 
@@ -26,8 +27,11 @@ export function releaseAnswer<T>(
   }
   follow(
     work,
+    // The caller already has its error: a throw here would be an unhandled rejection.
     (answer) => {
-      destroyStream(streamOf(answer) as NodeJS.ReadableStream)
+      absorb(() => {
+        destroyStream(streamOf(answer) as NodeJS.ReadableStream)
+      })
     },
     ignore,
   )

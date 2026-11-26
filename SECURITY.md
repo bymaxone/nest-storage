@@ -89,7 +89,7 @@ If you build a custom configuration instead of using a recipe, you must add this
 
 ### Public access / ACL caveat
 
-`publicRead: true` (or `defaultPublicRead: true`) sends `ACL: 'public-read'` on PutObject. This fails on modern AWS S3 buckets (Object Ownership = "Bucket owner enforced") with HTTP 400 `AccessControlListNotSupported`, and is a **silent no-op** on Cloudflare R2. Use a **bucket policy**, a **CDN**, or **signed URLs** for public object delivery.
+`publicRead: true` (or `defaultPublicRead: true`) sends `ACL: 'public-read'` on PutObject. This fails on modern AWS S3 buckets (Object Ownership = "Bucket owner enforced") with HTTP 400 `AccessControlListNotSupported`. What Cloudflare R2 does with the ACL was **not measured**. Use a **bucket policy**, a **CDN**, or **signed URLs** for public object delivery.
 
 ---
 

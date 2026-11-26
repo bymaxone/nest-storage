@@ -5,7 +5,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common'
 import { absorb } from '../utils/absorb'
-import { assertCleanRoot, dispatch, rejectedWith, tagged } from '../utils/prototype-guard'
+import { assertCleanRoot, dispatch, rejectedWith, tagged, settles } from '../utils/prototype-guard'
 import { verdictOf } from '../utils/settle-or-cut'
 import { releaseAnswer } from '../utils/release-answer'
 import { StorageMetricsTally } from './storage-metrics-tally'
@@ -117,7 +117,8 @@ async function releasingOnRefusal<T>(
   streamOf: (result: T) => NodeJS.ReadableStream,
 ): Promise<T> {
   try {
-    return await verdictOf(outward)
+    // The check stays the last statement before the answer is handed on.
+    return settles(await verdictOf(outward))
   } catch (error) {
     releaseAnswer(produced(), streamOf)
     throw error

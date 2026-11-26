@@ -117,6 +117,71 @@ describe('a refused download', () => {
     },
   )
 
+  // A `then` that erases itself is a documented limit of the check; the release must not widen it.
+  it.each([
+    ['without an observer', 1],
+    ['through the observer', 2],
+  ])('adds no point where a planted then replaces the answer (%s)', async (mode, windows) => {
+    let replaced = 0
+    for (let depth = 0; depth < 30; depth += 1) {
+      const body = new PassThrough()
+      let left = depth
+      const hop = (): void => {
+        if (left > 0) {
+          left -= 1
+          queueMicrotask(hop)
+          return
+        }
+        Object.defineProperty(root, 'then', {
+          configurable: true,
+          value(this: { stream?: unknown }, resolve: (value: unknown) => void) {
+            const answered = this.stream !== undefined
+            Reflect.deleteProperty(root, 'then')
+            if (answered) replaced += 1
+            resolve(answered ? { stream: undefined } : this)
+          },
+        })
+      }
+      const observer =
+        mode === 'through the observer'
+          ? new StorageObserver(new StorageMetricsTally(), new StorageTracing())
+          : undefined
+      const answer = (): Promise<unknown> => {
+        queueMicrotask(hop)
+        return Promise.resolve({ Body: body, ContentLength: 3 })
+      }
+      await planted(body, 0, 0, answer, observer)
+        .download({ key: 'a.txt' })
+        .then(
+          () => undefined,
+          () => undefined,
+        )
+      await new Promise((resolve) => setImmediate(resolve))
+      Reflect.deleteProperty(root, 'then')
+    }
+    expect(replaced).toBe(windows)
+  })
+
+  it('raises no second failure when the client resolves nothing', async () => {
+    // The release reads the answer after the caller has its error; a throw there would end the process.
+    const seen: unknown[] = []
+    const prior = process.listeners('unhandledRejection')
+    process.removeAllListeners('unhandledRejection')
+    process.on('unhandledRejection', (reason) => seen.push(reason))
+    try {
+      const service = planted(new PassThrough(), 0, 0, () => Promise.resolve(undefined))
+      await expect(service.download({ key: 'a.txt' })).rejects.toMatchObject({
+        response: { error: { code: 'STORAGE_PROVIDER_ERROR' } },
+      })
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setImmediate(resolve))
+    } finally {
+      process.removeAllListeners('unhandledRejection')
+      for (const listener of prior) process.on('unhandledRejection', listener)
+    }
+    expect(seen).toEqual([])
+  })
+
   it('reports a client that throws before it returns a promise as a provider failure', async () => {
     // There is no pending answer to release, and the release must not add a failure of its own.
     const send = (): never => {

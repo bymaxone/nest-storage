@@ -23,7 +23,7 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Changed
 
-- The server bundle ceilings are 34 379 B (ESM) and 34 422 B (CJS).
+- The server bundle ceilings are 34 424 B (ESM) and 34 475 B (CJS).
 
 ## [1.1.23] - 2026-11-25
 
