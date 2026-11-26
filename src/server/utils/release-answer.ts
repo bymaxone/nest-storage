@@ -7,7 +7,7 @@ import { follow } from './prototype-guard'
 import { destroyStream } from './stream-utils'
 
 function ignore(): void {
-  // A work that rejected holds no stream, and its reason has already reached the caller.
+  // A work that rejected holds no stream.
 }
 
 /**

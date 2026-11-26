@@ -107,7 +107,6 @@ export class StorageObserver {
   }
 }
 
-/** The members a decorated method's class carries, when it was built with an observer. */
 /**
  * Passes `outward` on, and destroys the stream of the answer the method produced when it rejects. The layers
  * above the method check the runtime again, and a refusal there drops an answer nobody else can reach.
@@ -125,6 +124,7 @@ async function releasingOnRefusal<T>(
   }
 }
 
+/** The members a decorated method's class carries, when it was built with an observer. */
 interface Observing {
   readonly observer?: StorageObserver
 }
