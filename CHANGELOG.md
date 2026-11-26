@@ -25,6 +25,9 @@ note on each entry is the compatibility contract — read it, not the number.
 - **Documentation: Cloudflare R2 and `publicRead`.** The text called the ACL a silent no-op there; it was not
   measured. The `getUploadUrl` row also names the `x-amz-acl` header it signs with `publicRead`.
 
+**Apply to a derived backend:** nothing to change. In the declarations, `ObservedOptions`, the options type of the
+observer the services hold as a protected member, gains an optional `answerStream`. The barrel does not export it.
+
 ### Changed
 
 - The server bundle ceilings are 34 542 B (ESM) and 34 580 B (CJS).
