@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.24] - 2026-11-26
+
 ### Fixed
 
 - **A download refused after the provider answered now destroys the body it holds.** When the runtime check refused
@@ -1470,4 +1472,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.21]: https://github.com/bymaxone/nest-storage/compare/v1.1.20...v1.1.21
 [1.1.22]: https://github.com/bymaxone/nest-storage/compare/v1.1.21...v1.1.22
 [1.1.23]: https://github.com/bymaxone/nest-storage/compare/v1.1.22...v1.1.23
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.23...HEAD
+[1.1.24]: https://github.com/bymaxone/nest-storage/compare/v1.1.23...v1.1.24
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.24...HEAD
