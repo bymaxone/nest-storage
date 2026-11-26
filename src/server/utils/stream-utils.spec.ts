@@ -422,6 +422,20 @@ describe('stream-utils', () => {
       expect(bytes).toBe('head'.length + chunkCount * chunk.byteLength)
     })
 
+    it('reads a head larger than the upload buffer, without pausing before the head is complete', async () => {
+      // Nothing reads the upload side until the head resolves, so a pause before then would never end.
+      const chunk = Buffer.alloc(64 * 1024, 7)
+      const source = new PassThrough()
+      const peeking = peekFirstBytes(source, 8 * chunk.byteLength)
+      for (let i = 0; i < 8; i += 1) source.write(chunk)
+
+      const { head, replacementBody } = await peeking
+      expect(head.byteLength).toBe(8 * chunk.byteLength)
+
+      source.end()
+      expect(await drainBytes(replacementBody as NodeJS.ReadableStream)).toBe(8 * chunk.byteLength)
+    })
+
     it('propagates a source error to the replacement body', async () => {
       // The peek resolves first; a later source error surfaces on the upload side.
       const source = new PassThrough()
