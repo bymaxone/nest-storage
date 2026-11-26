@@ -16,14 +16,14 @@ note on each entry is the compatibility contract — read it, not the number.
 ### Fixed
 
 - **A download refused after the provider answered now destroys the body it holds.** When the runtime check refused
-  `download` or `downloadBuffer` between the answer and the first read, nothing read or closed the stream, so its
-  connection stayed open. The stream is now destroyed.
+  `download` or `downloadBuffer` between the answer and the first read, in the method itself or in the operation
+  counting and tracing around it, nothing read or closed the stream, so its connection stayed open.
 - **Documentation: Cloudflare R2 and `publicRead`.** The text called the ACL a silent no-op there; it was not
   measured. The `getUploadUrl` row also names the `x-amz-acl` header it signs with `publicRead`.
 
 ### Changed
 
-- The server bundle ceilings are 34 288 B (ESM) and 34 359 B (CJS).
+- The server bundle ceilings are 34 379 B (ESM) and 34 422 B (CJS).
 
 ## [1.1.23] - 2026-11-25
 

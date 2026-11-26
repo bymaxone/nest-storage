@@ -453,7 +453,9 @@ export class StorageService {
    * @returns The object stream and its metadata.
    * @throws StorageException `STORAGE_OBJECT_NOT_FOUND` when the body is absent.
    */
-  @Observed('download')
+  @Observed<{ stream: NodeJS.ReadableStream }>('download', {
+    answerStream: (result) => result.stream,
+  })
   async download(
     request: DownloadOptions,
   ): Promise<{ stream: NodeJS.ReadableStream; metadata: ObjectMetadata }> {

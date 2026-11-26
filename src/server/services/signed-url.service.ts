@@ -187,7 +187,7 @@ export class SignedUrlService {
    *
    * ACL caveat: `publicRead` emits `ACL: public-read`, which returns HTTP 400
    * `AccessControlListNotSupported` on modern AWS S3 buckets (Object Ownership
-   * = "Bucket owner enforced") and is a no-op on Cloudflare R2. Whether the grant
+   * = "Bucket owner enforced"); its effect on Cloudflare R2 was not measured. Whether the grant
    * is public has not been measured on any provider: MinIO does not implement
    * object ACLs (a PUT with an ACL stores an owner-only one, and PutObjectAcl is
    * not implemented). A browser PUT needs `x-amz-acl` in the bucket's CORS

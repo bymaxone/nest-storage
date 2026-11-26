@@ -11,6 +11,9 @@ import { IdempotencyCache } from '../utils/idempotency-cache'
 import { applyDefaults } from '../config/apply-defaults'
 import type { ValidationService } from './validation.service'
 import type { FileScannerService } from './file-scanner.service'
+import { StorageObserver } from '../observability/storage-observer'
+import { StorageMetricsTally } from '../observability/storage-metrics-tally'
+import { StorageTracing } from '../observability/storage-tracing'
 
 const root = Object.prototype as unknown as Record<string, unknown>
 
@@ -20,6 +23,7 @@ function planted(
   depth: number,
   bodyIdleTimeoutMs: number,
   answer?: () => Promise<unknown>,
+  observer?: StorageObserver,
 ): StorageService {
   const options = applyDefaults({
     endpoint: 'https://s3.example.com',
@@ -54,6 +58,7 @@ function planted(
     // Neither collaborator is reached on a download.
     undefined as unknown as ValidationService,
     undefined as unknown as FileScannerService,
+    observer,
   )
 }
 
@@ -77,6 +82,38 @@ describe('a refused download', () => {
         await new Promise((resolve) => setImmediate(resolve))
         expect({ depth, destroyed: body.destroyed }).toEqual({ depth, destroyed: true })
       }
+    },
+  )
+
+  // The module wires an observer, which adds its own checks after the method has returned.
+  it.each(['download', 'downloadBuffer'] as const)(
+    'destroys the body when %s is refused through the observer',
+    async (method) => {
+      let refusals = 0
+      for (let depth = 0; depth < 20; depth += 1) {
+        const body = new PassThrough()
+        // Ended but unread: only a release, or a completed read, can destroy it.
+        body.end('abc')
+        const observer = new StorageObserver(new StorageMetricsTally(), new StorageTracing())
+        const service = planted(body, depth, 0, undefined, observer)
+        // A plant that lands after the answer leaves the body open to a caller who received it.
+        const refused = await (
+          method === 'download'
+            ? service.download({ key: 'a.txt' })
+            : service.downloadBuffer({ key: 'a.txt' })
+        ).then(
+          () => false,
+          () => true,
+        )
+        // Drain first: a plant deeper than the call still runs, and would refuse the next one at entry.
+        await new Promise((resolve) => setImmediate(resolve))
+        Reflect.deleteProperty(root, 'plantedAfterAnswer')
+        if (refused) {
+          refusals += 1
+          expect({ depth, destroyed: body.destroyed }).toEqual({ depth, destroyed: true })
+        }
+      }
+      expect(refusals).toBeGreaterThan(2)
     },
   )
 
