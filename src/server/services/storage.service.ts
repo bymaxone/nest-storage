@@ -14,6 +14,7 @@ import {
   HeadObjectCommand,
   ListObjectsV2Command,
   type PutObjectCommandInput,
+  type GetObjectCommandOutput,
 } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import { BYMAX_STORAGE_IDEMPOTENCY_CACHE, BYMAX_STORAGE_OPTIONS } from '../bymax-storage.constants'
@@ -92,6 +93,7 @@ import {
   normalizeScanBody,
 } from '../utils/upload-support'
 import { assertMaxBytes, readDownloadBody } from '../utils/download-buffer'
+import { downloadedStream, releaseAnswer } from '../utils/release-answer'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import { Observed, StorageObserver } from '../observability/storage-observer'
 import { rememberUploadedBytes, uploadedBytesOf } from '../utils/uploaded-bytes'
@@ -451,7 +453,7 @@ export class StorageService {
    * @returns The object stream and its metadata.
    * @throws StorageException `STORAGE_OBJECT_NOT_FOUND` when the body is absent.
    */
-  @Observed('download')
+  @Observed('download', { answerStream: downloadedStream })
   async download(
     request: DownloadOptions,
   ): Promise<{ stream: NodeJS.ReadableStream; metadata: ObjectMetadata }> {
@@ -467,12 +469,12 @@ export class StorageService {
     const bucket = this.resolveBucket(options.bucket)
     const context = callDetails('download', { key: options.key, bucket: options.bucket })
     throwIfAborted(options.abortSignal, context)
+    let sent: Promise<GetObjectCommandOutput> | undefined
     try {
-      const response = await verdictOf(
-        this.s3Provider
-          .getClient()
-          .send(getObjectInput(bucket, finalKey, options), sendOptions(options.abortSignal)),
-      )
+      sent = this.s3Provider
+        .getClient()
+        .send(getObjectInput(bucket, finalKey, options), sendOptions(options.abortSignal))
+      const response = await verdictOf(sent)
       if (!response.Body) {
         throw new StorageException(STORAGE_ERROR_CODES.STORAGE_OBJECT_NOT_FOUND, undefined, context)
       }
@@ -490,6 +492,7 @@ export class StorageService {
         metadata: toObjectMetadata(response, this.keyResolver.stripPrefix(finalKey), bucket),
       }
     } catch (err) {
+      releaseAnswer(sent, (response) => response.Body)
       if (err instanceof StorageException) {
         throw err
       }
@@ -512,17 +515,21 @@ export class StorageService {
     assertCleanRoot()
     const options = readDownloadBuffer(request)
     assertMaxBytes(options.maxBytes)
-    const { stream, metadata } = await verdictOf(this.download(options))
-    const buffer = await verdictOf(
-      readDownloadBody(
-        stream,
-        metadata,
-        options.maxBytes,
-        options.abortSignal,
-        callerFields({ key: options.key, bucket: options.bucket }),
-      ),
-    )
-    return { buffer, metadata }
+    const pending = this.download(options)
+    let stream: NodeJS.ReadableStream | undefined
+    try {
+      const answer = await verdictOf(pending)
+      stream = answer.stream
+      const caller = callerFields({ key: options.key, bucket: options.bucket })
+      const buffer = await verdictOf(
+        readDownloadBody(stream, answer.metadata, options.maxBytes, options.abortSignal, caller),
+      )
+      return { buffer, metadata: answer.metadata }
+    } catch (err) {
+      // A refusal can come before the stream is in hand, so it is released from the pending answer.
+      releaseAnswer(pending, downloadedStream)
+      throw err
+    }
   }
 
   /**
@@ -738,7 +745,7 @@ export class StorageService {
             // separate the segments stay literal so the bucket/key boundaries hold.
             CopySource: `/${sourceBucket}/${sourceKey.split('/').map(encodeURIComponent).join('/')}`,
             CacheControl: options.cacheControl ?? this.options.defaultCacheControl,
-            // ACLs are a no-op on modern S3 (Object Ownership) and R2; see header-utils.
+            // Modern S3 refuses ACLs (Object Ownership) and R2 was not measured; see header-utils.
             ACL: acl,
             MetadataDirective: 'COPY',
           }),

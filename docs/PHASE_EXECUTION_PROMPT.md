@@ -380,7 +380,7 @@ Invoke /security-review — fix ALL findings including Low. Pay special attentio
     temporary credential and is NEVER logged; signed PUT bypasses local validation (use the presigner
     Content-Length-Range + HEAD + post-upload scanner).
   • ACL — `defaultPublicRead`/`publicRead` via ACL fails (HTTP 400 AccessControlListNotSupported) on
-    modern AWS S3 (ACLs disabled by default) and is a no-op on R2; the docs warn and the AWS error is
+    modern AWS S3 (ACLs disabled by default) and its effect on R2 was not measured; the docs warn and the AWS error is
     mapped — prefer bucket policy / CDN / signed URLs.
   • SECRETS / PII — credentials only via env/ConfigService, never logged; never put PII (email, gov ID)
     in object keys (keys appear in provider logs / CDN / traces); `details` never carries a secret or a
@@ -458,7 +458,7 @@ These derive from `docs/development_plan.md` (§1.2 Guiding principles, §1.7 Gl
 - **Signed URLs** — TTL clamped to `maxTtlSeconds`; `ttlSeconds ≤ 0` rejected; `maxTtlSeconds` clamped to
   the 604800s SigV4 cap at init; **never log a signed URL** (temporary credential); signed PUT bypasses
   local validation — pair with the presigner Content-Length-Range + HEAD + post-upload scanner.
-- **ACL** — `publicRead` via ACL 400s on modern AWS S3 (ACLs disabled) and is a no-op on R2; map the
+- **ACL** — `publicRead` via ACL 400s on modern AWS S3 (ACLs disabled) and its effect on R2 was not measured; map the
   AccessControlListNotSupported error and steer to bucket policy / CDN / signed URLs.
 - **Secrets / PII** — credentials via env only, never logged; never put PII in object keys; `details`
   never carries a token or signed URL; SSE-`NONE` is a sentinel that omits the header.

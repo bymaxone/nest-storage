@@ -5,8 +5,9 @@
  */
 import { Inject, Injectable } from '@nestjs/common'
 import { absorb } from '../utils/absorb'
-import { assertCleanRoot, dispatch, rejectedWith, tagged } from '../utils/prototype-guard'
+import { assertCleanRoot, dispatch, rejectedWith, tagged, settles } from '../utils/prototype-guard'
 import { verdictOf } from '../utils/settle-or-cut'
+import { releaseAnswer } from '../utils/release-answer'
 import { StorageMetricsTally } from './storage-metrics-tally'
 import { outcomeOf, scanVerdictOfError, type StorageOperation } from './storage-operations'
 import { StorageTracing, type StorageSpanAttributes, type StorageSpanName } from './storage-tracing'
@@ -21,6 +22,8 @@ export interface ObservedOptions<T> {
   readonly describe?: (result: T) => StorageSpanAttributes
   /** The bytes of a successful result that reached the provider, for the upload counter. */
   readonly bytes?: (result: T) => number | undefined
+  /** The stream a successful result holds, destroyed when the call is refused after producing it. */
+  readonly answerStream?: (result: T) => NodeJS.ReadableStream
 }
 
 /** Seconds elapsed since `startedAt` (a `process.hrtime.bigint()` reading). */
@@ -104,6 +107,24 @@ export class StorageObserver {
   }
 }
 
+/**
+ * Passes `outward` on, and destroys the stream of the answer the method produced when it rejects. The layers
+ * above the method check the runtime again, and a refusal there drops an answer nobody else can reach.
+ */
+async function releasingOnRefusal<T>(
+  outward: Promise<T>,
+  produced: () => Promise<T> | undefined,
+  streamOf: (result: T) => NodeJS.ReadableStream,
+): Promise<T> {
+  try {
+    // The check stays the last statement before the answer is handed on.
+    return settles(await verdictOf(outward))
+  } catch (error) {
+    releaseAnswer(produced(), streamOf)
+    throw error
+  }
+}
+
 /** The members a decorated method's class carries, when it was built with an observer. */
 interface Observing {
   readonly observer?: StorageObserver
@@ -126,16 +147,23 @@ export function Observed<T = unknown>(
       // The runtime is checked before anything dispatches, and the method is called with the `apply`
       // captured at load: a replaced `Function.prototype.apply` would otherwise answer without the method
       // body, and its own guard, ever running.
+      let produced: Promise<T> | undefined
       const run = (): Promise<T> => {
         assertCleanRoot()
-        return dispatch(original, this, args)
+        produced = dispatch(original, this, args)
+        return produced
       }
       // Tagged on the way out: the method's synchronous start, a host's validator or tracer included, has
       // run by now, and the caller's await reads the promise's `constructor` next.
       try {
         assertCleanRoot()
+        const outward =
+          this.observer === undefined ? run() : this.observer.observe(operation, run, options)
+        const { answerStream } = options
         return tagged(
-          this.observer === undefined ? run() : this.observer.observe(operation, run, options),
+          answerStream === undefined
+            ? outward
+            : releasingOnRefusal(outward, () => produced, answerStream),
         )
       } catch (error) {
         // Tagged like the success path: the refusal is awaited by the same caller, through the same `constructor`.

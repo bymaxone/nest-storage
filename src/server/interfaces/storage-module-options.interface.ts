@@ -12,8 +12,8 @@ import type { IFileScanner } from './file-scanner.interface'
  *
  * `defaultPublicRead` applies an ACL on uploads. NOTE: ACLs fail with HTTP 400
  * `AccessControlListNotSupported` on modern AWS S3 buckets (Object Ownership =
- * "Bucket owner enforced") and are a no-op on Cloudflare R2 — prefer a bucket
- * policy, a CDN, or signed URLs.
+ * "Bucket owner enforced"), and their effect on Cloudflare R2 was not measured —
+ * prefer a bucket policy, a CDN, or signed URLs.
  */
 export interface BymaxStorageModuleOptions {
   /** S3-compatible endpoint. REQUIRED. */
@@ -37,7 +37,7 @@ export interface BymaxStorageModuleOptions {
   cdnBaseUrl?: string
   /**
    * Apply ACL `public-read` on uploads. Default: `false`. Fails with HTTP 400
-   * on modern AWS S3 (ACLs disabled) and is a no-op on R2 — prefer bucket
+   * on modern AWS S3 (ACLs disabled); not measured on R2 — prefer bucket
    * policy / CDN / signed URLs.
    */
   defaultPublicRead?: boolean

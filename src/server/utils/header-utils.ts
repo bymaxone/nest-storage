@@ -80,8 +80,8 @@ export function buildSSE(
  * Resolves the canned ACL from per-call → module default.
  *
  * Note: `'public-read'` returns HTTP 400 `AccessControlListNotSupported` on
- * modern AWS S3 (ACLs disabled / Block Public Access) and is a silent no-op on
- * Cloudflare R2. Public delivery should normally go through `publicBaseUrl` /
+ * modern AWS S3 (ACLs disabled / Block Public Access); its effect on
+ * Cloudflare R2 was not measured. Public delivery should normally go through `publicBaseUrl` /
  * `cdnBaseUrl`; the header is emitted only for buckets that explicitly allow ACLs.
  *
  * @param perCall - The per-call public-read flag, if any.

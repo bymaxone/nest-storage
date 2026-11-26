@@ -8,6 +8,7 @@
 import { PassThrough, Readable } from 'node:stream'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
+import { absorb } from './absorb'
 import { stepOf, verdictOf } from './settle-or-cut'
 import { assertCleanRoot, settles } from './prototype-guard'
 
@@ -92,7 +93,11 @@ export function destroyStream(stream: NodeJS.ReadableStream): void {
     return
   }
   target.once?.('error', () => undefined)
-  target.destroy?.()
+  const answered: unknown = target.destroy?.()
+  // A host's own stream may answer with a promise. A Node stream answers with itself.
+  if (answered !== target) {
+    absorb(() => answered)
+  }
 }
 
 /**

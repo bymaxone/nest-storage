@@ -698,7 +698,7 @@ export interface BymaxStorageModuleOptions {
   publicBaseUrl?: string
   /** When set, `getPublicUrl()` returns the CDN URL instead. */
   cdnBaseUrl?: string
-  /** Apply ACL `public-read` on uploads. Default: false. NOTE: fails (400 AccessControlListNotSupported) on modern AWS S3 buckets with ACLs disabled, and is a no-op on R2 — prefer bucket policy / CDN / signed URLs (spec §16.1). */
+  /** Apply ACL `public-read` on uploads. Default: false. NOTE: fails (400 AccessControlListNotSupported) on modern AWS S3 buckets with ACLs disabled, and its effect on R2 was not measured — prefer bucket policy / CDN / signed URLs (spec §16.1). */
   defaultPublicRead?: boolean
   /** Global key prefix applied to every operation. Useful for multi-tenant isolation. */
   keyPrefix?: string
@@ -4229,7 +4229,7 @@ export const providerRecipes = {
     }
   },
 
-  /** Cloudflare R2 — ACLs ignored; getPublicUrl needs an r2.dev or custom domain. */
+  /** Cloudflare R2 — ACL effect not measured; getPublicUrl needs an r2.dev or custom domain. */
   cloudflareR2(input: R2Input): BymaxStorageModuleOptions {
     return {
       endpoint: `https://${input.accountId}.r2.cloudflarestorage.com`,

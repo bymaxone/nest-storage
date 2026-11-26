@@ -255,7 +255,7 @@ export interface BymaxStorageModuleOptions {
    * Apply ACL `public-read` on uploads. Default: false. NOTE: modern AWS S3 buckets
    * disable ACLs (Object Ownership = "Bucket owner enforced", the default for new
    * buckets since April 2023), so sending an ACL on PutObject returns HTTP 400
-   * `AccessControlListNotSupported`; Cloudflare R2 ignores ACLs entirely. For public
+   * `AccessControlListNotSupported`; the effect on Cloudflare R2 was not measured. For public
    * access prefer a bucket policy, a CDN, or signed URLs — see §16.1 / §16.2.
    */
   defaultPublicRead?: boolean
@@ -397,7 +397,7 @@ const options = providerRecipes.cloudflareR2({
 }
 ```
 
-**Cloudflare R2:** (R2 ignores ACLs — configure Custom Domain in the R2 dashboard)
+**Cloudflare R2:** (ACL effect on R2 not measured — configure Custom Domain in the R2 dashboard)
 
 ```typescript
 {
@@ -1157,7 +1157,7 @@ Deliverables: complete JSDoc; README with quick start + provider scenarios; SECU
 - **S3-compatible only.** Does not cover Azure Blob Storage or native GCS (GCS Interop has limitations: no multipart, no modern signed PUT). A future separate lib, not planned.
 - **Provider-exclusive features.** R2 cache rules, S3 Object Lambda, S3 Select, Wasabi compliance — nothing leaks through the public API. Use the `BYMAX_STORAGE_S3_CLIENT` token for direct calls.
 - **Integrity checksums break non-AWS providers (the #1 S3-v3 trap).** `@aws-sdk/client-s3` ≥ 3.729.0 defaults `requestChecksumCalculation` to `'WHEN_SUPPORTED'`, adding CRC32 `x-amz-checksum-*` headers on every PutObject/UploadPart (and checksum-mode on GET). Cloudflare R2, Backblaze B2, MinIO, and DigitalOcean Spaces **reject** these headers (`Unsupported header x-amz-checksum-crc32` / `XAmzContentChecksumMismatch`), so the default upload path **fails out of the box** on exactly the providers this lib targets. Mitigation: set `requestChecksumCalculation`/`responseChecksumValidation` to `'WHEN_REQUIRED'` — the non-AWS provider recipes (§4.3) do this automatically. Because the peer floor is `^3.700.0`, every fresh install resolves to a version with the new default; a Testcontainers/MinIO e2e is **not** a reliable guard (MinIO checksum support is version-dependent), so this is documented rather than relied upon.
-- **ACL `public-read` fails on modern AWS S3.** New AWS S3 buckets default to Object Ownership = "Bucket owner enforced" (ACLs disabled, since April 2023), so a PutObject carrying `ACL: 'public-read'` returns HTTP 400 `AccessControlListNotSupported`. `defaultPublicRead`/`publicRead` therefore **does not work by default on AWS**; Cloudflare R2 ignores ACLs entirely (`publicRead: true` is silently a no-op — configure a Custom Domain in the R2 dashboard). For public access on either, use a bucket policy, a CDN, or signed URLs rather than ACLs.
+- **ACL `public-read` fails on modern AWS S3.** New AWS S3 buckets default to Object Ownership = "Bucket owner enforced" (ACLs disabled, since April 2023), so a PutObject carrying `ACL: 'public-read'` returns HTTP 400 `AccessControlListNotSupported`. `defaultPublicRead`/`publicRead` therefore **does not work by default on AWS**; what Cloudflare R2 does with the ACL was not measured (configure a Custom Domain in the R2 dashboard). For public access on either, use a bucket policy, a CDN, or signed URLs rather than ACLs.
 - **Versioning across providers.** Behavior varies; R2 still does not officially support object versioning. `UploadResult.versionId` may be `undefined`.
 
 ### 16.2 Security
