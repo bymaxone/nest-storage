@@ -555,3 +555,19 @@ describe('withIdleTimeout and a step that settles twice or after the cut', () =>
     expect(push).not.toHaveBeenCalledWith(Buffer.from('second'))
   })
 })
+
+describe('withIdleTimeout released early', () => {
+  it('does not return the iterator of a source that has no cancel of its own', async () => {
+    const source = new PassThrough()
+    const returned = jest.fn(() => Promise.resolve({ done: true, value: undefined }))
+    jest.spyOn(source, Symbol.asyncIterator).mockReturnValue({
+      next: () => new Promise(() => undefined),
+      return: returned,
+    } as never)
+    const wrapper = withIdleTimeout(source, 1000)
+    wrapper.destroy()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(returned).not.toHaveBeenCalled()
+    expect(source.destroyed).toBe(true)
+  })
+})

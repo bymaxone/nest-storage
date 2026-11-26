@@ -510,6 +510,21 @@ describe('stream-utils', () => {
   })
 
   describe('destroyStream', () => {
+    it('does not treat a stream that answers destroy() with itself as something to wait on', () => {
+      let thenReads = 0
+      const stream = {
+        destroy(): unknown {
+          return this
+        },
+        get then(): undefined {
+          thenReads += 1
+          return undefined
+        },
+      }
+      destroyStream(stream as unknown as NodeJS.ReadableStream)
+      expect(thenReads).toBe(0)
+    })
+
     it('handles the rejection of a destroy that returns a promise, for every caller', async () => {
       const seen: unknown[] = []
       const prior = process.listeners('unhandledRejection')
