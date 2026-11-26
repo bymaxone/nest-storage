@@ -368,7 +368,7 @@ DELIVERABLES
 - `buildACL(perCall: boolean | undefined, defaultValue: boolean): 'public-read' | undefined` →
   `(perCall ?? defaultValue) ? 'public-read' : undefined`. In the JSDoc, document that
   `'public-read'` returns HTTP 400 `AccessControlListNotSupported` on modern AWS S3 (ACLs disabled /
-  Block Public Access) and has an effect on R2 that was not measured — public delivery should normally use
+  Block Public Access) and its effect on R2 was not measured — public delivery should normally use
   `publicBaseUrl`/`cdnBaseUrl`; the header is still emitted for buckets that explicitly allow ACLs.
 
 Constraints:
