@@ -3,6 +3,7 @@
  * @layer server/services
  */
 import { PassThrough } from 'node:stream'
+import { ReadableStream } from 'node:stream/web'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { StorageService } from './storage.service'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
@@ -180,6 +181,67 @@ describe('a refused download', () => {
       for (const listener of prior) process.on('unhandledRejection', listener)
     }
     expect(seen).toEqual([])
+  })
+
+  /** Refuses `download` after a client answered with `body`, and returns what went unhandled. */
+  async function refused(body: unknown, hops = 0): Promise<unknown[]> {
+    const seen: unknown[] = []
+    const prior = process.listeners('unhandledRejection')
+    process.removeAllListeners('unhandledRejection')
+    process.on('unhandledRejection', (reason) => seen.push(reason))
+    try {
+      let depth = hops
+      const hop = (): void => {
+        if (depth === 0) {
+          root.plantedAfterAnswer = true
+          return
+        }
+        depth -= 1
+        queueMicrotask(hop)
+      }
+      const answer = (): Promise<unknown> => {
+        queueMicrotask(hop)
+        return Promise.resolve({ Body: body, ContentLength: 3 })
+      }
+      await expect(
+        planted(new PassThrough(), 0, 1000, answer).download({ key: 'a.txt' }),
+      ).rejects.toMatchObject({ response: { error: { code: 'STORAGE_VALIDATION_FAILED' } } })
+      for (let turn = 0; turn < 3; turn += 1) {
+        await new Promise((resolve) => setImmediate(resolve))
+      }
+      Reflect.deleteProperty(root, 'plantedAfterAnswer')
+    } finally {
+      process.removeAllListeners('unhandledRejection')
+      for (const listener of prior) process.on('unhandledRejection', listener)
+    }
+    return seen
+  }
+
+  it('handles the rejection of a destroy that returns a promise', async () => {
+    // A host's own client can answer with any stream-like body.
+    const body = Object.assign(new PassThrough(), {
+      destroy: (): Promise<never> => Promise.reject(new Error('from destroy')),
+    })
+    expect(await refused(body)).toEqual([])
+  })
+
+  // The idle guard wraps the body and takes its lock; the two depths refuse on either side of that.
+  it.each([
+    ['before it is wrapped', 0],
+    ['after it is wrapped', 4],
+  ] as const)('cancels a web stream body refused %s', async (_when, hops) => {
+    let cancelled = false
+    const body = new ReadableStream({
+      cancel: () => {
+        cancelled = true
+      },
+    })
+    expect(await refused(body, hops)).toEqual([])
+    expect({ cancelled }).toEqual({ cancelled: true })
+  })
+
+  it('leaves a body that holds nothing to release', async () => {
+    expect(await refused(new Blob(['abc']))).toEqual([])
   })
 
   it('reports a client that throws before it returns a promise as a provider failure', async () => {

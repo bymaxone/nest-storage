@@ -26,7 +26,7 @@ Complexity is HIGH: multipart with `@aws-sdk/lib-storage` requires correct error
 8. **Non-AWS checksum opt-out (the #1 provider-compat trap).** The resolved options carry `requestChecksumCalculation` and `responseChecksumValidation` (`'WHEN_SUPPORTED' | 'WHEN_REQUIRED'`, default `'WHEN_SUPPORTED'`). Against non-AWS S3-compatible providers (R2 / B2 / MinIO / Spaces / Wasabi) these must be `'WHEN_REQUIRED'`, otherwise the SDK's default streaming-checksum trailers make uploads/downloads fail. The MinIO smoke test (2.14) must set them to `'WHEN_REQUIRED'`.
 9. **Multipart auto-aborts.** `@aws-sdk/lib-storage`'s `Upload` with `leavePartsOnError: false` cleans up parts on failure itself — never write a manual `AbortMultipartUpload` for the lib-storage path.
 10. **`StorageException` status comes from the catalog.** Construct it as `new StorageException(code)` or `new StorageException(code, details)`; the HTTP status is resolved internally from the `STORAGE_ERROR_STATUS` map (code → `HttpStatus`). Do **not** pass an explicit `HttpStatus` argument, and do **not** import `STORAGE_ERROR_MESSAGES` / `STORAGE_ERROR_STATUS` (both are internal, not exported).
-11. **`defaultPublicRead` ACL caveat.** Sending `ACL: 'public-read'` returns HTTP 400 `AccessControlListNotSupported` on modern AWS S3 (ACLs disabled / Block Public Access) and is a silent no-op on Cloudflare R2. The header builder still produces it for buckets that allow ACLs, but public delivery should normally go through `publicBaseUrl` / `cdnBaseUrl`. Document this where the ACL is applied.
+11. **`defaultPublicRead` ACL caveat.** Sending `ACL: 'public-read'` returns HTTP 400 `AccessControlListNotSupported` on modern AWS S3 (ACLs disabled / Block Public Access) and has an effect on R2 that was not measured. The header builder still produces it for buckets that allow ACLs, but public delivery should normally go through `publicBaseUrl` / `cdnBaseUrl`. Document this where the ACL is applied.
 12. **Zero runtime dependencies.** The idempotency cache and stream helpers are hand-rolled (no `lru-cache`, no extra deps); the AWS SDK packages stay in `peerDependencies`. The bundle budget is **brotli** (server < 30 KB brotli, shared < 3.5 KB brotli) — never "gzipped".
 13. **CI stays green.** The four workflows (`ci`, `codeql`, `scorecard`, `release`) already exist from the scaffold and run on every PR; each task's commit must keep them green.
 14. **Conventional Commits**, with **NO `Co-Authored-By` trailer** of any kind.
@@ -368,7 +368,7 @@ DELIVERABLES
 - `buildACL(perCall: boolean | undefined, defaultValue: boolean): 'public-read' | undefined` →
   `(perCall ?? defaultValue) ? 'public-read' : undefined`. In the JSDoc, document that
   `'public-read'` returns HTTP 400 `AccessControlListNotSupported` on modern AWS S3 (ACLs disabled /
-  Block Public Access) and is a silent no-op on Cloudflare R2 — public delivery should normally use
+  Block Public Access) and has an effect on R2 that was not measured — public delivery should normally use
   `publicBaseUrl`/`cdnBaseUrl`; the header is still emitted for buckets that explicitly allow ACLs.
 
 Constraints:
@@ -562,7 +562,7 @@ Constraints:
 - @fileoverview + @layer header already present; functions ≤ 50 lines (split the input assembly into a
   small private helper if `uploadSingleShot` would exceed it); file ≤ 800 lines. English-only, timeless comments.
 - StorageException with NO explicit HttpStatus. The `ACL: 'public-read'` caveat (HTTP 400 on modern AWS
-  S3, no-op on R2) is already documented in `header-utils` — do not re-explain in code beyond a one-line note.
+  S3, effect on R2 not measured) is already documented in `header-utils` — do not re-explain in code beyond a one-line note.
 - AWS SDK v3 SigV4-only; no `signatureVersion`.
 
 Verification:

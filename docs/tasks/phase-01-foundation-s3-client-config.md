@@ -33,7 +33,7 @@ When the phase closes, the library can be installed in a NestJS fixture app, cre
 11. **Provider checksum trap (the #1 compatibility issue).** The options, resolved options, and `S3Client` config all carry `requestChecksumCalculation` and `responseChecksumValidation` (`'WHEN_SUPPORTED' | 'WHEN_REQUIRED'`, default `'WHEN_SUPPORTED'`). AWS S3 accepts the default; non-AWS providers (R2, B2, MinIO, Spaces, Wasabi) reject the default CRC32 integrity headers and require `'WHEN_REQUIRED'`.
 12. **Bundle budgets are brotli** (never gzip): `server` < 30 KB brotli, `shared` < 3.5 KB brotli.
 13. **DI tokens are `Symbol`.** The internal maps `STORAGE_ERROR_MESSAGES` (code→message) and `STORAGE_ERROR_STATUS` (code→`HttpStatus`) are implementation details and are **NOT exported**; only `STORAGE_ERROR_CODES` and `StorageException` are public.
-14. **`defaultPublicRead` via ACL is a known dead-end** on modern AWS S3 (returns HTTP 400 `AccessControlListNotSupported` when Object Ownership = "Bucket owner enforced") and a no-op on Cloudflare R2 — document this where the field/flag is defined; prefer bucket policy / CDN / signed URLs.
+14. **`defaultPublicRead` via ACL is a known dead-end** on modern AWS S3 (returns HTTP 400 `AccessControlListNotSupported` when Object Ownership = "Bucket owner enforced") and not measured on R2 — document this where the field/flag is defined; prefer bucket policy / CDN / signed URLs.
 
 ---
 
@@ -912,7 +912,7 @@ Define the eight public interfaces consumers reference or implement — `BymaxSt
 
 - [ ] Eight interface files + `index.ts` created, all fields documented with JSDoc.
 - [ ] `BymaxStorageModuleOptions` carries every field from spec §4.1 — including `requestChecksumCalculation` and `responseChecksumValidation` (`'WHEN_SUPPORTED' | 'WHEN_REQUIRED'`) and `maxAttempts` — and **no `signatureVersion`** field anywhere.
-- [ ] `defaultPublicRead` JSDoc documents the ACL dead-end (HTTP 400 `AccessControlListNotSupported` on modern AWS S3, no-op on R2; prefer bucket policy / CDN / signed URLs).
+- [ ] `defaultPublicRead` JSDoc documents the ACL dead-end (HTTP 400 `AccessControlListNotSupported` on modern AWS S3, effect on R2 not measured; prefer bucket policy / CDN / signed URLs).
 - [ ] `BymaxStorageModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'>` plus `BymaxStorageModuleOptionsFactory`; `IUploadValidator.validate` returns a discriminated union `{ ok: true } | { ok: false; reason: string }`.
 - [ ] `import type` for all external types; `readonly` on arrays; no `any` in any signature; `pnpm typecheck` passes.
 

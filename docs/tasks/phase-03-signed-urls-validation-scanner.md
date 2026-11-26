@@ -26,7 +26,7 @@ Two pure security utilities underpin the phase: `clampTtl` (validates and silent
 8. **Signed URLs are temporary credentials.** NEVER log a returned `url`; every method that returns one carries JSDoc reinforcing "never log this URL". Never cache a signed URL across users.
 9. **TTL semantics.** `clampTtl` silently clamps to `maxTtlSeconds` (consumer-friendly, parity with the SDK) and rejects TTL ≤ 0 with `STORAGE_SIGNED_URL_TTL_INVALID`. The presign hard ceiling is 604800 s (7 days).
 10. **No-op providers (exact shapes).** `NoOpUploadValidator.validate()` returns `{ ok: true }`; `NoOpFileScanner.scan()` returns `{ status: 'clean', engine: 'noop' }`.
-11. **`defaultPublicRead` ACL caveat.** ACL-based public-read (`ACL: 'public-read'`) **fails on modern AWS S3** (HTTP 400 `AccessControlListNotSupported` under Block Public Access / BucketOwnerEnforced) and is a **no-op on Cloudflare R2**. Document this in `getUploadUrl` JSDoc; do not rely on ACLs for public access.
+11. **`defaultPublicRead` ACL caveat.** ACL-based public-read (`ACL: 'public-read'`) **fails on modern AWS S3** (HTTP 400 `AccessControlListNotSupported` under Block Public Access / BucketOwnerEnforced) and has an effect on R2 that was not measured. Document this in `getUploadUrl` JSDoc; do not rely on ACLs for public access.
 12. **Conventional Commits**, one per task, **with NO `Co-Authored-By` (or any AI-attribution) trailer**.
 13. **Never create `.gitkeep` / `.keep` or empty-directory placeholders** — directories emerge from real files.
 14. **Bundle budget is brotli.** New server code stays within the ceilings (server < 30 KB brotli, shared < 3.5 KB brotli) — verified via `scripts/check-size.mjs` at phase close.
@@ -169,7 +169,7 @@ The service that issues presigned URLs via `@aws-sdk/s3-request-presigner`. Thre
 - [x] `getDownloadUrl` clamps TTL above `maxTtlSeconds` and throws `STORAGE_SIGNED_URL_TTL_INVALID` for TTL ≤ 0.
 - [x] `getDownloadUrl` forwards `ResponseContentDisposition` / `ResponseContentType` when provided.
 - [x] `getUploadUrl` returns `requiredHeaders['Content-Type']` equal to `options.contentType`, and forwards `Metadata` + `ContentLength: maxSizeBytes`.
-- [x] `getUploadUrl` applies `ACL: 'public-read'` (via `buildACL`) when `publicRead: true`; its JSDoc documents the ACL caveat (fails on modern AWS S3, no-op on R2).
+- [x] `getUploadUrl` applies `ACL: 'public-read'` (via `buildACL`) when `publicRead: true`; its JSDoc documents the ACL caveat (fails on modern AWS S3, effect on R2 not measured).
 - [x] `getMultipartUploadUrls` calls `CreateMultipartUploadCommand` first, returns `uploadId` + N `partUrls` (partNumbers 1..N) + `completeUrl`.
 - [x] `getMultipartUploadUrls` rejects `parts <= 0` and throws when the provider returns no `UploadId`.
 - [x] `assertConfigured()` throws `STORAGE_NOT_CONFIGURED` when the client is not configured.
@@ -229,7 +229,7 @@ DELIVERABLES
      `ACL: buildACL(publicRead, defaultPublicRead)`, Metadata; return
      `requiredHeaders: { 'Content-Type': options.contentType }`. JSDoc: the client MUST send exactly
      that Content-Type (part of the signature); document the ACL caveat (ACL public-read fails on
-     modern AWS S3 / no-op on R2 — do not rely on it).
+     modern AWS S3 / effect on R2 not measured — do not rely on it).
    - `getMultipartUploadUrls(options): Promise<MultipartUploadUrlsResult>` — reject `parts <= 0`;
      `send(CreateMultipartUploadCommand)` → require `UploadId` (throw if missing); `Promise.all` of N
      presigned `UploadPartCommand` (PartNumber 1..N); presign `CompleteMultipartUploadCommand`;

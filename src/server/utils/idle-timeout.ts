@@ -4,6 +4,7 @@
  * after a fixed time instead of holding the server-side upload open forever.
  * @layer server/utils
  */
+import { absorb } from './absorb'
 import { Readable } from 'node:stream'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
@@ -71,6 +72,15 @@ function readWithinIdleTime<T>(
   )
 }
 
+function releaseSource(source: NodeJS.ReadableStream, iterator: AsyncIterator<unknown>): void {
+  destroyStream(source)
+  // A web stream has no destroy(): the iterator holds its lock, and returning it with no
+  // read pending cancels it.
+  if ('cancel' in source) {
+    absorb(() => iterator.return?.())
+  }
+}
+
 /**
  * Wraps a stream so a source that stays silent for `idleMs` fails the read with a
  * {@link SourceIdleError}. The clock runs only while a chunk is being waited for, so a
@@ -127,7 +137,7 @@ export function withIdleTimeout(
       // Why this is a plain Readable and not Readable.from(asyncGenerator): a generator's return()
       // queues behind the read it is parked on, and a silent source never completes that read, so
       // neither the idle error nor a consumer's early destroy could release the source.
-      destroyStream(source)
+      releaseSource(source, iterator)
       callback(error)
     },
   })

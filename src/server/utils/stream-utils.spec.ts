@@ -510,6 +510,23 @@ describe('stream-utils', () => {
   })
 
   describe('destroyStream', () => {
+    it('handles the rejection of a destroy that returns a promise, for every caller', async () => {
+      const seen: unknown[] = []
+      const prior = process.listeners('unhandledRejection')
+      process.removeAllListeners('unhandledRejection')
+      process.on('unhandledRejection', (reason) => seen.push(reason))
+      try {
+        destroyStream({
+          destroy: (): Promise<never> => Promise.reject(new Error('from destroy')),
+        } as unknown as NodeJS.ReadableStream)
+        await new Promise((resolve) => setImmediate(resolve))
+      } finally {
+        process.removeAllListeners('unhandledRejection')
+        for (const listener of prior) process.on('unhandledRejection', listener)
+      }
+      expect(seen).toEqual([])
+    })
+
     it('keeps an error from crashing the process when the stream cleanup fails', async () => {
       // A stream's own _destroy can fail even when destroy() was called without an error.
       const failingCleanup = new Readable({

@@ -10,7 +10,7 @@
 
 Phase 5 turns a feature-complete, fully-tested library into a **published `0.1.0` artifact on npm**. The engine, services, provider recipes, e2e suite, and mutation baseline already exist from Phases 1–4; the four CI workflows (`ci` / `codeql` / `scorecard` / `release`) were created in **Phase 1** and have gated every PR since the first one. This phase is therefore predominantly mechanical: write the public documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, mutation-testing docs, LICENSE), **confirm** the existing CI suite is green for the release candidate, **finalize** the `release.yml` `v*.*.*` publish trigger, calibrate the brotli bundle budgets, run the final Stryker mutation pass (break 95), and tag + publish with `--provenance`.
 
-The single largest correctness risk in the documentation is teaching consumers the two provider traps that the AWS SDK v3 surfaces by default: the **integrity-checksum headers** that non-AWS S3-compatible providers reject (the #1 provider-compat trap), and the **`ACL: public-read`** path that returns HTTP 400 on modern AWS S3 and is a silent no-op on Cloudflare R2. The README, SECURITY, and CHANGELOG must state these accurately so a first-time consumer does not hit a broken upload path.
+The single largest correctness risk in the documentation is teaching consumers the two provider traps that the AWS SDK v3 surfaces by default: the **integrity-checksum headers** that non-AWS S3-compatible providers reject (the #1 provider-compat trap), and the **`ACL: public-read`** path that returns HTTP 400 on modern AWS S3 and has an effect on R2 that was not measured. The README, SECURITY, and CHANGELOG must state these accurately so a first-time consumer does not hit a broken upload path.
 
 ---
 
@@ -26,7 +26,7 @@ The single largest correctness risk in the documentation is teaching consumers t
 8. **Never create `.gitkeep` / `.keep`** or empty-directory placeholders; directories emerge from real files.
 9. **Checksum opt-out is mandatory for non-AWS providers.** The options/resolved-options and the S3Client config carry `requestChecksumCalculation` + `responseChecksumValidation` (`'WHEN_SUPPORTED' | 'WHEN_REQUIRED'`, default `'WHEN_SUPPORTED'`). The non-AWS provider recipes (R2, Backblaze B2, MinIO, DigitalOcean Spaces, Wasabi) set **both to `'WHEN_REQUIRED'`**. README/SECURITY must teach this as the **#1 provider-compat trap** (§16.1).
 10. **`maxAttempts`, not `maxRetries`** (AWS SDK v3); `DEFAULT_MAX_ATTEMPTS = 3`. **There is NO `signatureVersion` option anywhere** — the SDK is SigV4-only. Never document either removed/renamed name.
-11. **ACL caveat.** `defaultPublicRead` / `publicRead` via `ACL: 'public-read'` returns HTTP 400 `AccessControlListNotSupported` on modern AWS S3 (Object Ownership "Bucket owner enforced") and is a **silent no-op on R2**. Document where relevant (README provider notes, SECURITY, error-code table for `STORAGE_PROVIDER_ERROR`).
+11. **ACL caveat.** `defaultPublicRead` / `publicRead` via `ACL: 'public-read'` returns HTTP 400 `AccessControlListNotSupported` on modern AWS S3 (Object Ownership "Bucket owner enforced") and its effect on R2 was not measured. Document where relevant (README provider notes, SECURITY, error-code table for `STORAGE_PROVIDER_ERROR`).
 12. **Bundle budget is brotli** — `dist/server` < 30 KB brotli, `dist/shared` < 3.5 KB brotli. Never report or write "gzipped".
 13. **Mutation: Stryker `high 100 / low 95 / break 95`** — the final run must not drop below the break threshold.
 14. **Publish with `--provenance`.**
@@ -78,7 +78,7 @@ Author the public `README.md`, mirroring the structure of `nest-auth/README.md` 
 - [x] Subpath Exports table lists exactly two entries: `.` (server) and `./shared`.
 - [x] Four complete, copy-pasteable quick-start scenarios: (1) AWS S3 via `providerRecipes.awsS3`; (2) Cloudflare R2 with `customDomain` (which is the `publicBaseUrl` — **required**, no working default); (3) DigitalOcean Spaces with CDN; (4) MinIO local (dev) with `forcePathStyle: true`.
 - [x] A dedicated note teaches the **#1 provider-compat trap**: non-AWS providers reject the SDK's default integrity-checksum headers, and the non-AWS recipes set `requestChecksumCalculation`/`responseChecksumValidation` to `'WHEN_REQUIRED'` to fix it.
-- [x] A note documents that `publicRead` via ACL returns HTTP 400 `AccessControlListNotSupported` on modern AWS S3 and is a silent no-op on R2 — use a bucket policy / CDN / signed URL instead.
+- [x] A note documents that `publicRead` via ACL returns HTTP 400 `AccessControlListNotSupported` on modern AWS S3 and its effect on R2 was not measured — use a bucket policy / CDN / signed URL instead.
 - [x] Configuration prose uses `maxAttempts` (default 3) and contains **no** `maxRetries` and **no** `signatureVersion` anywhere.
 - [x] Complete table of all 17 error codes with their HTTP status (mirrors spec §12.2).
 - [x] An `IUploadValidator` example (magic-byte PDF check) and an `IFileScanner` stub (ClamAV) example.
@@ -155,7 +155,7 @@ DELIVERABLES
      the new default, so this is opt-out-by-recipe, not relied upon by e2e.
    - **Public access / ACLs:** `publicRead` via `ACL: 'public-read'` returns HTTP 400
      `AccessControlListNotSupported` on modern AWS S3 (Object Ownership "Bucket owner enforced")
-     and is a silent no-op on R2 (configure a Custom Domain instead). Use a bucket policy, a CDN,
+     and its effect on R2 was not measured (configure a Custom Domain there). Use a bucket policy, a CDN,
      or signed URLs for public access.
 10. `## Error Codes` — the full 17-row table (code + HTTP status + when), mirroring spec §12.2.
 11. `## Testing` — `pnpm test`, `pnpm test:cov`, `pnpm test:e2e`, `pnpm mutation`.
@@ -259,7 +259,7 @@ DELIVERABLES
      production; plaintext-credentials guidance (Secrets Manager / Vault / Doppler).
    - A short "operational hardening" subsection: non-AWS providers must opt out of integrity
      checksums (`'WHEN_REQUIRED'`, done by the recipes), and `publicRead` via ACL fails on modern
-     AWS S3 / is a no-op on R2 — prefer bucket policy / CDN / signed URLs.
+     AWS S3 / its effect on R2 was not measured — prefer bucket policy / CDN / signed URLs.
    - List the sensitive code paths that warrant extra review: `KeyResolverService`, the TTL clamp,
      the MIME matcher, and the idempotency cache.
 
@@ -340,7 +340,7 @@ DELIVERABLES
      are secrets (never log them); MIME validation is header-only (plug an `IUploadValidator` for
      magic bytes); path-traversal guard is mandatory; idempotency cache is in-memory/per-instance;
      non-AWS providers MUST opt out of integrity checksums (`'WHEN_REQUIRED'`); `publicRead` via
-     ACL fails on modern AWS S3 and is a no-op on R2.
+     ACL fails on modern AWS S3 and its effect on R2 was not measured.
    - Subpaths: exactly two (`.`, `./shared`).
    - Guidelines table: remove CRYPTO/JWT/OAUTH/NEXTJS/REACT; keep NESTJS/TYPESCRIPT/TESTING; add
      AWS_SDK, MINIO, TESTCONTAINERS.
