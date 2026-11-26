@@ -93,7 +93,7 @@ import {
   normalizeScanBody,
 } from '../utils/upload-support'
 import { assertMaxBytes, readDownloadBody } from '../utils/download-buffer'
-import { releaseAnswer } from '../utils/release-answer'
+import { downloadedStream, releaseAnswer } from '../utils/release-answer'
 import { pickUploadStrategy } from '../utils/upload-strategy'
 import { Observed, StorageObserver } from '../observability/storage-observer'
 import { rememberUploadedBytes, uploadedBytesOf } from '../utils/uploaded-bytes'
@@ -453,9 +453,7 @@ export class StorageService {
    * @returns The object stream and its metadata.
    * @throws StorageException `STORAGE_OBJECT_NOT_FOUND` when the body is absent.
    */
-  @Observed<{ stream: NodeJS.ReadableStream }>('download', {
-    answerStream: (result) => result.stream,
-  })
+  @Observed('download', { answerStream: downloadedStream })
   async download(
     request: DownloadOptions,
   ): Promise<{ stream: NodeJS.ReadableStream; metadata: ObjectMetadata }> {
@@ -529,7 +527,7 @@ export class StorageService {
       return { buffer, metadata: answer.metadata }
     } catch (err) {
       // A refusal can come before the stream is in hand, so it is released from the pending answer.
-      releaseAnswer(pending, (answer) => answer.stream)
+      releaseAnswer(pending, downloadedStream)
       throw err
     }
   }

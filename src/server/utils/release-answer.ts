@@ -36,3 +36,13 @@ export function releaseAnswer<T>(
     ignore,
   )
 }
+
+/**
+ * The stream a `download` answer holds.
+ *
+ * @param answer - What `download` resolved with.
+ * @returns Its stream.
+ */
+export function downloadedStream(answer: { stream: NodeJS.ReadableStream }): NodeJS.ReadableStream {
+  return answer.stream
+}
