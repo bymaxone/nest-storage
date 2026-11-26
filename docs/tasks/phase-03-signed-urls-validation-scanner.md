@@ -26,7 +26,7 @@ Two pure security utilities underpin the phase: `clampTtl` (validates and silent
 8. **Signed URLs are temporary credentials.** NEVER log a returned `url`; every method that returns one carries JSDoc reinforcing "never log this URL". Never cache a signed URL across users.
 9. **TTL semantics.** `clampTtl` silently clamps to `maxTtlSeconds` (consumer-friendly, parity with the SDK) and rejects TTL ≤ 0 with `STORAGE_SIGNED_URL_TTL_INVALID`. The presign hard ceiling is 604800 s (7 days).
 10. **No-op providers (exact shapes).** `NoOpUploadValidator.validate()` returns `{ ok: true }`; `NoOpFileScanner.scan()` returns `{ status: 'clean', engine: 'noop' }`.
-11. **`defaultPublicRead` ACL caveat.** ACL-based public-read (`ACL: 'public-read'`) **fails on modern AWS S3** (HTTP 400 `AccessControlListNotSupported` under Block Public Access / BucketOwnerEnforced) and has an effect on R2 that was not measured. Document this in `getUploadUrl` JSDoc; do not rely on ACLs for public access.
+11. **`defaultPublicRead` ACL caveat.** ACL-based public-read (`ACL: 'public-read'`) **fails on modern AWS S3** (HTTP 400 `AccessControlListNotSupported` under Block Public Access / BucketOwnerEnforced); its effect on R2 was not measured. Document this in `getUploadUrl` JSDoc; do not rely on ACLs for public access.
 12. **Conventional Commits**, one per task, **with NO `Co-Authored-By` (or any AI-attribution) trailer**.
 13. **Never create `.gitkeep` / `.keep` or empty-directory placeholders** — directories emerge from real files.
 14. **Bundle budget is brotli.** New server code stays within the ceilings (server < 30 KB brotli, shared < 3.5 KB brotli) — verified via `scripts/check-size.mjs` at phase close.

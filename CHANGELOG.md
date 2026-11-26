@@ -19,8 +19,7 @@ note on each entry is the compatibility contract — read it, not the number.
   `download` or `downloadBuffer` between the answer and the first read, in the method itself or in the operation
   counting and tracing around it, nothing read or closed the stream, so its connection stayed open.
   A web `ReadableStream` body is cancelled, including when the idle guard had already wrapped it.
-- **A `destroy()` that returns a rejected promise no longer raises an unhandled rejection.** It applies to every
-  stream the library releases, for a host client or caller whose stream answers that way.
+- **A rejected promise from a stream's `destroy()` that the library calls no longer goes unhandled.**
 - **Documentation: Cloudflare R2 and `publicRead`.** The text called the ACL a silent no-op there; it was not
   measured. The `getUploadUrl` row also names the `x-amz-acl` header it signs with `publicRead`.
 

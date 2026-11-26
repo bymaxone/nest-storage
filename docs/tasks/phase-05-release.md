@@ -10,7 +10,7 @@
 
 Phase 5 turns a feature-complete, fully-tested library into a **published `0.1.0` artifact on npm**. The engine, services, provider recipes, e2e suite, and mutation baseline already exist from Phases 1–4; the four CI workflows (`ci` / `codeql` / `scorecard` / `release`) were created in **Phase 1** and have gated every PR since the first one. This phase is therefore predominantly mechanical: write the public documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, mutation-testing docs, LICENSE), **confirm** the existing CI suite is green for the release candidate, **finalize** the `release.yml` `v*.*.*` publish trigger, calibrate the brotli bundle budgets, run the final Stryker mutation pass (break 95), and tag + publish with `--provenance`.
 
-The single largest correctness risk in the documentation is teaching consumers the two provider traps that the AWS SDK v3 surfaces by default: the **integrity-checksum headers** that non-AWS S3-compatible providers reject (the #1 provider-compat trap), and the **`ACL: public-read`** path that returns HTTP 400 on modern AWS S3 and has an effect on R2 that was not measured. The README, SECURITY, and CHANGELOG must state these accurately so a first-time consumer does not hit a broken upload path.
+The single largest correctness risk in the documentation is teaching consumers the two provider traps that the AWS SDK v3 surfaces by default: the **integrity-checksum headers** that non-AWS S3-compatible providers reject (the #1 provider-compat trap), and the **`ACL: public-read`** path that returns HTTP 400 on modern AWS S3 and whose effect on R2 was not measured. The README, SECURITY, and CHANGELOG must state these accurately so a first-time consumer does not hit a broken upload path.
 
 ---
 
