@@ -70,11 +70,13 @@ function asParsed(value: string): string {
   return value.replace(/[\t\n\r]/g, '').replace(/^[\p{Cc} ]+/u, '')
 }
 
-/** Whether a URL parser reads the value as having a user or a password. */
-function parsedCarriesCredentials(value: string): boolean {
+/**
+ * Whether a URL parser reads the value as having a user or a password. Exported for its own spec: the
+ * string reading refuses what this refuses, so no option value shows this reading on its own.
+ */
+export function parsedCarriesCredentials(value: string): boolean {
   try {
     const url = new URL(value)
-    // Stryker disable next-line ConditionalExpression,LogicalOperator: the string reading of the authority refuses a superset of what this reads (2,000,000 random URL-like strings, none read by the parser with a user that the string reading missed), so no input tells these mutants apart from the original (equivalent).
     return url.username !== '' || url.password !== ''
   } catch {
     return false

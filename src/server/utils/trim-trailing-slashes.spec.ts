@@ -32,6 +32,11 @@ describe('trimTrailingSlashes', () => {
     expect(trimTrailingSlashes('////')).toBe('')
   })
 
+  it('returns a value with nothing to trim as the same value, even one that is not a string', () => {
+    // untyped JavaScript can pass a number here; the option validation refuses it afterwards
+    expect(trimTrailingSlashes(5 as unknown as string)).toBe(5)
+  })
+
   it('returns an empty string unchanged', () => {
     // zero-length input must not underflow the reverse scan
     expect(trimTrailingSlashes('')).toBe('')
