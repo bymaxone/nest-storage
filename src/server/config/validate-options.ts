@@ -56,13 +56,6 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 /**
- * What precedes the authority: an optional scheme and any run of slashes or backslashes, since a URL
- * parser accepts `https://host`, `https:/host`, `https:host` and `//host` alike. It needs no `^`: it can
- * match nothing, so its first match is always at the start.
- */
-const BEFORE_AUTHORITY = /(?:[a-z][a-z\d+.-]*:)?[/\\]*/i
-
-/**
  * The value as a URL parser reads it before parsing: leading control characters and spaces are
  * dropped (trailing ones cannot matter here) and tabs and line breaks are removed wherever they are.
  */
@@ -84,15 +77,18 @@ export function parsedCarriesCredentials(value: string): boolean {
 }
 
 /**
- * Whether the text holds userinfo read as a string: the authority is what follows
- * {@link BEFORE_AUTHORITY} up to the first `/`, `?` or `#` (a backslash is not one: only a special
- * scheme reads it as a slash, so counting it as part of the authority can only refuse more), and an
- * `@` in it separates userinfo from the host. This covers values a URL parser reads as something
- * else or rejects (`user@host:9000`, `user:pw@host`).
+ * Whether the text holds userinfo read as a string. What precedes the authority is an optional scheme
+ * and any run of slashes or backslashes, since a URL parser accepts `https://host`, `https:/host`,
+ * `https:host` and `//host` alike. The authority is what follows it up to the first `/`, `?` or `#`
+ * (a backslash is not one: only a special scheme reads it as a slash, so counting it as part of the
+ * authority can only refuse more), and an `@` in it separates userinfo from the host. This covers
+ * values a URL parser reads as something else or rejects (`user@host:9000`, `user:pw@host`).
  */
 function authorityCarriesCredentials(text: string): boolean {
+  // Sticky, so the match is tried at the start only. A literal here is a new object on each call, so no
+  // call sees the position another one left.
   // Stryker disable next-line StringLiteral: the replacement text holds no `/`, `?`, `#` or `@`, so the search and the `@` test give the same answer whatever it is (equivalent).
-  const rest = text.replace(BEFORE_AUTHORITY, '')
+  const rest = text.replace(/(?:[a-z][a-z\d+.-]*:)?[/\\]*/iy, '')
   const end = rest.search(/[/?#]/)
   return (end === -1 ? rest : rest.slice(0, end)).includes('@')
 }
