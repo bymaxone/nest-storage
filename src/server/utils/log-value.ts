@@ -30,8 +30,8 @@ function escapeChar(char: string): string {
   if (short !== undefined) return short
   const codePoint = Number(char.codePointAt(0))
   const hex = codePoint.toString(16)
-  // Stryker disable next-line EqualityOperator: no character the pattern matches has the code point U+FFFF (a noncharacter, not a control, format or separator), so `>=` and `>` pick the same form (equivalent).
-  return codePoint > 0xffff ? `\\u{${hex}}` : `\\u${hex.padStart(4, '0')}`
+  // Two code units mean a character beyond U+FFFF, which four digits cannot write.
+  return char.length === 1 ? `\\u${hex.padStart(4, '0')}` : `\\u{${hex}}`
 }
 
 /**
@@ -57,7 +57,5 @@ export function escapeForLog(text: string): string {
  * @returns The value as one quoted, escaped token; never throws.
  */
 export function logValue(value: unknown): string {
-  // Stryker disable next-line ConditionalExpression: `describeError` returns a string as it is (`String(value)`), so sending strings through it too gives the same text (equivalent).
-  const text = typeof value === 'string' ? value : describeError(value)
-  return JSON.stringify(text).replace(LEFT_LITERAL_BY_JSON, escapeChar)
+  return JSON.stringify(describeError(value)).replace(LEFT_LITERAL_BY_JSON, escapeChar)
 }

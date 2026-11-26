@@ -137,11 +137,9 @@ async function teeAndPeek(
   let peeked = 0
   let isPeekClosed = false
   const closePeek = (): void => {
-    // Stryker disable next-line ConditionalExpression: the `isPeekClosed` flag is still set inside the block, and calling `peekPT.end()` more than once on a PassThrough is a harmless no-op — dropping this idempotency guard changes nothing observable.
-    if (!isPeekClosed) {
-      isPeekClosed = true
-      peekPT.end()
-    }
+    // Reached more than once; ending an ended PassThrough does nothing.
+    isPeekClosed = true
+    peekPT.end()
   }
   source.on('data', (chunk: Buffer | string) => {
     const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk

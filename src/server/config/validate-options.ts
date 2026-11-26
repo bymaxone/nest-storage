@@ -57,10 +57,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 /**
  * What precedes the authority: an optional scheme and any run of slashes or backslashes, since a URL
- * parser accepts `https://host`, `https:/host`, `https:host` and `//host` alike.
+ * parser accepts `https://host`, `https:/host`, `https:host` and `//host` alike. It needs no `^`: it can
+ * match nothing, so its first match is always at the start.
  */
-// Stryker disable next-line Regex: the pattern can match the empty string, so it always matches at index 0 and dropping the `^` anchor strips the same prefix (equivalent); its other mutants are killed by the schemed-userinfo cases of the spec.
-const BEFORE_AUTHORITY = /^(?:[a-z][a-z\d+.-]*:)?[/\\]*/i
+const BEFORE_AUTHORITY = /(?:[a-z][a-z\d+.-]*:)?[/\\]*/i
 
 /**
  * The value as a URL parser reads it before parsing: leading control characters and spaces are

@@ -381,8 +381,8 @@ function fieldsOf(target: object, key: string | symbol): unknown[] {
   // Stryker disable next-line ArrayDeclaration: a constant first element is the same at load and at every check (equivalent).
   const fields: unknown[] = []
   let at = 0
-  // Stryker disable next-line EqualityOperator: an index past the list reads `undefined` on both sides of the compare (equivalent).
-  while (at < FIELDS.length) {
+  const fieldsEnd = FIELDS.length
+  while (at !== fieldsEnd) {
     fields[fields.length] = field(descriptor, item(FIELDS, at))
     at += 1
   }
@@ -400,8 +400,8 @@ function capture(target: object, key: string | symbol): void {
 function captureAll(target: object): void {
   const keys = ownKeys(target)
   let at = 0
-  // Stryker disable next-line EqualityOperator: an index past the keys captures the key `undefined`, which reads the same at load and at every check (equivalent).
-  while (at < keys.length) {
+  const keysEnd = keys.length
+  while (at !== keysEnd) {
     capture(target, item(keys, at))
     at += 1
   }
@@ -474,8 +474,8 @@ function readBaseline(): void {
   // Every promise the SDK or a callback derives through `then` is built by the species of its constructor.
   capture(INTRINSIC_PROMISE, Symbol.species)
   at = 0
-  // Stryker disable next-line EqualityOperator: an index past the list reads the global `undefined` at load and at every check (equivalent).
-  while (at < GLOBALS.length) {
+  const globalsEnd = GLOBALS.length
+  while (at !== globalsEnd) {
     capture(globalThis, item(GLOBALS, at))
     at += 1
   }
@@ -490,8 +490,8 @@ try {
 function differs(entry: Entry): boolean {
   const now = fieldsOf(entry.target, entry.key)
   let at = 0
-  // Stryker disable next-line EqualityOperator: an index past the fields compares `undefined` with `undefined` (equivalent).
-  while (at < now.length) {
+  const fieldCount = now.length
+  while (at !== fieldCount) {
     if (!same(now[at], entry.fields[at])) {
       return true
     }
