@@ -179,22 +179,42 @@ describe('withExactSize', () => {
 })
 
 describe('withExactSize on a source that had already failed', () => {
-  // `close` has not fired yet here. The assertion is on the `error` event: a reading loop would report a
-  // premature close for a guard that was destroyed quietly too.
+  // The assertion is on the guard's `error` event: a reading loop would report a premature close for a
+  // guard that was destroyed quietly too. "Closed" is whether the source's `close` has fired by then.
+  const lost = { code: 'ERR_STREAM_PREMATURE_CLOSE' }
+  const own = { message: 'source failed' }
   it.each([
-    ['without an error', undefined, { code: 'ERR_STREAM_PREMATURE_CLOSE' }],
-    ['with an error', new Error('source failed'), { message: 'source failed' }],
-  ])('fails a source destroyed %s just before the call', async (_how, cause, expected) => {
+    ['destroyed', (s: PassThrough) => s.destroy(), lost],
+    ['destroyed with an error', (s: PassThrough) => s.destroy(new Error('source failed')), own],
+    ['ended and destroyed unread', (s: PassThrough) => s.end('abc').destroy(), lost],
+    ['written and destroyed unread', (s: PassThrough) => (s.write('abc'), s.destroy()), lost],
+  ])('fails a source %s, closed or not yet', async (_how, break_, expected) => {
+    for (const closed of [false, true]) {
+      const source = new PassThrough()
+      source.once('error', () => undefined)
+      break_(source)
+      if (closed) await new Promise((resolve) => setImmediate(resolve))
+      const errors: unknown[] = []
+      withExactSize(source, 500).on('error', (err) => errors.push(err))
+
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(errors).toEqual([expect.objectContaining(expected)])
+    }
+  })
+
+  it('reports the shortfall of a source drained but not yet closed', async () => {
     const source = new PassThrough()
-    source.once('error', () => undefined)
-    source.destroy(cause)
-    const guard = withExactSize(source, 500)
+    source.resume()
+    source.end('abc')
+    await new Promise<void>((resolve) => source.once('end', () => resolve()))
+    source.destroy()
     const errors: unknown[] = []
-    guard.on('error', (err) => errors.push(err))
+    withExactSize(source, 500).on('error', (err) => errors.push(err))
 
     await new Promise((resolve) => setImmediate(resolve))
 
-    expect(errors).toEqual([expect.objectContaining(expected)])
+    expect(errors).toEqual([expect.any(SizeShortfallError)])
   })
 
   it('reports the shortfall of a source already read to its end', async () => {
