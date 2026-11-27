@@ -79,14 +79,23 @@ export async function peekFirstBytes(
 /** The streams whose later errors are already heard. */
 const HEARD = new WeakSet()
 
+/** The live streams already set to be destroyed on their first error. */
+const HELD = new WeakSet()
+
+/** Whether `stream` is new to `seen`, which it joins: so a listener is added once for each stream. */
+function firstTime(seen: WeakSet<object>, stream: object): boolean {
+  const first = !seen.has(stream)
+  seen.add(stream)
+  return first
+}
+
 /**
  * Hears every later error of a stream for as long as it lives, since one raised with nothing
  * listening is uncaught. One listener for each stream, however often this is asked. Anything
  * without `on` is left alone.
  */
 function hearErrors(stream: Partial<Readable>): void {
-  if (typeof stream.on !== 'function' || HEARD.has(stream)) return
-  HEARD.add(stream)
+  if (typeof stream.on !== 'function' || !firstTime(HEARD, stream)) return
   stream.on('error', () => undefined)
 }
 
@@ -106,9 +115,11 @@ export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream
     return failed
   }
   // Destroyed without an error, as `destroyStream` explains.
-  ;(source as Partial<Readable>).once?.('error', () => {
-    destroyStream(source)
-  })
+  if (firstTime(HELD, source)) {
+    ;(source as Partial<Readable>).once?.('error', () => {
+      destroyStream(source)
+    })
+  }
   return source
 }
 
