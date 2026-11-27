@@ -49,8 +49,7 @@ export class StorageMetricsTally {
    * counter accepts, and a scrape that read it would fail whole.
    */
   bytesUploaded(bytes: number | undefined): void {
-    // Stryker disable next-line EqualityOperator: `bytes >= 0` adds a zero to the count, which changes nothing (equivalent).
-    if (typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0)
+    if (typeof bytes === 'number' && Number.isFinite(bytes) && Math.min(bytes, 0) === 0)
       this.#bytesUploaded = Math.min(this.#bytesUploaded + bytes, Number.MAX_VALUE)
   }
 

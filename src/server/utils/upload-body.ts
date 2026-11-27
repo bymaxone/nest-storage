@@ -120,8 +120,8 @@ export function assertScannedSize(
   if (!isBufferLike(body) || declaredSize === undefined || body.byteLength === declaredSize) {
     return
   }
-  // Stryker disable next-line EqualityOperator: a length equal to the declared size has returned above, so `>=` gives the same answer (equivalent).
-  if (body.byteLength > declaredSize || declaredSize < thresholdBytes) {
+  // The two differ here, so the smaller one being the declared size means the buffer is longer.
+  if (Math.min(body.byteLength, declaredSize) === declaredSize || declaredSize < thresholdBytes) {
     throw declaredSizeMismatch(declaredSize, body.byteLength, context)
   }
 }

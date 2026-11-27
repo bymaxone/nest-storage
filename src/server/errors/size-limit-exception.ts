@@ -69,8 +69,8 @@ export function declaredSizeMismatch(
   receivedBytes: number,
   context: Record<string, unknown>,
 ): StorageException {
-  // Stryker disable next-line EqualityOperator: both callers pass lengths that differ, so the two arms never meet at equality and `>=` gives the same answer (equivalent).
-  if (receivedBytes > declaredBytes) {
+  // The two differ here, so the smaller one being the declared size means the body is longer.
+  if (Math.min(receivedBytes, declaredBytes) === declaredBytes) {
     return sizeLimitException(declaredBytes, 'declared', context)
   }
   return new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {

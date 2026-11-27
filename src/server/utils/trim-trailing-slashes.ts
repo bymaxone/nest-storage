@@ -43,6 +43,7 @@ export function trimTrailingSlashes(value: string): string {
   while (value[end - 1] === SLASH) {
     end -= 1
   }
-  // Stryker disable next-line ConditionalExpression: equivalent in value — `slice(0, length)` returns the same string; the guard returns the original reference instead of a copy, which no caller can observe
+  // Nothing trimmed gives the value itself back, so a non-string from untyped JavaScript reaches the
+  // option validation, which refuses it with its own error.
   return end === value.length ? value : value.slice(0, end)
 }

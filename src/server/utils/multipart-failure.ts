@@ -51,9 +51,8 @@ export async function failMultipartUpload(
   const abortedBy = upload.signal?.aborted === true ? upload.signal : undefined
   const lookup = abortedBy ? upload.createdUploadId?.() : undefined
   let uploadId = upload.uploadId
-  // Stryker disable next-line ConditionalExpression: when the uploader already holds an id it is the one the create answered, so waiting for the created id again yields the same value (equivalent).
-  if (uploadId === undefined && lookup) {
-    uploadId = await verdictOf(within(lookup, CLEANUP_DEADLINE_MS))
+  if (lookup) {
+    uploadId ??= await verdictOf(within(lookup, CLEANUP_DEADLINE_MS))
     // The caller does not wait longer, but an id that arrives later is still aborted.
     if (uploadId === undefined) {
       closeWhenCreated(client, target.bucket, target.finalKey, lookup, abortFailureLogger(logger))

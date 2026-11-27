@@ -56,13 +56,6 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 /**
- * What precedes the authority: an optional scheme and any run of slashes or backslashes, since a URL
- * parser accepts `https://host`, `https:/host`, `https:host` and `//host` alike.
- */
-// Stryker disable next-line Regex: the pattern can match the empty string, so it always matches at index 0 and dropping the `^` anchor strips the same prefix (equivalent); its other mutants are killed by the schemed-userinfo cases of the spec.
-const BEFORE_AUTHORITY = /^(?:[a-z][a-z\d+.-]*:)?[/\\]*/i
-
-/**
  * The value as a URL parser reads it before parsing: leading control characters and spaces are
  * dropped (trailing ones cannot matter here) and tabs and line breaks are removed wherever they are.
  */
@@ -70,11 +63,13 @@ function asParsed(value: string): string {
   return value.replace(/[\t\n\r]/g, '').replace(/^[\p{Cc} ]+/u, '')
 }
 
-/** Whether a URL parser reads the value as having a user or a password. */
-function parsedCarriesCredentials(value: string): boolean {
+/**
+ * Whether a URL parser reads the value as having a user or a password. Exported for its own spec: the
+ * string reading refuses what this refuses, so no option value shows this reading on its own.
+ */
+export function parsedCarriesCredentials(value: string): boolean {
   try {
     const url = new URL(value)
-    // Stryker disable next-line ConditionalExpression,LogicalOperator: the string reading of the authority refuses a superset of what this reads (2,000,000 random URL-like strings, none read by the parser with a user that the string reading missed), so no input tells these mutants apart from the original (equivalent).
     return url.username !== '' || url.password !== ''
   } catch {
     return false
@@ -82,15 +77,17 @@ function parsedCarriesCredentials(value: string): boolean {
 }
 
 /**
- * Whether the text holds userinfo read as a string: the authority is what follows
- * {@link BEFORE_AUTHORITY} up to the first `/`, `?` or `#` (a backslash is not one: only a special
- * scheme reads it as a slash, so counting it as part of the authority can only refuse more), and an
- * `@` in it separates userinfo from the host. This covers values a URL parser reads as something
- * else or rejects (`user@host:9000`, `user:pw@host`).
+ * Whether the text holds userinfo read as a string. What precedes the authority is an optional scheme
+ * and any run of slashes or backslashes, since a URL parser accepts `https://host`, `https:/host`,
+ * `https:host` and `//host` alike. The authority is what follows it up to the first `/`, `?` or `#`
+ * (a backslash is not one: only a special scheme reads it as a slash, so counting it as part of the
+ * authority can only refuse more), and an `@` in it separates userinfo from the host. This covers
+ * values a URL parser reads as something else or rejects (`user@host:9000`, `user:pw@host`).
  */
 function authorityCarriesCredentials(text: string): boolean {
-  // Stryker disable next-line StringLiteral: the replacement text holds no `/`, `?`, `#` or `@`, so the search and the `@` test give the same answer whatever it is (equivalent).
-  const rest = text.replace(BEFORE_AUTHORITY, '')
+  const afterScheme = text.replace(/^[a-z][a-z\d+.-]*:/i, '')
+  // Stryker disable next-line StringLiteral: what replaces the leading slashes holds no `/`, `?`, `#` or `@`, so the search and the `@` test give the same answer whatever it is (equivalent).
+  const rest = afterScheme.replace(/^[/\\]+/, '')
   const end = rest.search(/[/?#]/)
   return (end === -1 ? rest : rest.slice(0, end)).includes('@')
 }

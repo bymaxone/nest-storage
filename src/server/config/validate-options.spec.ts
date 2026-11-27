@@ -3,7 +3,7 @@
  * lazy-credential tolerance, and the conditional field checks.
  * @layer server/config
  */
-import { validateOptions } from './validate-options'
+import { parsedCarriesCredentials, validateOptions } from './validate-options'
 import type { StorageException } from '../errors/storage-exception'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
 
@@ -595,5 +595,38 @@ describe('validateOptions: a scanner that would leave scanning silently off', ()
         validateOptions({ ...valid, scanner })
       }),
     ).toBe('scanner must be an object')
+  })
+})
+
+describe('parsedCarriesCredentials', () => {
+  it.each([
+    ['https://user@host', true],
+    ['https://:password@host', true],
+    ['https://user:password@host', true],
+    ['https://host', false],
+    ['not a url', false],
+  ])('reads %s as carrying credentials: %s', (value, expected) => {
+    // the URL parser's own reading, asked directly: either part alone is enough
+    expect(parsedCarriesCredentials(value)).toBe(expected)
+  })
+})
+
+describe('validateOptions: what precedes the authority', () => {
+  it.each([
+    ['ftp:////user@host', true],
+    ['ftp:////host/a@b', false],
+    ['\\\\user@host', true],
+    ['\\\\host/a@b', false],
+    ['user@host', true],
+    ['host/a@b', false],
+    ['//a://user@host', false],
+  ])('reads an endpoint of %s as carrying credentials: %s', (endpoint, refused) => {
+    // a scheme with slashes, slashes only, and neither: only an `@` in the authority counts, and a
+    // scheme is read at the start only
+    const check = (): void => {
+      validateOptions({ ...valid, endpoint })
+    }
+    if (refused) expect(check).toThrow()
+    else expect(check).not.toThrow()
   })
 })
