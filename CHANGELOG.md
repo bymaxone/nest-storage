@@ -19,7 +19,7 @@ note on each entry is the compatibility contract — read it, not the number.
   upload began was waited for, until the request timed out or the caller aborted. The
   upload now fails at once.
 - A stream on the multipart path, with a declared `size` or a `validation.maxSizeBytes`, that had ended and been destroyed
-  before it was read when the upload began was waited for in the same way. The upload now fails at once with
+  before it was read when the upload began was waited for. The upload now fails at once with
   `STORAGE_MULTIPART_ABORTED`.
 - A stream on the multipart path that ended before its declared `size` was uploaded as a complete object, with a result
   whose `size` was the declared number. It is now refused as the single-request path refuses it:
