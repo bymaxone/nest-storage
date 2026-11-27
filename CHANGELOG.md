@@ -33,8 +33,10 @@ note on each entry is the compatibility contract — read it, not the number.
   rejects with the `StorageException` the upload gives with no scanner.
 - A stream that reported an `'error'` while a custom validator was running, without recording it or without destroying
   itself, could be waited for. The upload now fails.
-- A stream with a declared `size` below the multipart threshold, destroyed with no error while it was being sent, was
-  waited for until the request timed out or the caller aborted. The upload now fails with `STORAGE_PROVIDER_ERROR`.
+- A stream destroyed with no error during an upload could be waited for until the request timed out or the caller
+  aborted: one with a declared `size` below the multipart threshold while it was being sent, and one a custom validator
+  had read with `readBytes`. The upload now fails: `STORAGE_PROVIDER_ERROR` in one request,
+  `STORAGE_MULTIPART_ABORTED` in parts.
 - With a pre-upload scanner, a stream longer than its declared `size` could be answered `STORAGE_PROVIDER_ERROR` or
   `STORAGE_VALIDATION_FAILED`. It is now refused with `STORAGE_SIZE_EXCEEDED`, as with no scanner.
 

@@ -174,6 +174,24 @@ function releaseSourceOnEarlyClose(
 }
 
 /**
+ * A source destroyed with no error reports only `'close'`. Both sides of a tee end then, and quietly:
+ * an `'error'` on the upload side would reach whatever wraps the request body.
+ */
+function endWithLostSource(
+  source: NodeJS.ReadableStream,
+  sourceEnded: () => boolean,
+  closePeek: () => void,
+  replacement: PassThrough,
+): void {
+  source.once('close', () => {
+    if (!sourceEnded()) {
+      closePeek()
+      replacement.destroy()
+    }
+  })
+}
+
+/**
  * Tees a source stream: the peek side receives at most `maxBytes`, the upload
  * side receives the full stream.
  *
@@ -220,6 +238,7 @@ async function teeAndPeek(
     uploadPT.end()
   })
   releaseSourceOnEarlyClose(source, uploadPT, () => sourceEnded)
+  endWithLostSource(source, () => sourceEnded, closePeek, uploadPT)
   source.on('error', (err: Error) => {
     // End the peek side gracefully so the head resolves with whatever arrived,
     // and surface the failure on the upload side for the consumer to handle.

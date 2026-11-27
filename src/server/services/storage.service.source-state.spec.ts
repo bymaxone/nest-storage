@@ -474,14 +474,14 @@ describe('an upload of a stream in each state it can be in', () => {
    * without a scan: before the call, while a validator runs, mid-read and once the request is out.
    */
   it.each(
-    [false, true].flatMap((scan) =>
-      [3, undefined].flatMap((size) =>
+    Object.entries(PATHS).flatMap(([path, through]) =>
+      [3, 12 * MIB, undefined].flatMap((size) =>
         (['before the call', 'in a validator', 'mid-read', 'after the request is out'] as const).map(
-          (when) => [scan, size, when] as const,
+          (when) => [path, size, when, through] as const,
         ),
       ),
     ),
-  )('settles a source destroyed with no error (scan %s, declared %s, %s)', async (scan, size, when) => {
+  )('settles a source destroyed with no error (%s, declared %s, %s)', async (_p, size, when, through) => {
     let reads = 0
     const body: Readable = new Readable({
       read: () => {
@@ -496,14 +496,15 @@ describe('an upload of a stream in each state it can be in', () => {
     const storage = await storageWith(
       {
         name: 'slow',
-        validate: async () => {
+        validate: async ({ readBytes }) => {
+          if (through.reads) await readBytes?.(2)
           if (when === 'in a validator') body.destroy()
           await tick()
           return { ok: true }
         },
       },
-      100,
-      scan,
+      20 * MIB,
+      through.scan,
     )
 
     await expect(
@@ -515,7 +516,7 @@ describe('an upload of a stream in each state it can be in', () => {
           ...(size === undefined ? {} : { size }),
         })
         .then(String, code),
-    ).resolves.toBe(size === undefined ? aborted : 'STORAGE_PROVIDER_ERROR')
+    ).resolves.toBe(size === 3 ? provider : aborted)
     expect(stored).toEqual([])
   })
 
