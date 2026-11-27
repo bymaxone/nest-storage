@@ -340,3 +340,20 @@ describe('withSizeLimit on a source that had already failed', () => {
     expect(done).toEqual(['end'])
   })
 })
+
+describe('withSizeLimit on a source that reports its error after it was destroyed', () => {
+  it.each(['declared', 'max'] as const)('hears the late error of a %s source', async (kind) => {
+    const source = new Readable({
+      read: () => undefined,
+      destroy: (_error, callback) => void process.nextTick(callback, new Error('late')),
+    })
+    source.destroy()
+    const errors: unknown[] = []
+    withSizeLimit(source, 500, kind).on('error', (err) => errors.push(err))
+
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(errors).toEqual([expect.objectContaining({ code: 'ERR_STREAM_PREMATURE_CLOSE' })])
+    expect(source.errored).toMatchObject({ message: 'late' })
+  })
+})

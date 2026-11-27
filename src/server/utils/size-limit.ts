@@ -60,6 +60,7 @@ export function withSizeLimit(
   if (destroyed && !errored && !readableEnded) {
     guard.on('error', () => undefined)
     guard.destroy(prematureClose())
+    destroyStream(source)
     return guard
   }
   // `pipeline` destroys the source when the guard fails, and keeps an error on either side from
