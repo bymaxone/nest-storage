@@ -15,6 +15,7 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Fixed
 
+- Source stream errors during an upload no longer escape as an uncaught exception.
 - A stream with a declared `size` below the multipart threshold whose source had already errored or been destroyed when the
   upload began was waited for, until the request timed out or the caller aborted. The
   upload now fails at once.
