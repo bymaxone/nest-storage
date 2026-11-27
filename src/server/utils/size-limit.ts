@@ -63,6 +63,16 @@ export class SizeShortfallError extends Error {
   }
 }
 
+/** Fails `guard` for a source that failed before it was attached, whose events will not fire. */
+function relayPastFailure(source: NodeJS.ReadableStream, guard: Transform): void {
+  const { errored, destroyed } = source as Partial<Readable>
+  if (errored) guard.destroy(errored)
+  else if (destroyed)
+    finished(source, (err) => {
+      if (err) guard.destroy(err)
+    })
+}
+
 /**
  * Wraps a stream whose size the caller declared so that the provider is never handed an object of
  * another length. More than `declaredBytes` fails with {@link SizeLimitError} and fewer with
@@ -116,13 +126,7 @@ export function withExactSize(source: NodeJS.ReadableStream, declaredBytes: numb
     destroyStream(source)
   })
   guard.on('error', () => undefined)
-  // A source destroyed before this call has emitted its events already, so none of the above will
-  // fire: `finished` still reports what ended it.
-  if ((source as Partial<Readable>).destroyed === true) {
-    finished(source, (err) => {
-      if (err) guard.destroy(err)
-    })
-  }
+  relayPastFailure(source, guard)
   source.pipe(guard)
   return guard
 }

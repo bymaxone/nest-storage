@@ -3,7 +3,7 @@
  * one byte more fails the read and releases the source.
  * @layer server/utils
  */
-import { PassThrough, Readable } from 'node:stream'
+import { PassThrough, Readable, Transform } from 'node:stream'
 import { SizeLimitError, SizeShortfallError, withExactSize, withSizeLimit } from './size-limit'
 
 async function collect(stream: AsyncIterable<unknown>): Promise<Buffer> {
@@ -179,6 +179,27 @@ describe('withExactSize', () => {
 })
 
 describe('withExactSize on a source that had already failed', () => {
+  it('fails the read of a source that errored without being destroyed', async () => {
+    const source = new Transform({
+      autoDestroy: false,
+      transform(_chunk, _encoding, callback) {
+        callback(new Error('source failed'))
+      },
+    })
+    source.once('error', () => undefined)
+    source.write('x')
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(source.destroyed).toBe(false)
+
+    const read = (async () => {
+      for await (const _chunk of withExactSize(source, 500)) {
+        // Nothing is expected to arrive.
+      }
+    })()
+
+    await expect(read).rejects.toMatchObject({ message: 'source failed' })
+  })
+
   it.each([
     ['errored', new Error('source failed'), { message: 'source failed' }],
     ['destroyed', undefined, { code: 'ERR_STREAM_PREMATURE_CLOSE' }],
