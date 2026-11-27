@@ -31,6 +31,7 @@ export interface IUploadValidator {
     /**
      * Reads up to `maxBytes` from the body without consuming it for the actual
      * upload. Useful for magic-byte sniffing on streams.
+     * A stream that was already drained, destroyed or errored yields no bytes.
      */
     readBytes?: (maxBytes: number) => Promise<Buffer>
   }): Promise<{ ok: true } | { ok: false; reason: string }>

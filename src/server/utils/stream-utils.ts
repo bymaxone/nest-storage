@@ -70,7 +70,37 @@ export async function peekFirstBytes(
   }
   // The tee attaches a data listener to the caller's stream, which starts it flowing, so the root is checked first.
   assertCleanRoot()
-  return await verdictOf(teeAndPeek(body, maxBytes))
+  const spent = teeOfSpentSource(body)
+  return spent ? settles(spent) : await verdictOf(teeAndPeek(body, maxBytes))
+}
+
+/** The error Node reports for a stream that closed before its end. */
+export function prematureClose(): Error {
+  return Object.assign(new Error('Premature close'), { code: 'ERR_STREAM_PREMATURE_CLOSE' })
+}
+
+/**
+ * The tee of a source that had already ended, failed or been destroyed, whose `'data'`, `'end'` and `'error'`
+ * are past or will not come: nothing to peek, and a replacement that is already ended, or already failed with
+ * the source's error. `undefined` for any other source, one without these Node properties included.
+ */
+function teeOfSpentSource(
+  source: NodeJS.ReadableStream,
+): { head: Buffer; replacementBody: UploadBody } | undefined {
+  const { errored, destroyed, readableEnded } = source as Partial<Readable>
+  if (!errored && !destroyed && !readableEnded) {
+    return undefined
+  }
+  const replacement = new PassThrough()
+  if (readableEnded && !errored) {
+    replacement.end()
+  } else {
+    // No consumer may be attached yet (a validator can reject first); an unheard error would crash.
+    replacement.once('error', () => undefined)
+    replacement.destroy(errored ?? prematureClose())
+    destroyStream(source)
+  }
+  return { head: Buffer.alloc(0), replacementBody: replacement }
 }
 
 /**
@@ -172,6 +202,8 @@ async function teeAndPeek(
     uploadPT.once('error', () => undefined)
     uploadPT.destroy(err)
   })
+  // A `'data'` listener does not restart a source its caller had paused.
+  source.resume()
   const head = await verdictOf(collectStream(peekPT))
   return { head, replacementBody: uploadPT }
 }
