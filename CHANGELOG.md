@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.26] - 2026-11-27
+
 ### Fixed
 
 - Source stream errors during an upload no longer escape as an uncaught exception.
@@ -1529,4 +1531,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.23]: https://github.com/bymaxone/nest-storage/compare/v1.1.22...v1.1.23
 [1.1.24]: https://github.com/bymaxone/nest-storage/compare/v1.1.23...v1.1.24
 [1.1.25]: https://github.com/bymaxone/nest-storage/compare/v1.1.24...v1.1.25
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.25...HEAD
+[1.1.26]: https://github.com/bymaxone/nest-storage/compare/v1.1.25...v1.1.26
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.26...HEAD
