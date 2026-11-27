@@ -99,8 +99,8 @@ export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream
 
 /**
  * Brings an old-style stream, one with no boolean `destroyed` property, to a Node `Readable`, so that
- * its end, error and close are heard from the call on. A `'close'` is a loss only before the end;
- * Node's `Readable.prototype.wrap` destroys on every one, dropping the bytes it still holds. The
+ * its end, error and close are heard from the call on. An `'error'` is a loss, and a `'close'` one
+ * only before the end; Node's `Readable.prototype.wrap` destroys on every one, dropping the bytes it still holds. The
  * source is resumed, since one such as `form-data` delivers nothing until then.
  *
  * @param source - The caller's stream.
@@ -135,9 +135,11 @@ export function asReadable(source: NodeJS.ReadableStream): NodeJS.ReadableStream
     ended = true
     adapter.push(null)
   })
-  source.on('error', (error: Error) => adapter.destroy(error))
+  // Both give the adapter up with no error: releasing the source can raise either, and an error then
+  // reaches a request body nothing listens to.
+  source.on('error', () => adapter.destroy())
   source.on('close', () => {
-    if (!ended) adapter.destroy(new DOMException(undefined, 'AbortError'))
+    if (!ended) adapter.destroy()
   })
   source.resume()
   return adapter

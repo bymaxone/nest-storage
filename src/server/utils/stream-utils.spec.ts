@@ -759,17 +759,21 @@ describe('asReadable', () => {
     await expect(readStream(adapter)).resolves.toEqual(Buffer.from('abc'))
   })
 
-  // A close with no end, and an error, both end the read in a rejection.
+  // An error, and a close with no end, both fail the read, and neither raises an error of the
+  // wrapper's own: releasing a source can emit either, with nothing listening for it.
   it.each([
-    ['close', undefined, 'AbortError'],
-    ['error', new Error('boom'), 'Error'],
-  ])('fails the read on a %s before the end', async (event, given, name) => {
+    ['close', undefined],
+    ['error', new Error('boom')],
+  ])('fails the read on a %s before the end, raising no error', async (event, given) => {
     const source = oldStyle()
     const adapter = asReadable(source as unknown as NodeJS.ReadableStream)
+    const raised = jest.fn()
+    adapter.on('error', raised)
     const read = readStream(adapter)
     source.emit(event, given)
 
-    await expect(read).rejects.toMatchObject({ name })
+    await expect(read).rejects.toBeDefined()
+    expect(raised).not.toHaveBeenCalled()
   })
 
   // A full buffer pauses the source, and reading resumes it.
