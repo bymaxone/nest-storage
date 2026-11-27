@@ -521,6 +521,41 @@ describe('an upload of a stream in each state it can be in', () => {
   })
 
   /**
+   * A `'close'` the caller emits on a live stream does not lose the source: its bytes are stored. A
+   * scan reading such a stream itself is left out, as Node's iterator takes the event for the end.
+   */
+  it.each(Object.entries(PATHS).filter(([, through]) => through.reads || !through.scan))(
+    'stores a source that emits close without being destroyed, through %s',
+    async (_path, through) => {
+      let done = false
+      const body: Readable = new Readable({
+        read: () => {
+          if (done) return
+          done = true
+          body.push('abc')
+          body.push(null)
+          body.emit('close')
+        },
+      })
+      const storage = await storageWith(
+        {
+          name: 'magic',
+          validate: async ({ readBytes }) => {
+            if (through.reads) await readBytes?.(2)
+            return { ok: true }
+          },
+        },
+        100,
+        through.scan,
+      )
+
+      await storage.upload({ key: 'k', body, contentType: 'text/plain' })
+
+      expect(stored).toEqual([3])
+    },
+  )
+
+  /**
    * A source that delivers more than its declared size is too long whatever it does next, and a
    * scan answers that as the upload does without one.
    */

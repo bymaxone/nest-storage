@@ -184,7 +184,9 @@ function endWithLostSource(
   replacement: PassThrough,
 ): void {
   source.once('close', () => {
-    if (!sourceEnded()) {
+    // A `'close'` the source emits by hand leaves it live, and its data still to come.
+    const { destroyed } = source as Partial<Readable>
+    if (destroyed && !sourceEnded()) {
       closePeek()
       replacement.destroy()
     }
