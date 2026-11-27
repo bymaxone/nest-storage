@@ -610,3 +610,23 @@ describe('parsedCarriesCredentials', () => {
     expect(parsedCarriesCredentials(value)).toBe(expected)
   })
 })
+
+describe('validateOptions: what precedes the authority', () => {
+  it.each([
+    ['ftp:////user@host', true],
+    ['ftp:////host/a@b', false],
+    ['\\\\user@host', true],
+    ['\\\\host/a@b', false],
+    ['user@host', true],
+    ['host/a@b', false],
+    ['//a://user@host', false],
+  ])('reads an endpoint of %s as carrying credentials: %s', (endpoint, refused) => {
+    // a scheme with slashes, slashes only, and neither: only an `@` in the authority counts, and a
+    // scheme is read at the start only
+    const check = (): void => {
+      validateOptions({ ...valid, endpoint })
+    }
+    if (refused) expect(check).toThrow()
+    else expect(check).not.toThrow()
+  })
+})

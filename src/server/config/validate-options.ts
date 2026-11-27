@@ -85,10 +85,9 @@ export function parsedCarriesCredentials(value: string): boolean {
  * values a URL parser reads as something else or rejects (`user@host:9000`, `user:pw@host`).
  */
 function authorityCarriesCredentials(text: string): boolean {
-  // Sticky, so the match is tried at the start only. A literal here is a new object on each call, so no
-  // call sees the position another one left.
-  // Stryker disable next-line StringLiteral: the replacement text holds no `/`, `?`, `#` or `@`, so the search and the `@` test give the same answer whatever it is (equivalent).
-  const rest = text.replace(/(?:[a-z][a-z\d+.-]*:)?[/\\]*/iy, '')
+  const afterScheme = text.replace(/^[a-z][a-z\d+.-]*:/i, '')
+  // Stryker disable next-line StringLiteral: what replaces the leading slashes holds no `/`, `?`, `#` or `@`, so the search and the `@` test give the same answer whatever it is (equivalent).
+  const rest = afterScheme.replace(/^[/\\]+/, '')
   const end = rest.search(/[/?#]/)
   return (end === -1 ? rest : rest.slice(0, end)).includes('@')
 }
