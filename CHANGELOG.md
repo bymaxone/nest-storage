@@ -18,8 +18,15 @@ note on each entry is the compatibility contract — read it, not the number.
 - A stream with a declared `size` below the multipart threshold whose source had already errored or been destroyed when the
   upload began was waited for, until the request timed out or the caller aborted. The
   upload now fails at once.
+- A stream on the multipart path that ended before its declared `size` was uploaded as a complete object, with a result
+  whose `size` was the declared number. It is now refused as the single-request path refuses it:
+  `STORAGE_VALIDATION_FAILED` (`details.field: 'size'`, `details.declaredSize`, `details.receivedSize`) and no object is
+  stored. A multipart upload that was opened is aborted (`details.abort`); a stream that ends within its first part opens
+  none. A stream that a pre-upload scanner reads first is refused before any request.
 
-**Apply to a derived backend:** nothing to do. No public declaration changes.
+**Apply to a derived backend:** nothing to change to compile. A caller that declares a `size` larger than the stream
+delivers, at or above the multipart threshold, now gets an error; pass the true size, or none. Objects already stored
+from a short stream keep their length: `head()` reports it. No public declaration changes.
 
 ## [1.1.25] - 2026-11-27
 

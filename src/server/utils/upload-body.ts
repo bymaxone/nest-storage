@@ -36,8 +36,9 @@ export function withBytesBody(options: UploadOptions): UploadOptions {
 
 /**
  * Caps a stream, as it is read, at the lower of the configured maximum and the size its caller
- * declared, so an undeclared stream or one longer than it declared cannot exceed either. A
- * single-shot stream must have exactly the size declared: the request carries `Content-Length` set
+ * declared, so an undeclared stream or one longer than it declared cannot exceed either. A stream
+ * with a declared size must also reach it, or a source cut short would be stored as the whole. For a
+ * single-shot stream the exactness is held before the last byte is sent: the request carries `Content-Length` set
  * to that size, and a longer body would leave the provider with an object of the declared length
  * and the rest unread, which it stores as if it were the whole.
  *
@@ -101,27 +102,21 @@ export async function bufferStreamForScan(
 
 /**
  * Checks a body that was read into memory for a pre-upload scan against the size its caller declared,
- * as `boundStreamSize` does for a stream that is sent as it is read: the request carries
- * `Content-Length` set to the declared size, so a buffer of another length would be stored cut off.
- * Longer is always refused; shorter only where the declared size is a single-shot one, as for a stream.
+ * as `boundStreamSize` does for a stream that is sent as it is read: a buffer of another length is
+ * refused, since it is not the object the caller described.
  *
  * @param body - The body after the scan buffering.
  * @param declaredSize - The size the caller declared, if any.
- * @param thresholdBytes - The multipart threshold: a declared size at or above it is not single-shot.
  * @param context - Details to carry (key and bucket).
  * @throws StorageException `STORAGE_SIZE_EXCEEDED` or `STORAGE_VALIDATION_FAILED` on a mismatch.
  */
 export function assertScannedSize(
   body: UploadBody,
   declaredSize: number | undefined,
-  thresholdBytes: number,
   context: Record<string, unknown>,
 ): void {
   if (!isBufferLike(body) || declaredSize === undefined || body.byteLength === declaredSize) {
     return
   }
-  // The two differ here, so the smaller one being the declared size means the buffer is longer.
-  if (Math.min(body.byteLength, declaredSize) === declaredSize || declaredSize < thresholdBytes) {
-    throw declaredSizeMismatch(declaredSize, body.byteLength, context)
-  }
+  throw declaredSizeMismatch(declaredSize, body.byteLength, context)
 }

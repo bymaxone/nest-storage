@@ -57,5 +57,13 @@ describe('declaredSizeMismatch', () => {
       details: { key: 'k', field: 'size', declaredSize: 500, receivedSize: 499 },
     })
   })
-})
 
+  // The row fixes which branch equal lengths take, so a rewrite of the comparison does not move
+  // them unnoticed.
+  it('takes the longer-body branch when the two lengths are equal', () => {
+    expect(bodyOf(declaredSizeMismatch(500, 500, { key: 'k' })).error).toMatchObject({
+      code: 'STORAGE_SIZE_EXCEEDED',
+      details: { key: 'k', declaredSize: 500 },
+    })
+  })
+})

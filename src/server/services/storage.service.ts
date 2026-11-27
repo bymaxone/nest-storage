@@ -245,7 +245,7 @@ export class StorageService {
       signal,
       context,
     )
-    assertScannedSize(scanned, options.size, this.options.multipart.thresholdBytes, context)
+    assertScannedSize(scanned, options.size, context)
     const body = boundStreamSize(scanned, options.size, this.options)
     const validatedOptions = withFields(options, { body })
 

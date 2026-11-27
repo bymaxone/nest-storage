@@ -14,7 +14,7 @@ const CONTEXT = { key: 'k', bucket: 'b' }
 /** The code and details of the error the check throws, or `undefined` when it does not. */
 function outcome(body: Buffer | Readable, declared: number | undefined): { code: string; details: Record<string, unknown> } | undefined {
   try {
-    assertScannedSize(body, declared, THRESHOLD, CONTEXT)
+    assertScannedSize(body, declared, CONTEXT)
   } catch (error) {
     const response = (error as StorageException).getResponse() as {
       error: { code: string; details: Record<string, unknown> }
@@ -52,9 +52,13 @@ describe('assertScannedSize', () => {
     })
   })
 
-  it('accepts a shorter buffer when the declared size is at or above the multipart threshold', () => {
-    expect(outcome(Buffer.alloc(10), THRESHOLD)).toBeUndefined()
-    expect(outcome(Buffer.alloc(10), THRESHOLD + 500)).toBeUndefined()
+  it('refuses a shorter buffer when the declared size is at or above the multipart threshold', () => {
+    for (const declared of [THRESHOLD, THRESHOLD + 500]) {
+      expect(outcome(Buffer.alloc(10), declared)).toMatchObject({
+        code: 'STORAGE_VALIDATION_FAILED',
+        details: { field: 'size', declaredSize: declared, receivedSize: 10 },
+      })
+    }
   })
 })
 
@@ -94,12 +98,11 @@ describe('boundStreamSize', () => {
     expect((await read(boundStreamSize(Readable.from([Buffer.alloc(500)]), 500, options()))).error).toBeUndefined()
   })
 
-  it('lets a multipart-sized stream that is shorter than declared through unchanged, and refuses one that is longer', async () => {
-    // The multipart path never stored a truncated object, so a shorter body stays accepted there.
+  it('holds a multipart-sized stream to its declared size too: shorter fails with a shortfall, longer with a limit', async () => {
     const shorter = await read(boundStreamSize(Readable.from([Buffer.alloc(120)]), THRESHOLD + 500, options()))
     const longer = await read(boundStreamSize(Readable.from([Buffer.alloc(THRESHOLD + 600)]), THRESHOLD + 500, options()))
 
-    expect(shorter).toEqual({ bytes: 120, error: undefined })
+    expect(shorter.error).toMatchObject({ name: 'SizeShortfallError', declaredBytes: THRESHOLD + 500, receivedBytes: 120 })
     expect(longer.error).toMatchObject({ name: 'SizeLimitError', kind: 'declared' })
   })
 
