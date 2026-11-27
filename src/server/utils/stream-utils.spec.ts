@@ -589,7 +589,7 @@ describe('stream-utils', () => {
       expect(forwarded).not.toHaveBeenCalled()
     })
 
-    it('keeps one error listener on a stream however often it is held and released', () => {
+    it('adds one error listener to a destroyed stream however often it is released', () => {
       const failed = new Readable({ read() {} })
       failed.destroy()
       const before = failed.listenerCount('error')
