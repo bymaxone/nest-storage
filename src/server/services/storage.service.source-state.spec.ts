@@ -378,6 +378,43 @@ describe('an upload of a stream in each state it can be in', () => {
     },
   )
 
+  /**
+   * Only a source that was already consumed is refused: one that is empty and not yet read, and an
+   * empty buffer, are stored as empty objects, on the single-request and the multipart strategy.
+   */
+  it.each(
+    Object.entries(PATHS).flatMap(([path, through]) =>
+      Object.entries({
+        'an unread Readable.from([])': () => Readable.from([]),
+        'an unread ended PassThrough': () => new PassThrough().end(),
+        'an empty Buffer': () => Buffer.alloc(0),
+      }).flatMap(([source, make]) =>
+        [0, undefined].map((size) => [path, source, size, through, make] as const),
+      ),
+    ),
+  )('stores 0 bytes through %s from %s (declared %s)', async (_p, _s, size, through, make) => {
+    const storage = await storageWith(
+      {
+        name: 'magic',
+        validate: async ({ readBytes }) => {
+          if (through.reads) await readBytes?.(2)
+          return { ok: true }
+        },
+      },
+      100,
+      through.scan,
+    )
+
+    await storage.upload({
+      key: 'k',
+      body: make(),
+      contentType: 'text/plain',
+      ...(size === undefined ? {} : { size }),
+    })
+
+    expect(stored).toEqual([0])
+  })
+
   /** A validator that rejects leaves the replacement with no reader, whose error must not go unheard. */
   it.each(['destroyed earlier', 'errored in the same tick'] as const)(
     'raises nothing unheard when the validator rejects a %s source',
