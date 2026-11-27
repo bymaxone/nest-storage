@@ -181,7 +181,7 @@ describe('withExactSize', () => {
 describe('withExactSize on a source that had already failed', () => {
   // The assertion is on the guard's `error` event: a reading loop would report a premature close for a
   // guard that was destroyed quietly too. "Closed" is whether the source's `close` has fired by then.
-  const lost = { code: 'ERR_STREAM_PREMATURE_CLOSE' }
+  const lost = { message: 'Premature close', code: 'ERR_STREAM_PREMATURE_CLOSE' }
   const own = { message: 'source failed' }
   it.each([
     ['destroyed', (s: PassThrough) => s.destroy(), lost],
@@ -203,7 +203,7 @@ describe('withExactSize on a source that had already failed', () => {
     }
   })
 
-  it('reports the shortfall of a source drained but not yet closed', async () => {
+  it('reports the shortfall of a source drained and then destroyed', async () => {
     const source = new PassThrough()
     source.resume()
     source.end('abc')
