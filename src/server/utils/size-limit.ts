@@ -56,7 +56,7 @@ export function withSizeLimit(
   return guard
 }
 
-/** Raised, as the read error of the exact-size stream, when the source ends before its declared size. */
+/** Raised, as the read error of a size-bounded stream, when the source ends before its declared size. */
 export class SizeShortfallError extends Error {
   constructor(
     readonly declaredBytes: number,
