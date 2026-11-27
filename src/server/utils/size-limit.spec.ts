@@ -177,3 +177,23 @@ describe('withExactSize', () => {
     expect(escaped).not.toHaveBeenCalled()
   })
 })
+
+describe('withExactSize on a source that had already failed', () => {
+  it.each([
+    ['errored', new Error('source failed'), { message: 'source failed' }],
+    ['destroyed', undefined, { code: 'ERR_STREAM_PREMATURE_CLOSE' }],
+  ])('fails the read of an already %s source with what ended it', async (_state, cause, expected) => {
+    const source = new PassThrough()
+    source.once('error', () => undefined)
+    source.destroy(cause)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    const read = (async () => {
+      for await (const _chunk of withExactSize(source, 500)) {
+        // Nothing is expected to arrive.
+      }
+    })()
+
+    await expect(read).rejects.toMatchObject(expected)
+  })
+})

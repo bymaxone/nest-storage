@@ -3,7 +3,7 @@
  * the moment the count exceeds a limit, destroying the source so nothing more is pulled from it.
  * @layer server/utils
  */
-import { Transform, pipeline, type Readable } from 'node:stream'
+import { Transform, finished, pipeline, type Readable } from 'node:stream'
 import { destroyStream } from './stream-utils'
 
 /** Which bound a stream crossed: the configured maximum, or the size its caller declared. */
@@ -116,6 +116,13 @@ export function withExactSize(source: NodeJS.ReadableStream, declaredBytes: numb
     destroyStream(source)
   })
   guard.on('error', () => undefined)
+  // A source destroyed before this call has emitted its events already, so none of the above will
+  // fire: `finished` still reports what ended it.
+  if ((source as Partial<Readable>).destroyed === true) {
+    finished(source, (err) => {
+      if (err) guard.destroy(err)
+    })
+  }
   source.pipe(guard)
   return guard
 }

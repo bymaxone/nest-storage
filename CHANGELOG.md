@@ -13,6 +13,14 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- A stream with a declared `size` below the multipart threshold whose source had already errored or been destroyed when the
+  upload began was waited for, until the idle timeout or, with `uploadIdleTimeoutMs: 0`, until the caller aborted. The
+  upload now fails at once.
+
+**Apply to a derived backend:** nothing to do. No public declaration changes.
+
 ## [1.1.25] - 2026-11-27
 
 ### Changed
