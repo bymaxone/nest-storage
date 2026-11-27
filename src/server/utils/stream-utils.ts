@@ -98,10 +98,10 @@ export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream
 }
 
 /**
- * Brings an old-style stream, one with no boolean `destroyed` property, to a Node `Readable` with
- * Node's own converter, so that its end, error and close are heard from the call on. The source is
- * resumed, since one such as `form-data` delivers nothing until then. A `'close'` that follows the
- * end before the wrapper was read fails the upload, as the converter drops what it still holds.
+ * Brings an old-style stream, one with no boolean `destroyed` property, to a Node `Readable`, so that
+ * its end, error and close are heard from the call on. A `'close'` is a loss only before the end;
+ * Node's `Readable.prototype.wrap` destroys on every one, dropping the bytes it still holds. The
+ * source is resumed, since one such as `form-data` delivers nothing until then.
  *
  * @param source - The caller's stream.
  * @returns `source` itself when it has the flag, otherwise the `Readable` that reads it.
@@ -110,13 +110,37 @@ export function asReadable(source: NodeJS.ReadableStream): NodeJS.ReadableStream
   if (typeof (source as Partial<Readable>).destroyed === 'boolean') {
     return source
   }
-  const wrapper = new Readable().wrap(source)
-  // An upload that gives the wrapper up before the end releases the source too.
-  wrapper.once('close', () => {
-    if (!wrapper.readableEnded) destroyStream(source)
+  let ended = false
+  let paused = false
+  const adapter = new Readable({
+    read: () => {
+      if (paused) {
+        paused = false
+        source.resume()
+      }
+    },
+    // An upload that gives the adapter up before the end releases the source too.
+    destroy: (error, done) => {
+      if (!ended) destroyStream(source)
+      done(error)
+    },
+  })
+  source.on('data', (chunk) => {
+    if (!adapter.push(chunk)) {
+      paused = true
+      source.pause()
+    }
+  })
+  source.on('end', () => {
+    ended = true
+    adapter.push(null)
+  })
+  source.on('error', (error: Error) => adapter.destroy(error))
+  source.on('close', () => {
+    if (!ended) adapter.destroy(new DOMException(undefined, 'AbortError'))
   })
   source.resume()
-  return wrapper
+  return adapter
 }
 
 /**

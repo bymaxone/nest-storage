@@ -531,8 +531,8 @@ describe('an upload of a stream in each state it can be in', () => {
   )
 
   /**
-   * An old-style stream has no `destroyed` flag. One that delivers everything is stored; one that
-   * closes before its end, with a validator still running, ends with an error instead of waiting.
+   * An old-style stream has no `destroyed` flag. A `'close'` after its end changes nothing; one
+   * before the end, with a validator still running, ends the upload with an error.
    * The source starts to deliver when it is resumed, as `form-data` does.
    */
   it.each(
@@ -574,8 +574,7 @@ describe('an upload of a stream in each state it can be in', () => {
       .upload({ key: 'k', body: body as unknown as Readable, contentType: 'text/plain', size: 3 })
       .then(() => 'stored', code)
 
-    // The converter drops unread bytes on a close, so only a read before it saves them.
-    const whole = then === 'ends' || (then === 'ends and closes' && through.reads)
+    const whole = then !== 'closes early'
     expect(answered).toBe(whole ? 'stored' : provider)
     expect(stored).toEqual(whole ? [3] : [])
   })

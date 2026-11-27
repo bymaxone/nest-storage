@@ -730,7 +730,7 @@ describe('asReadable', () => {
   })
 
   // An upload that gives the wrapper up releases the caller's source; a finished one is left alone.
-  it('destroys the source only when the wrapper closes before its end', async () => {
+  it('destroys the source only when the adapter is given up before the end', async () => {
     const destroy = jest.fn()
     const given = asReadable(
       oldStyle({ destroy }) as unknown as NodeJS.ReadableStream,
@@ -746,5 +746,45 @@ describe('asReadable', () => {
     source.emit('end')
     await once(finished, 'close')
     expect(destroy).not.toHaveBeenCalled()
+  })
+
+  // Bytes still held when a close follows the end are delivered, not dropped.
+  it('keeps what it holds when the source closes after its end', async () => {
+    const source = oldStyle()
+    const adapter = asReadable(source as unknown as NodeJS.ReadableStream)
+    source.emit('data', Buffer.from('abc'))
+    source.emit('end')
+    source.emit('close')
+
+    await expect(readStream(adapter)).resolves.toEqual(Buffer.from('abc'))
+  })
+
+  // A close with no end, and an error, both end the read in a rejection.
+  it.each([
+    ['close', undefined, 'AbortError'],
+    ['error', new Error('boom'), 'Error'],
+  ])('fails the read on a %s before the end', async (event, given, name) => {
+    const source = oldStyle()
+    const adapter = asReadable(source as unknown as NodeJS.ReadableStream)
+    const read = readStream(adapter)
+    source.emit(event, given)
+
+    await expect(read).rejects.toMatchObject({ name })
+  })
+
+  // A full buffer pauses the source, and reading resumes it.
+  it('pauses the source on backpressure and resumes it when read', async () => {
+    const pause = jest.fn()
+    const resume = jest.fn()
+    const source = oldStyle({ pause, resume })
+    const adapter = asReadable(source as unknown as NodeJS.ReadableStream) as unknown as Readable
+    expect(resume).toHaveBeenCalledTimes(1)
+
+    source.emit('data', Buffer.alloc(adapter.readableHighWaterMark))
+    expect(pause).toHaveBeenCalledTimes(1)
+    adapter.on('data', () => undefined)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(resume).toHaveBeenCalledTimes(2)
   })
 })
