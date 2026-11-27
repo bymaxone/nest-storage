@@ -6,7 +6,6 @@
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
 import { withExactSize, withSizeLimit } from './size-limit'
-import { pickUploadStrategy } from './upload-strategy'
 import { withFields } from './read-once'
 import { declaredSizeMismatch } from '../errors/size-limit-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
@@ -35,16 +34,13 @@ export function withBytesBody(options: UploadOptions): UploadOptions {
 }
 
 /**
- * Caps a stream, as it is read, at the lower of the configured maximum and the size its caller
- * declared, so an undeclared stream or one longer than it declared cannot exceed either. A stream
- * with a declared size must also reach it, or a source cut short would be stored as the whole. For a
- * single-shot stream the exactness is held before the last byte is sent: the request carries `Content-Length` set
- * to that size, and a longer body would leave the provider with an object of the declared length
- * and the rest unread, which it stores as if it were the whole.
+ * Caps a stream, as it is read: one with a declared size is held to exactly that size on either
+ * upload path, so a source cut short is not stored as the whole and a longer one is refused before
+ * its last byte is sent; one with no declared size cannot exceed the configured maximum.
  *
  * @param body - The body about to be uploaded.
  * @param declaredSize - The size the caller declared, if any.
- * @param options - The resolved module options: `validation.maxSizeBytes` and the multipart threshold.
+ * @param options - The resolved module options: `validation.maxSizeBytes`.
  * @returns `body`, or a guarded stream that fails once the cap is crossed.
  */
 export function boundStreamSize(
@@ -57,12 +53,9 @@ export function boundStreamSize(
   if (isBufferLike(body) || limit === undefined) {
     return body
   }
-  const singleShot =
-    pickUploadStrategy(body, declaredSize, options.multipart.thresholdBytes) === 'single-shot'
-  if (declaredSize !== undefined && singleShot) {
-    return withExactSize(body, declaredSize)
-  }
-  return withSizeLimit(body, limit, declaredSize === undefined ? 'max' : 'declared')
+  return declaredSize === undefined
+    ? withSizeLimit(body, limit, 'max')
+    : withExactSize(body, declaredSize)
 }
 
 /**

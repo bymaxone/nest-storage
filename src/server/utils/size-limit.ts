@@ -22,9 +22,8 @@ export class SizeLimitError extends Error {
 
 /**
  * Wraps a stream so that reading more than `limitBytes` fails with {@link SizeLimitError}. Bytes
- * up to the limit pass through unchanged and the limit itself is allowed. A `'declared'` limit is
- * also the size the stream must reach: a source that ends before it fails with
- * {@link SizeShortfallError}. On a failure, and on any error of the source, the source is destroyed.
+ * up to the limit pass through unchanged and the limit itself is allowed. On the failure, and on
+ * any error of the source, the source is destroyed.
  *
  * @param source - The caller's stream.
  * @param limitBytes - The most bytes the stream may deliver.
@@ -45,9 +44,6 @@ export function withSizeLimit(
         return
       }
       callback(null, chunk)
-    },
-    flush(callback) {
-      callback(kind === 'declared' && seen < limitBytes ? new SizeShortfallError(limitBytes, seen) : null)
     },
   })
   // `pipeline` destroys the source when the guard fails, and keeps an error on either side from
