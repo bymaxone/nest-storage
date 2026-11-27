@@ -182,6 +182,21 @@ describe('a checksummed upload whose source stream fails', () => {
     await settled()
   })
 
+  // A refusal that comes before the source is taken hold of still releases it.
+  it('keeps hearing the source of a refused upload', async () => {
+    const body = source()
+
+    await expect(upload(body, { size: -1 })).rejects.toMatchObject({
+      response: { error: { code: STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED } },
+    })
+
+    // An `emit` of an error that nothing hears throws.
+    expect(() => {
+      body.emit('error', new Error('boom'))
+      body.emit('error', new Error('again'))
+    }).not.toThrow()
+  })
+
   // A body that failed before the send may not report it again.
   it('settles with an error when the source had already failed', async () => {
     refuses = false

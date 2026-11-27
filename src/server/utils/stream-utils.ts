@@ -159,8 +159,8 @@ function failedInPlaceOf(source: NodeJS.ReadableStream): PassThrough | undefined
  * Readable and forwards the source's `'error'` to it; once a request has failed nothing listens to
  * that wrapper, so an error given here would crash the process from a stream this library cannot
  * reach. A close carries no error to forward. Destroying can still emit `'error'` when the stream's
- * own cleanup fails, so a no-op listener is attached first; the caller is already being rejected,
- * or has already been answered.
+ * own cleanup fails, so a no-op listener is attached first and stays, since the stream can report
+ * more than once; the caller is already being rejected, or has already been answered.
  *
  * @param stream - The stream to release.
  */
@@ -170,7 +170,7 @@ export function destroyStream(stream: NodeJS.ReadableStream): void {
   if (!target) {
     return
   }
-  target.once?.('error', () => undefined)
+  target.on?.('error', () => undefined)
   const answered: unknown = target.destroy?.()
   // A host's own stream may answer with a promise. A Node stream answers with itself.
   if (answered !== target) {
