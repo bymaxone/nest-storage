@@ -353,6 +353,23 @@ describe('upload size bound', () => {
     expect(putBodies).toEqual([])
   })
 
+  it.each([
+    ['a declared size', 12 * MIB, {}],
+    ['no declared size under a maximum', undefined, { validation: { maxSizeBytes: 100 * MIB } }],
+  ])('rejects a multipart source ended and destroyed unread, with %s', async (_how, size, limits) => {
+    const storage = await storageWith({ uploadIdleTimeoutMs: 0, ...limits })
+    const source = new PassThrough()
+    source.end('abc')
+    source.destroy()
+
+    const error: unknown = await storage
+      .upload({ key: 'k', body: source, contentType: 'text/plain', ...(size === undefined ? {} : { size }) })
+      .catch((err: unknown) => err)
+
+    expect(error).toMatchObject({ code: 'STORAGE_MULTIPART_ABORTED' })
+    expect(putBodies).toEqual([])
+  })
+
   describe('a single-shot stream whose declared size is wrong', () => {
     // A provider stores an object once it has received `Content-Length` bytes, so a 5000-byte stream declared
     // as 500 would leave a 500-byte object; the last byte is held back so that no request completes.
