@@ -469,6 +469,90 @@ describe('an upload of a stream in each state it can be in', () => {
     expect(scanned).toEqual(unscanned)
   })
 
+  /**
+   * A source destroyed with no error has nothing to report, and the upload must still end, with and
+   * without a scan: before the call, while a validator runs, mid-read and once the request is out.
+   */
+  it.each(
+    [false, true].flatMap((scan) =>
+      [3, undefined].flatMap((size) =>
+        (['before the call', 'in a validator', 'mid-read', 'after the request is out'] as const).map(
+          (when) => [scan, size, when] as const,
+        ),
+      ),
+    ),
+  )('settles a source destroyed with no error (scan %s, declared %s, %s)', async (scan, size, when) => {
+    let reads = 0
+    const body: Readable = new Readable({
+      read: () => {
+        reads += 1
+        if (reads > 1) return
+        body.push('ab')
+        if (when === 'mid-read') setImmediate(() => body.destroy())
+        if (when === 'after the request is out') setTimeout(() => body.destroy(), 100)
+      },
+    })
+    if (when === 'before the call') body.destroy()
+    const storage = await storageWith(
+      {
+        name: 'slow',
+        validate: async () => {
+          if (when === 'in a validator') body.destroy()
+          await tick()
+          return { ok: true }
+        },
+      },
+      100,
+      scan,
+    )
+
+    await expect(
+      storage
+        .upload({
+          key: 'k',
+          body,
+          contentType: 'text/plain',
+          ...(size === undefined ? {} : { size }),
+        })
+        .then(String, code),
+    ).resolves.toBe(size === undefined ? aborted : 'STORAGE_PROVIDER_ERROR')
+    expect(stored).toEqual([])
+  })
+
+  /**
+   * A source that delivers more than its declared size is too long whatever it does next, and a
+   * scan answers that as the upload does without one.
+   */
+  it.each(
+    [false, true].flatMap((scan) =>
+      [6, 200].flatMap((length) =>
+        (['ends', 'fails', 'is destroyed'] as const).map((then) => [scan, length, then] as const),
+      ),
+    ),
+  )('refuses a source over its declared size (scan %s, %s bytes, then %s)', async (scan, length, then) => {
+    let reads = 0
+    const body: Readable = new Readable({
+      read: () => {
+        reads += 1
+        if (reads > 1) return
+        body.push('a'.repeat(length))
+        if (then === 'ends') body.push(null)
+        else setImmediate(() => body.destroy(then === 'fails' ? new Error('boom') : undefined))
+      },
+    })
+    body.on('error', () => undefined)
+    const storage = await storageWith(
+      { name: 'none', validate: () => Promise.resolve({ ok: true }) },
+      100,
+      scan,
+    )
+
+    await expect(
+      storage.upload({ key: 'k', body, contentType: 'text/plain', size: 3 }).then(String, code),
+    ).resolves.toBe('STORAGE_SIZE_EXCEEDED')
+    expect(stored).toEqual([])
+  })
+
   /** A validator that rejects leaves the replacement with no reader, whose error must not go unheard. */
   it.each(['destroyed earlier', 'errored in the same tick'] as const)(
     'raises nothing unheard when the validator rejects a %s source',

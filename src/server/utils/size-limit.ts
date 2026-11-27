@@ -4,7 +4,7 @@
  * @layer server/utils
  */
 import { Transform, pipeline, type Readable } from 'node:stream'
-import { destroyStream, prematureClose } from './stream-utils'
+import { destroyStream, prematureClose, SOURCE_LOST } from './stream-utils'
 
 /** Which bound a stream crossed: the configured maximum, or the size its caller declared. */
 export type SizeLimitKind = 'max' | 'declared'
@@ -123,7 +123,9 @@ export function withExactSize(source: NodeJS.ReadableStream, declaredBytes: numb
     guard.destroy(err instanceof Error ? err : new Error(String(err)))
   })
   source.once('close', () => {
-    if (!ended) guard.destroy()
+    if (ended) return
+    if (!guard.destroyed) guard.emit(SOURCE_LOST)
+    guard.destroy()
   })
   guard.once('close', () => {
     destroyStream(source)

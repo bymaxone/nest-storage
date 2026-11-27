@@ -5,6 +5,7 @@
  */
 import { PassThrough, Readable, Transform } from 'node:stream'
 import { SizeLimitError, SizeShortfallError, withExactSize, withSizeLimit } from './size-limit'
+import { SOURCE_LOST } from './stream-utils'
 
 async function collect(stream: AsyncIterable<unknown>): Promise<Buffer> {
   const parts: Buffer[] = []
@@ -168,6 +169,24 @@ describe('withExactSize', () => {
 
     expect(events).toEqual(['close'])
     expect(guarded.destroyed).toBe(true)
+  })
+
+  it.each([
+    ['the source goes by itself', (s: PassThrough) => s.destroy(), 1],
+    ['the consumer destroys the guard', (_s: PassThrough, g: Readable) => g.destroy(), 0],
+    ['the source fails', (s: PassThrough) => s.destroy(new Error('source failed')), 0],
+    ['the source ends', (s: PassThrough, g: Readable) => (g.resume(), s.end('0123456789')), 0],
+  ])('says the source was lost only when %s', async (_how, break_, times) => {
+    const source = new PassThrough()
+    const guarded = withExactSize(source, 10)
+    guarded.on('error', () => undefined)
+    const lost = jest.fn()
+    guarded.on(SOURCE_LOST, lost)
+
+    break_(source, guarded)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(lost).toHaveBeenCalledTimes(times)
   })
 
   it('releases the source when the consumer destroys the guard', async () => {

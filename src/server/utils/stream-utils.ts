@@ -97,6 +97,13 @@ export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream
   return source
 }
 
+/**
+ * Emitted by a stream that stands for a source, when that source closed before its end with no error
+ * to report, so that whoever sends it stops waiting. An event of its own: an `'error'` on a request
+ * body reaches the SDK's wrappers of it.
+ */
+export const SOURCE_LOST = Symbol('source-lost')
+
 /** The error Node reports for a stream that closed before its end. */
 export function prematureClose(): Error {
   return Object.assign(new Error('Premature close'), { code: 'ERR_STREAM_PREMATURE_CLOSE' })

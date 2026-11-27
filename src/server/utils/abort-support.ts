@@ -10,6 +10,7 @@ import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constant
 import { assertAbortSignal } from './call-input'
 import { markHandled, tagged } from './prototype-guard'
 import { nothing, settleOrCut, verdictOf } from './settle-or-cut'
+import { SOURCE_LOST } from './stream-utils'
 
 /**
  * How long the cleanup of an aborted or failed call may take. It runs with a signal of its own, never
@@ -237,6 +238,9 @@ export function abortOnBodyFailure(
   let failure: unknown
   stream.once('error', (err: unknown) => {
     failure = err
+    controller.abort()
+  })
+  stream.once(SOURCE_LOST, () => {
     controller.abort()
   })
   return {

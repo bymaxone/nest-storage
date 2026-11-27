@@ -9,7 +9,7 @@ import { withExactSize, withSizeLimit } from './size-limit'
 import { pickUploadStrategy } from './upload-strategy'
 import { withFields } from './read-once'
 import { isRootRefusal } from './prototype-guard'
-import { declaredSizeMismatch } from '../errors/size-limit-exception'
+import { declaredSizeMismatch, sizeLimitException } from '../errors/size-limit-exception'
 import { mapAwsError } from '../errors/aws-error-mapper'
 import { mapMultipartError } from '../errors/multipart-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
@@ -84,8 +84,8 @@ export function boundStreamSize(
  * @param declaredSize - The size the caller declared, if any.
  * @param options - The resolved module options: `validation.maxSizeBytes` and the multipart threshold.
  * @returns The buffered body.
- * @throws StorageException `STORAGE_VALIDATION_FAILED` when there is no bound or the stream exceeds
- *   it; `STORAGE_PROVIDER_ERROR` or `STORAGE_MULTIPART_ABORTED` when the stream fails.
+ * @throws StorageException `STORAGE_SIZE_EXCEEDED` when the stream is longer than its declared size;
+ *   `STORAGE_VALIDATION_FAILED` when there is no bound or an undeclared stream exceeds it; `STORAGE_PROVIDER_ERROR` or `STORAGE_MULTIPART_ABORTED` when the stream fails.
  */
 export async function bufferStreamForScan(
   body: NodeJS.ReadableStream,
@@ -106,7 +106,8 @@ export async function bufferStreamForScan(
   const strategy = pickUploadStrategy(body, declaredSize, options.multipart.thresholdBytes)
   let buffered: Buffer | undefined
   try {
-    buffered = await verdictOf(readStreamUpTo(body, maxSizeBytes))
+    // A declared size above the maximum is refused before this point, so it is the lower bound.
+    buffered = await verdictOf(readStreamUpTo(body, declaredSize ?? maxSizeBytes))
   } catch (err) {
     // A refusal of the runtime check is not a failure of the stream: it keeps its own code.
     if (isRootRefusal(err)) {
@@ -121,6 +122,10 @@ export async function bufferStreamForScan(
         })
   }
   if (buffered === undefined) {
+    // Refused at the first byte over, as the send refuses it, whatever the stream would do next.
+    if (declaredSize !== undefined) {
+      throw sizeLimitException(declaredSize, 'declared', context)
+    }
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
       ...context,
       maxSizeBytes,
