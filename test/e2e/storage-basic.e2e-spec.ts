@@ -4,6 +4,7 @@
  * rejection, and metadata round-tripping.
  * @layer test/e2e
  */
+import { S3Client } from '@aws-sdk/client-s3'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { BymaxStorageModule, StorageService, providerRecipes } from '@bymax-one/nest-storage'
 import { startMinio, type MinioHandle } from './fixtures/minio-container'
@@ -56,10 +57,13 @@ describe('Storage E2E — basic ops', () => {
   })
 
   it('rejects a path-traversal key before it reaches S3', async () => {
+    const sent = jest.spyOn(S3Client.prototype, 'send')
     // The KeyResolver guard blocks `..` segments with STORAGE_KEY_INVALID.
     await expect(
       storage.upload({ key: '../etc/passwd', body: Buffer.from('x'), contentType: 'text/plain' }),
     ).rejects.toMatchObject({ code: 'STORAGE_KEY_INVALID' })
+    expect(sent).not.toHaveBeenCalled()
+    sent.mockRestore()
   })
 
   it('preserves custom metadata through a round-trip', async () => {

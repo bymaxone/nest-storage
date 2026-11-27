@@ -84,5 +84,7 @@ describe('Storage E2E — list + copy + deleteMany', () => {
     const result = await storage.deleteMany(['list-test/0.txt', 'list-test/1.txt', 'list-test/missing.txt'])
     expect(result.deleted.length).toBeGreaterThanOrEqual(2)
     expect(result.failed).toEqual([])
+    await expect(storage.exists('list-test/0.txt')).resolves.toBe(false)
+    await expect(storage.exists('list-test/1.txt')).resolves.toBe(false)
   })
 })

@@ -7,6 +7,7 @@
  * @layer test/e2e
  */
 import { Readable } from 'node:stream'
+import type { HttpException } from '@nestjs/common'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { BymaxStorageModule, StorageService, providerRecipes } from '@bymax-one/nest-storage'
 import { startMinio, type MinioHandle } from './fixtures/minio-container'
@@ -83,6 +84,9 @@ describe('Storage E2E — declared size of a stream', () => {
     )
 
     expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+    expect((error as HttpException).getResponse()).toMatchObject({
+      error: { details: { abort: 'completed' } },
+    })
     expect(ms).toBeLessThan(REFUSAL_BOUND_MS)
     await expect(storage.exists('shorter-multipart.bin')).resolves.toBe(false)
   })
