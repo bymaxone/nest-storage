@@ -179,6 +179,21 @@ describe('withExactSize', () => {
 })
 
 describe('withExactSize on a source that had already failed', () => {
+  it('reports the shortfall of a source already read to its end', async () => {
+    const source = Readable.from([Buffer.from('abc')])
+    for await (const _chunk of source) {
+      // Drained, so the source is destroyed with no error to report.
+    }
+
+    const read = (async () => {
+      for await (const _chunk of withExactSize(source, 500)) {
+        // Nothing is expected to arrive.
+      }
+    })()
+
+    await expect(read).rejects.toBeInstanceOf(SizeShortfallError)
+  })
+
   it('fails the read of a source that errored without being destroyed', async () => {
     const source = new Transform({
       autoDestroy: false,
