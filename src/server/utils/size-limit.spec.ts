@@ -83,23 +83,35 @@ describe('withExactSize', () => {
   }
 
   it('passes a body of exactly the declared size through, last byte included', async () => {
-    const guarded = withExactSize(Readable.from([Buffer.from('ab'), Buffer.from('cd'), Buffer.from('e')]), 5)
+    const guarded = withExactSize(
+      Readable.from([Buffer.from('ab'), Buffer.from('cd'), Buffer.from('e')]),
+      5,
+    )
 
     expect(await drain(guarded)).toEqual({ bytes: 'abcde', error: undefined })
   })
 
   it('passes an empty body declared as 0 bytes', async () => {
-    expect(await drain(withExactSize(Readable.from([]), 0))).toEqual({ bytes: '', error: undefined })
+    expect(await drain(withExactSize(Readable.from([]), 0))).toEqual({
+      bytes: '',
+      error: undefined,
+    })
   })
 
   it('accepts a source that sends strings', async () => {
-    expect(await drain(withExactSize(Readable.from(['ab', 'c']), 3))).toEqual({ bytes: 'abc', error: undefined })
+    expect(await drain(withExactSize(Readable.from(['ab', 'c']), 3))).toEqual({
+      bytes: 'abc',
+      error: undefined,
+    })
   })
 
   it('refuses a longer body with a SizeLimitError before the declared size is complete', async () => {
     // The provider stores an object once it has received `Content-Length` bytes, so the last byte is
     // held back until the source has ended: here it never is released, and the request stays incomplete.
-    const guarded = withExactSize(Readable.from([Buffer.from('abcd'), Buffer.from('e'), Buffer.from('f')]), 5)
+    const guarded = withExactSize(
+      Readable.from([Buffer.from('abcd'), Buffer.from('e'), Buffer.from('f')]),
+      5,
+    )
 
     const { bytes, error } = await drain(guarded)
 
@@ -144,7 +156,12 @@ describe('withExactSize', () => {
     const guarded = withExactSize(source, 10)
     const events: string[] = []
     guarded.on('error', () => events.push('error'))
-    const closed = new Promise<void>((resolve) => guarded.once('close', () => { events.push('close'); resolve() }))
+    const closed = new Promise<void>((resolve) =>
+      guarded.once('close', () => {
+        events.push('close')
+        resolve()
+      }),
+    )
 
     source.destroy()
     await closed
@@ -256,18 +273,21 @@ describe('withExactSize on a source that had already failed', () => {
   it.each([
     ['errored', new Error('source failed'), { message: 'source failed' }],
     ['destroyed', undefined, { code: 'ERR_STREAM_PREMATURE_CLOSE' }],
-  ])('fails the read of an already %s source with what ended it', async (_state, cause, expected) => {
-    const source = new PassThrough()
-    source.once('error', () => undefined)
-    source.destroy(cause)
-    await new Promise((resolve) => setImmediate(resolve))
+  ])(
+    'fails the read of an already %s source with what ended it',
+    async (_state, cause, expected) => {
+      const source = new PassThrough()
+      source.once('error', () => undefined)
+      source.destroy(cause)
+      await new Promise((resolve) => setImmediate(resolve))
 
-    const read = (async () => {
-      for await (const _chunk of withExactSize(source, 500)) {
-        // Nothing is expected to arrive.
-      }
-    })()
+      const read = (async () => {
+        for await (const _chunk of withExactSize(source, 500)) {
+          // Nothing is expected to arrive.
+        }
+      })()
 
-    await expect(read).rejects.toMatchObject(expected)
-  })
+      await expect(read).rejects.toMatchObject(expected)
+    },
+  )
 })
