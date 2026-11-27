@@ -290,8 +290,8 @@ to fix in the presigner.
 ### `defaultPublicRead` is not a candidate for an environment flag
 
 `publicRead` emits `ACL: public-read`. Modern AWS S3 buckets reject that with HTTP 400
-`AccessControlListNotSupported`, and R2 ignores ACLs entirely, so on the two most common targets the
-option is a hard failure or a silent no-op. It exists for the providers where it still works — the
+`AccessControlListNotSupported`, so there the option is a hard failure; its effect is not measured on
+R2. It exists for the providers where it still works — the
 DigitalOcean Spaces recipe sets it — and public access is otherwise a bucket policy, a CDN, or a
 signed URL. Do not propose promoting it to a configurable default, and do not read a `publicRead`
 path as the way to serve public objects.
@@ -389,6 +389,11 @@ The architecture deep-dive that explains these rules — module wiring, the `S3C
 lifecycle, the validation pipeline, the TTL clamp and the provider recipes — is in
 `docs/architecture.md`. It is kept out of this file so the review rules stay within the
 budget a reviewer actually reads.
+
+## Release authority
+
+The PM's GO, naming the version and the full SHA, is the maintainer's decision on version number,
+merge, tag and publish (owner standing order, 2026-11-26).
 
 ## Session memory (Obsidian vault)
 

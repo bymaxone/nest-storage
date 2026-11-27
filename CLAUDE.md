@@ -49,9 +49,9 @@ The LRU idempotency cache is not shared across process replicas. Two pods can ea
 
 `@aws-sdk/client-s3` ≥ 3.729.0 sends `x-amz-checksum-crc32` headers by default. R2, B2, MinIO, DigitalOcean Spaces, and Wasabi **reject** these headers. Every non-AWS provider recipe sets `requestChecksumCalculation`/`responseChecksumValidation` to `'WHEN_REQUIRED'`. If you touch a provider recipe or add a new one, this opt-out is not optional.
 
-### 7 — `publicRead` via ACL fails on modern AWS S3 and is a no-op on R2
+### 7 — `publicRead` via ACL fails on modern AWS S3 and is not measured on R2
 
-Do not route users to `publicRead: true` for general public access. Modern AWS S3 buckets return HTTP 400 `AccessControlListNotSupported`. R2 ignores ACLs. Steer to bucket policies, CDN, or signed URLs instead.
+Do not route users to `publicRead: true` for general public access. Modern AWS S3 buckets return HTTP 400 `AccessControlListNotSupported`. Its effect is not measured on R2. Steer to bucket policies, CDN, or signed URLs instead.
 
 ### 8 — Use `maxAttempts`, never `maxRetries` or `signatureVersion`
 
@@ -129,6 +129,12 @@ Use context7 (`mcp__context7__resolve-library-id` + `mcp__context7__query-docs`)
 - `pnpm size` — every bundle within the ceiling in `scripts/check-size.mjs`
 - `/bymax-quality:code-review` — 0 CRITICAL, 0 HIGH
 - `/security-review` — 0 CRITICAL, 0 HIGH, 0 MEDIUM, 0 LOW
+
+---
+
+## Release Authority
+
+The PM's GO, naming the version and the full SHA, is the maintainer's decision on version number, merge, tag and publish (owner standing order, 2026-11-26).
 
 ---
 
