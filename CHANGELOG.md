@@ -13,6 +13,15 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.25] - 2026-11-27
+
+### Changed
+
+- Internal restructure of server code, including how the credential check strips a URL option's scheme and leading
+  slashes. No behaviour change is intended.
+
+**Apply to a derived backend:** nothing to change. No public declaration changes.
+
 ## [1.1.24] - 2026-11-26
 
 ### Fixed
@@ -1476,4 +1485,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.22]: https://github.com/bymaxone/nest-storage/compare/v1.1.21...v1.1.22
 [1.1.23]: https://github.com/bymaxone/nest-storage/compare/v1.1.22...v1.1.23
 [1.1.24]: https://github.com/bymaxone/nest-storage/compare/v1.1.23...v1.1.24
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.24...HEAD
+[1.1.25]: https://github.com/bymaxone/nest-storage/compare/v1.1.24...v1.1.25
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.25...HEAD
