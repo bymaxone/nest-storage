@@ -37,6 +37,11 @@ note on each entry is the compatibility contract — read it, not the number.
   aborted: one with a declared `size` below the multipart threshold while it was being sent, and one a custom validator
   had read with `readBytes`. The upload now fails: `STORAGE_PROVIDER_ERROR` in one request,
   `STORAGE_MULTIPART_ABORTED` in parts.
+- An old-style stream, one with no boolean `destroyed` property, that closed before its end could be waited for, and
+  with a pre-upload scanner none could be stored. It is now resumed and read through `Readable.prototype.wrap`: a close
+  before the end or an error fails the upload. So does a `'close'` that follows the `'end'` before the library has read
+  the stream. One with no declared `size`, no `validation.maxSizeBytes` and no validator reading it was refused
+  before; it is no longer refused for being old-style.
 - With a pre-upload scanner, a stream longer than its declared `size` could be answered `STORAGE_PROVIDER_ERROR` or
   `STORAGE_VALIDATION_FAILED`. It is now refused with `STORAGE_SIZE_EXCEEDED`, as with no scanner.
 
@@ -45,9 +50,6 @@ note on each entry is the compatibility contract — read it, not the number.
 - A stream that had already been read to its end when the upload began is now refused, like one that was destroyed or
   errored; with no declared `size` it was stored as an empty object. An empty stream that nothing has read yet, and an
   empty `Buffer`, are still stored as empty objects.
-- An old-style stream, one with no boolean `destroyed` property, is now refused with `STORAGE_VALIDATION_FAILED`
-  (`details.field: 'body'`) before any request. It was not a Node `Readable`: one that closed early could be waited for,
-  and one that delivered all its bytes could be stored.
 
 **Apply to a derived backend:** nothing to change to compile. A caller that declares a `size` larger than the stream
 delivers, at or above the multipart threshold, now gets an error; pass the true size, or none. Objects already stored
@@ -56,7 +58,7 @@ from a short stream keep their length: `head()` reports it. A stream that was al
 and also when it never held a byte; to store an empty object, pass an unread stream or an empty `Buffer`. Code that
 matched a stream's own error from an upload with a pre-upload scanner now receives a `StorageException`. With such a
 scanner, a stream longer than its declared `size` is `STORAGE_SIZE_EXCEEDED` also when it passes
-`validation.maxSizeBytes`. A caller that passes an old-style stream pipes it into a `PassThrough` and passes that. No
+`validation.maxSizeBytes`. No
 public declaration changes.
 
 ## [1.1.25] - 2026-11-27

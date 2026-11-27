@@ -15,6 +15,7 @@ import { mapMultipartError } from '../errors/multipart-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
 import {
+  asReadable,
   destroyStream,
   holdSource,
   isBufferLike,
@@ -28,7 +29,7 @@ import { verdictOf } from './settle-or-cut'
  * Brings an untyped body to bytes: a string becomes its UTF-8 bytes and an `ArrayBuffer` or other
  * view becomes a `Buffer`. A buffer has one size, its own length, which replaces any size the
  * caller declared, so the limit check, the strategy, `Content-Length` and the result agree. A
- * stream is taken hold of here, before anything is awaited (see `holdSource`).
+ * stream is taken hold of here, before anything is awaited (see `asReadable` and `holdSource`).
  *
  * @param options - The upload request as the caller passed it.
  * @returns The request with its body in an accepted shape and a buffer's size set to its length.
@@ -38,9 +39,9 @@ export function withBytesBody(options: UploadOptions): UploadOptions {
   if (isBufferLike(body)) {
     return withFields(options, { body, size: body.byteLength })
   }
-  // A stream that is still live is returned as it was given, and so is the request.
-  const held = holdSource(body)
-  return held === body ? options : withFields(options, { body: held })
+  // A live stream with a `destroyed` flag is returned as it was given, and so is the request.
+  const held = holdSource(asReadable(body))
+  return held === options.body ? options : withFields(options, { body: held })
 }
 
 /**

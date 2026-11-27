@@ -98,6 +98,28 @@ export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream
 }
 
 /**
+ * Brings an old-style stream, one with no boolean `destroyed` property, to a Node `Readable` with
+ * Node's own converter, so that its end, error and close are heard from the call on. The source is
+ * resumed, since one such as `form-data` delivers nothing until then. A `'close'` that follows the
+ * end before the wrapper was read fails the upload, as the converter drops what it still holds.
+ *
+ * @param source - The caller's stream.
+ * @returns `source` itself when it has the flag, otherwise the `Readable` that reads it.
+ */
+export function asReadable(source: NodeJS.ReadableStream): NodeJS.ReadableStream {
+  if (typeof (source as Partial<Readable>).destroyed === 'boolean') {
+    return source
+  }
+  const wrapper = new Readable().wrap(source)
+  // An upload that gives the wrapper up before the end releases the source too.
+  wrapper.once('close', () => {
+    if (!wrapper.readableEnded) destroyStream(source)
+  })
+  source.resume()
+  return wrapper
+}
+
+/**
  * Emitted by a stream that stands for a source, when that source closed before its end with no error
  * to report, so that whoever sends it stops waiting. An event of its own: an `'error'` on a request
  * body reaches the SDK's wrappers of it.
@@ -380,19 +402,17 @@ export function toUploadBody(body: unknown): UploadBody {
     return Buffer.from(body.buffer, body.byteOffset, body.byteLength)
   }
   const stream = body as
-    | { pipe?: unknown; on?: unknown; once?: unknown; pause?: unknown; resume?: unknown; destroyed?: unknown }
+    | { pipe?: unknown; on?: unknown; once?: unknown; pause?: unknown; resume?: unknown }
     | null
     | undefined
   // The surface this library drives: `pipe`, the event methods, and `pause`/`resume` for backpressure. An
   // object without them is not a stream, and one that merely looks like it would be waited on until the timeout.
-  // So would an old-style stream: with no `destroyed` flag, a close before its end cannot be told apart.
   const readable =
     typeof stream?.pipe === 'function' &&
     typeof stream.on === 'function' &&
     typeof stream.once === 'function' &&
     typeof stream.pause === 'function' &&
-    typeof stream.resume === 'function' &&
-    typeof stream.destroyed === 'boolean'
+    typeof stream.resume === 'function'
   if (!(body instanceof Uint8Array) && !readable) {
     // A Blob, an array of chunks or any other object is not a body the SDK can send; refusing it here gives
     // the caller a validation error instead of a failure that blames the multipart upload.

@@ -3,8 +3,8 @@
  * guards, sizing, the memory-bounded peek/tee, and the buffer-to-stream adapter.
  * @layer server/utils
  */
-import { EventEmitter } from 'node:events'
-import { PassThrough, Readable } from 'node:stream'
+import { EventEmitter, once } from 'node:events'
+import { PassThrough, Readable, Stream } from 'node:stream'
 import {
   destroyStream,
   readStreamUpTo,
@@ -15,6 +15,7 @@ import {
   peekFirstBytes,
   readStream,
   toUploadBody,
+  asReadable,
 } from './stream-utils'
 
 /** Drains a stream to a string, normalizing string/Buffer chunks. */
@@ -694,5 +695,56 @@ describe('stream-utils', () => {
         expect(released()).toBe(1)
       })
     })
+  })
+})
+
+describe('asReadable', () => {
+  const oldStyle = (extra: object = {}): Stream =>
+    Object.assign(new Stream(), {
+      readable: true,
+      pause: () => undefined,
+      resume: () => undefined,
+      ...extra,
+    })
+
+  // A stream with the flag is what the library already follows: it is not wrapped.
+  it('returns a stream with a destroyed flag as it was given', () => {
+    for (const source of [new Readable({ read: () => undefined }), new PassThrough()]) {
+      expect(asReadable(source)).toBe(source)
+    }
+  })
+
+  // The wrapper is a Node Readable that delivers what the old-style source delivers.
+  it('reads an old-style source through a Readable, resuming it', async () => {
+    const source: Stream = oldStyle({
+      resume: () => {
+        source.emit('data', Buffer.from('abc'))
+        source.emit('end')
+      },
+    })
+
+    const wrapper = asReadable(source as unknown as NodeJS.ReadableStream)
+
+    expect(wrapper).toBeInstanceOf(Readable)
+    await expect(readStream(wrapper)).resolves.toEqual(Buffer.from('abc'))
+  })
+
+  // An upload that gives the wrapper up releases the caller's source; a finished one is left alone.
+  it('destroys the source only when the wrapper closes before its end', async () => {
+    const destroy = jest.fn()
+    const given = asReadable(
+      oldStyle({ destroy }) as unknown as NodeJS.ReadableStream,
+    ) as unknown as Readable
+    given.destroy()
+    await once(given, 'close')
+    expect(destroy).toHaveBeenCalledTimes(1)
+
+    destroy.mockClear()
+    const source = oldStyle({ destroy })
+    const finished = asReadable(source as unknown as NodeJS.ReadableStream) as unknown as Readable
+    finished.resume()
+    source.emit('end')
+    await once(finished, 'close')
+    expect(destroy).not.toHaveBeenCalled()
   })
 })
