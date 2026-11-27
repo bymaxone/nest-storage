@@ -7,7 +7,7 @@
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { PassThrough, Readable } from 'node:stream'
+import { PassThrough, Readable, Stream } from 'node:stream'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { BymaxStorageModule } from '../bymax-storage.module'
 import type { StorageException } from '../errors/storage-exception'
@@ -524,9 +524,53 @@ describe('an upload of a stream in each state it can be in', () => {
   })
 
   /**
-   * A `'close'` the caller emits on a live stream does not lose the source: its bytes are stored, and a
-   * destroy that follows is still noticed. A scan reading such a stream itself is left out, as Node's
-   * iterator takes the event for the end.
+   * An old-style stream has no `destroyed` property to read, so its `'close'` before its end is the
+   * only sign that the rest will not come.
+   */
+  it.each(
+    Object.entries(PATHS).flatMap(([path, through]) =>
+      [3, 12 * MIB, undefined].map((size) => [path, size, through] as const),
+    ),
+  )('settles when an old-style stream closes early, through %s (declared %s)', async (_path, size, through) => {
+    const body = Object.assign(new Stream(), {
+      readable: true,
+      pause: () => undefined,
+      resume: () => undefined,
+    })
+    // After the upload has subscribed: such a stream keeps nothing for a late listener.
+    setTimeout(() => {
+      body.emit('data', Buffer.from('a'))
+      body.emit('close')
+    }, 50)
+    const storage = await storageWith(
+      {
+        name: 'magic',
+        validate: async ({ readBytes }) => {
+          if (through.reads) await readBytes?.(2)
+          return { ok: true }
+        },
+      },
+      20 * MIB,
+      through.scan,
+    )
+
+    await expect(
+      storage
+        .upload({
+          key: 'k',
+          body: body as unknown as Readable,
+          contentType: 'text/plain',
+          ...(size === undefined ? {} : { size }),
+        })
+        .then(() => `stored ${stored.join(',')}`, code),
+    ).resolves.toBe(size === 3 ? provider : aborted)
+    expect(stored).toEqual([])
+  })
+
+  /**
+   * A `'close'` emitted by hand does not lose a live source. One that had already been given its end
+   * is stored whole; on one that had not, a destroy that follows is still noticed. A scan reading
+   * such a stream itself is left out, as Node's iterator takes the event for the end.
    */
   it.each(
     Object.entries(PATHS)

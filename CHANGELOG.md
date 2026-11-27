@@ -37,6 +37,8 @@ note on each entry is the compatibility contract — read it, not the number.
   aborted: one with a declared `size` below the multipart threshold while it was being sent, and one a custom validator
   had read with `readBytes`. The upload now fails: `STORAGE_PROVIDER_ERROR` in one request,
   `STORAGE_MULTIPART_ABORTED` in parts.
+- A stream with no `destroyed` property (an old-style stream) that closed before its end could be waited for. The upload
+  now fails: `STORAGE_PROVIDER_ERROR` in one request, `STORAGE_MULTIPART_ABORTED` in parts.
 - With a pre-upload scanner, a stream longer than its declared `size` could be answered `STORAGE_PROVIDER_ERROR` or
   `STORAGE_VALIDATION_FAILED`. It is now refused with `STORAGE_SIZE_EXCEEDED`, as with no scanner.
 

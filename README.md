@@ -370,6 +370,13 @@ Uploads are automatically routed to multipart when `size >= multipart.thresholdB
 
 **The library owns a `Readable` once you pass it to `upload()`**, as with `stream.pipeline`. When the upload is rejected for any reason, the stream is destroyed without an error, which releases the file handle or socket behind it: a listener on the stream sees `'close'`, and the failure is the rejection of `upload()`. A call answered from the idempotency cache destroys the stream unread. Do not reuse a stream you passed in; open a new one to retry. No listener on the stream is needed to avoid an unhandled `'error'` event. One limit: where a size cap reads your stream through Node's `stream.pipeline`, that function calls your stream's `destroy()` itself and ignores what it returns, so a `destroy()` of your own that returns a rejected promise goes unhandled there. The one exception is a call the runtime guard refuses at its start, because the runtime differs from what it was at load (for example code in the same process added a property to `Object.prototype`): it is refused before the library owns the body, so the stream is untouched and you still own it.
 
+### Known limits of a stream body
+
+Two kinds of source can leave an upload unsettled. Pass an `abortSignal` (see [Cancelling a call](#cancelling-a-call-abortsignal)) to end it with `STORAGE_REQUEST_ABORTED`.
+
+- A source that calls `push(null)` and then `destroy()` inside its `read()`, uploaded with no `size` or with one at or above the multipart threshold, when no custom validator reads it.
+- A source created with `emitClose: false` and destroyed with no error during the upload: it reports nothing to wait for.
+
 ### Idempotency
 
 ```typescript

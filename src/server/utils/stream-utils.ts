@@ -107,7 +107,8 @@ export const SOURCE_LOST = Symbol('source-lost')
 /**
  * Calls `lost` when a source is destroyed before its end, which with no error to report only its
  * `'close'` says. Node marks a stream destroyed before it closes it, so a `'close'` emitted by hand on
- * a live source is not a loss. Every `'close'` is heard, since a real one may follow such a one.
+ * a live source is not a loss. An old-style stream has no such mark, so its `'close'` counts. Every
+ * `'close'` is heard, since a real one may follow one emitted by hand.
  * `lost` may be called again, and after an error the caller already handled.
  *
  * @param source - The caller's stream.
@@ -120,7 +121,7 @@ export function onSourceLost(
   lost: () => void,
 ): void {
   source.on('close', () => {
-    if ((source as Partial<Readable>).destroyed === true && !ended()) lost()
+    if ((source as Partial<Readable>).destroyed !== false && !ended()) lost()
   })
 }
 
