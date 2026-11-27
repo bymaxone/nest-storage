@@ -90,8 +90,7 @@ export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream
   if (failed) {
     return failed
   }
-  // Destroyed without an error, as `destroyStream` explains. One `NodeJS.ReadableStream` shape or
-  // another may lack `once`; there is nothing to watch then.
+  // Destroyed without an error, as `destroyStream` explains.
   ;(source as Partial<Readable>).once?.('error', () => {
     destroyStream(source)
   })
@@ -105,8 +104,8 @@ export function prematureClose(): Error {
 
 /**
  * A stream that has already failed, to stand for a source whose bytes are past: one that ended (they
- * went to whoever read it), failed or was destroyed. Its `'data'`, `'end'` and `'error'` are past or
- * will not come. It carries the source's own error when there is one. `undefined` for any other
+ * went to whoever read it), failed or was destroyed. A wait for its events may never end.
+ * It carries the source's own error when there is one. `undefined` for any other
  * source, one without these Node properties included.
  */
 function failedInPlaceOf(source: NodeJS.ReadableStream): PassThrough | undefined {

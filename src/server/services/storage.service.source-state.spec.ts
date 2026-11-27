@@ -309,9 +309,8 @@ describe('an upload of a stream in each state it can be in', () => {
   }
 
   /**
-   * Every state against every size shape, on every path that reads the stream. The validator reads
-   * twice, so the second read starts from the replacement the first one left, and each read must
-   * settle. A source that failed is refused with the same code on every path.
+   * The validator reads twice, so the second read starts from the replacement the first one left,
+   * and each read must settle. A source that failed is refused with the same code on every path.
    */
   it.each(rows)(
     'settles through %s: a %s source with %s',
@@ -346,7 +345,7 @@ describe('an upload of a stream in each state it can be in', () => {
 
   /**
    * An error emitted while the library holds the stream and nothing reads it yet is past when the
-   * read begins. A stream that does not destroy itself, or an `emit` by hand, records nothing.
+   * read begins. An `emit` by hand records nothing.
    */
   it.each(
     Object.entries(PATHS).flatMap(([path, through]) =>
@@ -379,8 +378,8 @@ describe('an upload of a stream in each state it can be in', () => {
   )
 
   /**
-   * Only a source that was already consumed is refused: one that is empty and not yet read, and an
-   * empty buffer, are stored as empty objects, on the single-request and the multipart strategy.
+   * A source that is empty and not yet read, and an empty buffer, are stored as empty objects, on
+   * the single-request and the multipart strategy.
    */
   it.each(
     Object.entries(PATHS).flatMap(([path, through]) =>
