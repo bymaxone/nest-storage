@@ -189,6 +189,22 @@ describe('withExactSize', () => {
     expect(lost).toHaveBeenCalledTimes(times)
   })
 
+  it('keeps a source that ended and closed from counting as lost while its bytes are unread', async () => {
+    // A closed source is destroyed too, and only its `'end'` tells it apart from one that was cut.
+    const source = new PassThrough()
+    const guarded = withExactSize(source, 10)
+    const lost = jest.fn()
+    guarded.on(SOURCE_LOST, lost)
+    const closed = new Promise((resolve) => source.once('close', resolve))
+
+    source.end('0123456789')
+    await closed
+
+    expect(guarded.destroyed).toBe(false)
+    expect(lost).not.toHaveBeenCalled()
+    expect(await drain(guarded)).toEqual({ bytes: '0123456789', error: undefined })
+  })
+
   it('releases the source when the consumer destroys the guard', async () => {
     const source = new PassThrough()
     const guarded = withExactSize(source, 10)
