@@ -4,7 +4,7 @@
  * @layer server/utils
  */
 import { Transform, pipeline, type Readable } from 'node:stream'
-import { destroyStream, prematureClose } from './stream-utils'
+import { destroyStream, onSourceLost, prematureClose, SOURCE_LOST } from './stream-utils'
 
 /** Which bound a stream crossed: the configured maximum, or the size its caller declared. */
 export type SizeLimitKind = 'max' | 'declared'
@@ -75,6 +75,14 @@ export class SizeShortfallError extends Error {
   }
 }
 
+/** What the size guard does about a lost source: it says so, unless already failed, and closes. */
+function closeAsLost(guard: Transform): () => void {
+  return () => {
+    if (!guard.destroyed) guard.emit(SOURCE_LOST)
+    guard.destroy()
+  }
+}
+
 /**
  * Wraps a stream whose size the caller declared so that the provider is never handed an object of
  * another length. More than `declaredBytes` fails with {@link SizeLimitError} and fewer with
@@ -122,9 +130,7 @@ export function withExactSize(source: NodeJS.ReadableStream, declaredBytes: numb
   source.once('error', (err: unknown) => {
     guard.destroy(err instanceof Error ? err : new Error(String(err)))
   })
-  source.once('close', () => {
-    if (!ended) guard.destroy()
-  })
+  onSourceLost(source, () => ended, closeAsLost(guard))
   guard.once('close', () => {
     destroyStream(source)
   })

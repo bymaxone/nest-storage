@@ -7,7 +7,12 @@ import { once } from 'node:events'
 import { PassThrough, Readable } from 'node:stream'
 import type { StorageException } from '../errors/storage-exception'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
-import { assertScannedSize, boundStreamSize } from './upload-body'
+import {
+  assertScannedSize,
+  boundStreamSize,
+  bufferStreamForScan,
+  withBytesBody,
+} from './upload-body'
 
 const THRESHOLD = 1000
 const CONTEXT = { key: 'k', bucket: 'b' }
@@ -60,6 +65,15 @@ describe('assertScannedSize', () => {
         details: { field: 'size', declaredSize: declared, receivedSize: 10 },
       })
     }
+  })
+})
+
+describe('withBytesBody', () => {
+  /** A live stream needs no stand-in, so the caller's request is not copied. */
+  it('returns the request it was given for a live stream', () => {
+    const request = { key: 'k', body: new PassThrough(), contentType: 'text/plain' }
+
+    expect(withBytesBody(request)).toBe(request)
   })
 })
 
@@ -139,3 +153,26 @@ describe('boundStreamSize', () => {
   })
 })
 
+
+describe('bufferStreamForScan', () => {
+  const options = {
+    validation: { maxSizeBytes: 100 },
+    multipart: { thresholdBytes: THRESHOLD },
+  } as unknown as ResolvedBymaxStorageOptions
+
+  /**
+   * The runtime refusal raised while the stream is read is not a failure of the stream: it keeps its
+   * own code, whichever way the body would have been sent.
+   */
+  it.each([3, THRESHOLD])('keeps the runtime refusal as it is (declared %d)', async (declared) => {
+    const root = Object.prototype as unknown as Record<string, unknown>
+    root.plantedBeforeScanRead = true
+    try {
+      await expect(
+        bufferStreamForScan(Readable.from([Buffer.from('abc')]), CONTEXT, declared, options),
+      ).rejects.toMatchObject({ response: { error: { code: 'STORAGE_VALIDATION_FAILED' } } })
+    } finally {
+      Reflect.deleteProperty(root, 'plantedBeforeScanRead')
+    }
+  })
+})
