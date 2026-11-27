@@ -120,7 +120,6 @@ describe('bytes uploaded by a multipart upload', () => {
     uploaderSending([6 * MIB])
     const { service, tally } = serviceWithTally()
 
-    // A declared size at or above the multipart threshold takes the multipart path, which uploads a short stream as it is.
     await service.upload({
       key: 'a',
       body: Readable.from([Buffer.alloc(1)]),

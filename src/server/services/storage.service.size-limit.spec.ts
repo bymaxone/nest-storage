@@ -353,6 +353,23 @@ describe('upload size bound', () => {
     expect(putBodies).toEqual([])
   })
 
+  it.each([
+    ['a declared size', 12 * MIB, {}],
+    ['no declared size under a maximum', undefined, { validation: { maxSizeBytes: 100 * MIB } }],
+  ])('rejects a multipart source ended and destroyed unread, with %s', async (_how, size, limits) => {
+    const storage = await storageWith({ uploadIdleTimeoutMs: 0, ...limits })
+    const source = new PassThrough()
+    source.end('abc')
+    source.destroy()
+
+    const error: unknown = await storage
+      .upload({ key: 'k', body: source, contentType: 'text/plain', ...(size === undefined ? {} : { size }) })
+      .catch((err: unknown) => err)
+
+    expect(error).toMatchObject({ code: 'STORAGE_MULTIPART_ABORTED' })
+    expect(putBodies).toEqual([])
+  })
+
   describe('a single-shot stream whose declared size is wrong', () => {
     // A provider stores an object once it has received `Content-Length` bytes, so a 5000-byte stream declared
     // as 500 would leave a 500-byte object; the last byte is held back so that no request completes.
@@ -454,17 +471,65 @@ describe('upload size bound', () => {
       expect(putBodies).toEqual([Buffer.alloc(500, 1)])
     })
 
-    it('uploads a body shorter than a multipart-sized declared size, as a multipart upload', async () => {
+    it('refuses a body shorter than a multipart-sized declared size and sends nothing', async () => {
       const storage = await storageWith({ ...scanning, multipart: { thresholdBytes: 100, partSizeBytes: 5 * MIB } })
 
+      const error: unknown = await storage
+        .upload({ key: 'k', body: Readable.from([Buffer.alloc(120, 1)]), contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+      expect(detailsOf(error)).toMatchObject({ field: 'size', declaredSize: 500, receivedSize: 120 })
+      expect(calls).toEqual([])
+    })
+  })
+
+  describe('a multipart stream that ends before its declared size', () => {
+    // A connection that drops can end a stream cleanly and early, and the bytes that did arrive must
+    // not become the object. The single-shot path refuses such a body; both paths answer alike.
+    it('refuses a body smaller than one part with STORAGE_VALIDATION_FAILED, before any request', async () => {
+      const storage = await storageWith({ multipart: { thresholdBytes: 100, partSizeBytes: 5 * MIB } })
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: Readable.from([Buffer.alloc(120, 9)]), contentType: 'text/plain', size: 500 })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+      expect(detailsOf(error)).toMatchObject({ field: 'size', declaredSize: 500, receivedSize: 120 })
+      expect(detailsOf(error)).not.toHaveProperty('abort')
+      expect(calls).toEqual([])
+    })
+
+    it('aborts an upload whose parts have started, and never completes it', async () => {
+      const storage = await storageWith({})
+
+      const error: unknown = await storage
+        .upload({ key: 'cut.bin', body: mibStream(6).stream, size: 12 * MIB, contentType: 'application/octet-stream' })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({ code: 'STORAGE_VALIDATION_FAILED', status: 400 })
+      expect(detailsOf(error)).toMatchObject({
+        field: 'size',
+        declaredSize: 12 * MIB,
+        receivedSize: 6 * MIB,
+        abort: 'completed',
+      })
+      expect(calls).toContain('DELETE ?uploadId=u1')
+      expect(calls).not.toContain('POST ?uploadId=u1')
+    })
+
+    it('completes a body of exactly the declared size', async () => {
+      const storage = await storageWith({})
+
       const result = await storage.upload({
-        key: 'k',
-        body: Readable.from([Buffer.alloc(120, 1)]),
-        contentType: 'text/plain',
-        size: 500,
+        key: 'whole.bin',
+        body: mibStream(6).stream,
+        size: 6 * MIB,
+        contentType: 'application/octet-stream',
       })
 
-      expect(result.multipart).toBe(true)
+      expect(result).toMatchObject({ multipart: true, size: 6 * MIB })
+      expect(calls).toContain('POST ?uploadId=u1')
     })
   })
 

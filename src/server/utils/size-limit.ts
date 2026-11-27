@@ -20,10 +20,16 @@ export class SizeLimitError extends Error {
   }
 }
 
+/** The error Node reports for a stream that closed before its end. */
+function prematureClose(): Error {
+  return Object.assign(new Error('Premature close'), { code: 'ERR_STREAM_PREMATURE_CLOSE' })
+}
+
 /**
  * Wraps a stream so that reading more than `limitBytes` fails with {@link SizeLimitError}. Bytes
- * up to the limit pass through unchanged and the limit itself is allowed. On the failure, and on
- * any error of the source, the source is destroyed.
+ * up to the limit pass through unchanged and the limit itself is allowed. A `'declared'` limit is
+ * also the size the stream must reach: a source that ends before it fails with
+ * {@link SizeShortfallError}. On a failure, and on any error of the source, the source is destroyed.
  *
  * @param source - The caller's stream.
  * @param limitBytes - The most bytes the stream may deliver.
@@ -45,14 +51,25 @@ export function withSizeLimit(
       }
       callback(null, chunk)
     },
+    flush(callback) {
+      callback(kind === 'declared' && seen < limitBytes ? new SizeShortfallError(limitBytes, seen) : null)
+    },
   })
+  const { errored, destroyed, readableEnded } = source as Partial<Readable>
+  // `pipeline` waits without end on a source that ended and was destroyed before it was read.
+  if (destroyed && !errored && !readableEnded) {
+    guard.on('error', () => undefined)
+    guard.destroy(prematureClose())
+    destroyStream(source)
+    return guard
+  }
   // `pipeline` destroys the source when the guard fails, and keeps an error on either side from
   // surfacing as an unhandled 'error' event.
   pipeline(source, guard, () => undefined)
   return guard
 }
 
-/** Raised, as the read error of the exact-size stream, when the source ends before its declared size. */
+/** Raised, as the read error of a size-bounded stream, when the source ends before its declared size. */
 export class SizeShortfallError extends Error {
   constructor(
     readonly declaredBytes: number,
@@ -61,11 +78,6 @@ export class SizeShortfallError extends Error {
     super(`The upload body has ${String(receivedBytes)} bytes, fewer than the ${String(declaredBytes)} declared`)
     this.name = 'SizeShortfallError'
   }
-}
-
-/** The error Node reports for a stream that closed before its end. */
-function prematureClose(): Error {
-  return Object.assign(new Error('Premature close'), { code: 'ERR_STREAM_PREMATURE_CLOSE' })
 }
 
 /**

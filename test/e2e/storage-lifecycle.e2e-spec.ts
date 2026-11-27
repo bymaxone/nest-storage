@@ -6,7 +6,11 @@
  * @layer test/e2e
  */
 import { Test, type TestingModule } from '@nestjs/testing'
-import { PutBucketLifecycleConfigurationCommand, type S3Client } from '@aws-sdk/client-s3'
+import {
+  GetBucketLifecycleConfigurationCommand,
+  PutBucketLifecycleConfigurationCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
 import {
   BYMAX_STORAGE_S3_CLIENT,
   BucketLifecycleService,
@@ -102,6 +106,9 @@ describe('Storage E2E — bucket lifecycle', () => {
     await expect(lifecycle.remove('keep-reports')).resolves.toBe(true)
     await expect(lifecycle.remove('keep-tagged')).resolves.toBe(true)
     await expect(lifecycle.get()).resolves.toEqual([])
+    await expect(
+      rawClient.send(new GetBucketLifecycleConfigurationCommand({ Bucket: minio.bucket })),
+    ).rejects.toMatchObject({ name: 'NoSuchLifecycleConfiguration' })
   })
 
   it('answers a multipart-abort rule with the typed rejection MinIO documents, and changes nothing', async () => {
@@ -121,8 +128,11 @@ describe('Storage E2E — bucket lifecycle', () => {
   })
 
   it('rejects an invalid rule before reaching the server', async () => {
+    const sent = jest.spyOn(S3Client.prototype, 'send')
     await expect(
       lifecycle.upsert({ id: 'bad', prefix: 'p/', expirationDays: 0 }),
     ).rejects.toMatchObject({ code: 'STORAGE_LIFECYCLE_RULE_INVALID' })
+    expect(sent).not.toHaveBeenCalled()
+    sent.mockRestore()
   })
 })

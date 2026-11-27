@@ -6,6 +6,7 @@
  * @layer test/e2e
  */
 import { Readable } from 'node:stream'
+import { S3Client } from '@aws-sdk/client-s3'
 import { Test, type TestingModule } from '@nestjs/testing'
 import {
   BymaxStorageModule,
@@ -148,10 +149,13 @@ describe('Storage E2E — keyPrefix round trip, conditional reads, scanned strea
   })
 
   it('rejects a part count outside 1 to 10000 before any request', async () => {
+    const sent = jest.spyOn(S3Client.prototype, 'send')
     const error: unknown = await signedUrls
       .getMultipartUploadUrls({ key: 'mp.bin', contentType: 'application/octet-stream', parts: 10_001 })
       .catch((err: unknown) => err)
 
     expect(error).toMatchObject({ code: 'STORAGE_INVALID_PART_COUNT' })
+    expect(sent).not.toHaveBeenCalled()
+    sent.mockRestore()
   })
 })

@@ -291,3 +291,81 @@ describe('withExactSize on a source that had already failed', () => {
     },
   )
 })
+
+describe('withSizeLimit on a source that had already failed', () => {
+  // The same source states as for the exact-size guard, for a declared limit and for a bare maximum.
+  const lost = { message: 'Premature close', code: 'ERR_STREAM_PREMATURE_CLOSE' }
+  const own = { message: 'source failed' }
+  const turn = (): Promise<unknown> => new Promise((resolve) => setImmediate(resolve))
+
+  it.each([
+    ['destroyed', (s: PassThrough) => s.destroy(), lost],
+    ['destroyed with an error', (s: PassThrough) => s.destroy(new Error('source failed')), own],
+    ['ended and destroyed unread', (s: PassThrough) => s.end('abc').destroy(), lost],
+    ['written and destroyed unread', (s: PassThrough) => (s.write('abc'), s.destroy()), lost],
+  ])('fails a source %s, closed or not yet', async (_how, break_, expected) => {
+    for (const kind of ['declared', 'max'] as const) {
+      for (const closed of [false, true]) {
+        const source = new PassThrough()
+        source.once('error', () => undefined)
+        break_(source)
+        if (closed) await turn()
+        const errors: unknown[] = []
+        withSizeLimit(source, 500, kind).on('error', (err) => errors.push(err))
+
+        await turn()
+
+        expect(errors).toEqual([expect.objectContaining(expected)])
+      }
+    }
+  })
+
+  it('takes a source drained and then destroyed as ended', async () => {
+    const source = new PassThrough()
+    source.resume()
+    source.end('abc')
+    await new Promise((resolve) => source.once('end', resolve))
+    source.destroy()
+    const errors: unknown[] = []
+    const done: string[] = []
+    withSizeLimit(source, 500, 'declared').on('error', (err) => errors.push(err))
+    withSizeLimit(source, 500, 'max')
+      .on('end', () => done.push('end'))
+      .resume()
+
+    await turn()
+    await turn()
+
+    expect(errors).toEqual([expect.any(SizeShortfallError)])
+    expect(done).toEqual(['end'])
+  })
+})
+
+describe('withSizeLimit on a source that reports its error after it was destroyed', () => {
+  it.each(['declared', 'max'] as const)('hears the late error of a %s source', async (kind) => {
+    const source = new Readable({
+      read: () => undefined,
+      destroy: (_error, callback) => {
+        process.nextTick(callback, new Error('late'))
+      },
+    })
+    source.destroy()
+    const errors: unknown[] = []
+    withSizeLimit(source, 500, kind).on('error', (err) => errors.push(err))
+
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(errors).toEqual([expect.objectContaining({ code: 'ERR_STREAM_PREMATURE_CLOSE' })])
+    expect(source.errored).toMatchObject({ message: 'late' })
+  })
+  it('keeps the failure of a source destroyed unread from going unhandled when nobody reads the guard', async () => {
+    const source = new PassThrough()
+    source.end('abc')
+    source.destroy()
+
+    const guard = withSizeLimit(source, 500, 'declared')
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(guard.errored).toMatchObject({ code: 'ERR_STREAM_PREMATURE_CLOSE' })
+  })
+})
