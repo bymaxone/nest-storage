@@ -86,6 +86,8 @@ export async function peekFirstBytes(
  * @returns The stream to upload: `source` itself, or the failed one in its place.
  */
 export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream {
+  // Kept for as long as the stream lives: an error raised with nothing listening is uncaught.
+  ;(source as Partial<Readable>).on?.('error', () => undefined)
   const failed = failedInPlaceOf(source)
   if (failed) {
     return failed

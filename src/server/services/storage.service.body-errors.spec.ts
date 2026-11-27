@@ -73,6 +73,14 @@ const CASES: Record<string, Case> = {
     make: () => source(undefined, new Error('cleanup')),
     refused: true,
   },
+  'reports several errors at once': {
+    make: () =>
+      source((s) => {
+        s.emit('error', new Error('boom'))
+        s.emit('error', new Error('again'))
+        s.emit('error', new Error('more'))
+      }),
+  },
   'ends short of its declared size': {
     make: () => source((s) => s.push(null)),
     code: STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED,
