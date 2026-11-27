@@ -4,7 +4,7 @@
  * @layer server/utils
  */
 import { Transform, pipeline, type Readable } from 'node:stream'
-import { destroyStream } from './stream-utils'
+import { destroyStream, prematureClose } from './stream-utils'
 
 /** Which bound a stream crossed: the configured maximum, or the size its caller declared. */
 export type SizeLimitKind = 'max' | 'declared'
@@ -18,11 +18,6 @@ export class SizeLimitError extends Error {
     super(`The upload body is longer than ${String(limitBytes)} bytes`)
     this.name = 'SizeLimitError'
   }
-}
-
-/** The error Node reports for a stream that closed before its end. */
-function prematureClose(): Error {
-  return Object.assign(new Error('Premature close'), { code: 'ERR_STREAM_PREMATURE_CLOSE' })
 }
 
 /**

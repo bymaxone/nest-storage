@@ -21,7 +21,9 @@ note on each entry is the compatibility contract — read it, not the number.
 - A stream on the multipart path, with a declared `size` or a `validation.maxSizeBytes`, that had ended and been destroyed
   before it was read when the upload began was waited for. The upload now fails at once with
   `STORAGE_MULTIPART_ABORTED`.
-  Neither this entry nor the one above covers a custom validator that calls `readBytes`.
+- With a custom validator that calls `readBytes`, a stream that had been drained, destroyed or errored before the upload
+  began, or that its caller had paused, was waited for. Such an upload now ends as it does with no validator reading: a
+  paused stream is read, a drained one gives the validator no bytes, and a destroyed or errored one fails.
 - A stream on the multipart path that ended before its declared `size` was uploaded as a complete object, with a result
   whose `size` was the declared number. It is now refused as the single-request path refuses it:
   `STORAGE_VALIDATION_FAILED` (`details.field: 'size'`, `details.declaredSize`, `details.receivedSize`) and no object is
