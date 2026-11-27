@@ -39,8 +39,7 @@ note on each entry is the compatibility contract — read it, not the number.
   `STORAGE_MULTIPART_ABORTED` in parts.
 - An old-style stream, one with no boolean `destroyed` property, that closed before its end could be waited for, and
   with a pre-upload scanner none could be stored. It is now resumed and read through a `Readable`: a close before the
-  end or an error fails the upload. One with no declared `size`, no `validation.maxSizeBytes` and no validator reading it was refused
-  before; it is no longer refused for being old-style.
+  end or an error fails the upload.
 - With a pre-upload scanner, a stream longer than its declared `size` could be answered `STORAGE_PROVIDER_ERROR` or
   `STORAGE_VALIDATION_FAILED`. It is now refused with `STORAGE_SIZE_EXCEEDED`, as with no scanner.
 
