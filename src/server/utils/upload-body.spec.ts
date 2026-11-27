@@ -3,7 +3,7 @@
  * a body read into memory for a pre-upload scan is compared with the size its caller declared.
  * @layer server/utils
  */
-import { Readable } from 'node:stream'
+import { PassThrough, Readable } from 'node:stream'
 import type { StorageException } from '../errors/storage-exception'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import { assertScannedSize, boundStreamSize } from './upload-body'
@@ -85,6 +85,20 @@ describe('boundStreamSize', () => {
 
     expect(boundStreamSize(buffer, 5, options())).toBe(buffer)
     expect(boundStreamSize(stream, undefined, options())).toBe(stream)
+  })
+
+  it.each([
+    ['errored', new Error('source failed'), { message: 'source failed' }],
+    ['destroyed', undefined, { code: 'ERR_STREAM_PREMATURE_CLOSE' }],
+  ])('rejects a multipart-sized declared stream whose source was already %s', async (_state, cause, expected) => {
+    const source = new PassThrough()
+    source.once('error', () => undefined)
+    source.destroy(cause)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    const outcome = await read(boundStreamSize(source, THRESHOLD * 5, options()))
+
+    expect(outcome.error).toMatchObject(expected)
   })
 
   it('holds a single-shot stream to exactly its declared size: shorter fails with a shortfall, longer with a limit', async () => {
