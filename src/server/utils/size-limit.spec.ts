@@ -207,7 +207,7 @@ describe('withExactSize on a source that had already failed', () => {
     const source = new PassThrough()
     source.resume()
     source.end('abc')
-    await new Promise<void>((resolve) => source.once('end', () => resolve()))
+    await new Promise((resolve) => source.once('end', resolve))
     source.destroy()
     const errors: unknown[] = []
     withExactSize(source, 500).on('error', (err) => errors.push(err))
