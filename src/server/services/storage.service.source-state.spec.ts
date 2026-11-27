@@ -524,47 +524,52 @@ describe('an upload of a stream in each state it can be in', () => {
   })
 
   /**
-   * An old-style stream has no `destroyed` property to read, so its `'close'` before its end is the
-   * only sign that the rest will not come.
+   * An old-style stream has no `destroyed` flag and is not the Node `Readable` the library takes, so
+   * it is refused before anything reads it. A `Readable` driven the same way is stored.
    */
   it.each(
     Object.entries(PATHS).flatMap(([path, through]) =>
-      [3, 12 * MIB, undefined].map((size) => [path, size, through] as const),
+      (['closes early', 'delivers everything', 'is a Readable'] as const).map(
+        (then) => [path, then, through] as const,
+      ),
     ),
-  )('settles when an old-style stream closes early, through %s (declared %s)', async (_path, size, through) => {
-    const body = Object.assign(new Stream(), {
-      readable: true,
-      pause: () => undefined,
-      resume: () => undefined,
-    })
-    // After the upload has subscribed: such a stream keeps nothing for a late listener.
-    setTimeout(() => {
-      body.emit('data', Buffer.from('a'))
-      body.emit('close')
-    }, 50)
+  )('takes only a stream with a destroyed flag, through %s (one that %s)', async (_path, then, through) => {
+    const modern = then === 'is a Readable'
+    const body = modern
+      ? Readable.from([Buffer.from('abc')])
+      : Object.assign(new Stream(), {
+          readable: true,
+          pause: () => undefined,
+          resume: () => undefined,
+        })
+    if (!modern) {
+      setTimeout(() => {
+        body.emit('data', Buffer.from('abc'))
+        if (then === 'delivers everything') body.emit('end')
+        body.emit('close')
+      }, 20)
+    }
+    let validated = 0
     const storage = await storageWith(
       {
-        name: 'magic',
-        validate: async ({ readBytes }) => {
-          if (through.reads) await readBytes?.(2)
+        name: 'slow',
+        validate: async () => {
+          validated += 1
+          await new Promise((resolve) => setTimeout(resolve, 60))
           return { ok: true }
         },
       },
-      20 * MIB,
+      100,
       through.scan,
     )
 
     await expect(
       storage
-        .upload({
-          key: 'k',
-          body: body as unknown as Readable,
-          contentType: 'text/plain',
-          ...(size === undefined ? {} : { size }),
-        })
-        .then(() => `stored ${stored.join(',')}`, code),
-    ).resolves.toBe(size === 3 ? provider : aborted)
-    expect(stored).toEqual([])
+        .upload({ key: 'k', body: body as Readable, contentType: 'text/plain', size: 3 })
+        .then(() => 'stored', code),
+    ).resolves.toBe(modern ? 'stored' : refused)
+    expect(stored).toEqual(modern ? [3] : [])
+    expect(validated).toBe(modern ? 1 : 0)
   })
 
   /**

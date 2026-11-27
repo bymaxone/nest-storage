@@ -107,8 +107,7 @@ export const SOURCE_LOST = Symbol('source-lost')
 /**
  * Calls `lost` when a source is destroyed before its end, which with no error to report only its
  * `'close'` says. Node marks a stream destroyed before it closes it, so a `'close'` emitted by hand on
- * a live source is not a loss. An old-style stream has no such mark, so its `'close'` counts. Every
- * `'close'` is heard, since a real one may follow one emitted by hand.
+ * a live source is not a loss. Every `'close'` is heard, since a real one may follow such a one.
  * `lost` may be called again, and after an error the caller already handled.
  *
  * @param source - The caller's stream.
@@ -121,7 +120,7 @@ export function onSourceLost(
   lost: () => void,
 ): void {
   source.on('close', () => {
-    if ((source as Partial<Readable>).destroyed !== false && !ended()) lost()
+    if ((source as Partial<Readable>).destroyed === true && !ended()) lost()
   })
 }
 
@@ -381,17 +380,19 @@ export function toUploadBody(body: unknown): UploadBody {
     return Buffer.from(body.buffer, body.byteOffset, body.byteLength)
   }
   const stream = body as
-    | { pipe?: unknown; on?: unknown; once?: unknown; pause?: unknown; resume?: unknown }
+    | { pipe?: unknown; on?: unknown; once?: unknown; pause?: unknown; resume?: unknown; destroyed?: unknown }
     | null
     | undefined
   // The surface this library drives: `pipe`, the event methods, and `pause`/`resume` for backpressure. An
   // object without them is not a stream, and one that merely looks like it would be waited on until the timeout.
+  // So would an old-style stream: with no `destroyed` flag, a close before its end cannot be told apart.
   const readable =
     typeof stream?.pipe === 'function' &&
     typeof stream.on === 'function' &&
     typeof stream.once === 'function' &&
     typeof stream.pause === 'function' &&
-    typeof stream.resume === 'function'
+    typeof stream.resume === 'function' &&
+    typeof stream.destroyed === 'boolean'
   if (!(body instanceof Uint8Array) && !readable) {
     // A Blob, an array of chunks or any other object is not a body the SDK can send; refusing it here gives
     // the caller a validation error instead of a failure that blames the multipart upload.
