@@ -356,12 +356,14 @@ describe('an upload of a stream in each state it can be in', () => {
     async (_path, autoDestroy, through) => {
       const source = new Readable({ autoDestroy, read: () => undefined })
       source.push('abc')
+      const seen: string[] = []
       const storage = await storageWith(
         {
           name: 'slow',
-          validate: async () => {
+          validate: async ({ readBytes }) => {
             source.emit('error', new Error('boom'))
             await tick()
+            if (through.reads) seen.push(String(await readBytes?.(2)))
             return { ok: true }
           },
         },
@@ -374,6 +376,7 @@ describe('an upload of a stream in each state it can be in', () => {
       ).resolves.toBe(aborted)
       expect(source.destroyed).toBe(true)
       expect(stored).toEqual([])
+      expect(seen).toEqual(through.reads ? [''] : [])
     },
   )
 
