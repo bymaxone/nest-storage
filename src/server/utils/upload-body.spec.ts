@@ -7,7 +7,12 @@ import { once } from 'node:events'
 import { PassThrough, Readable } from 'node:stream'
 import type { StorageException } from '../errors/storage-exception'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
-import { assertScannedSize, boundStreamSize, bufferStreamForScan } from './upload-body'
+import {
+  assertScannedSize,
+  boundStreamSize,
+  bufferStreamForScan,
+  withBytesBody,
+} from './upload-body'
 
 const THRESHOLD = 1000
 const CONTEXT = { key: 'k', bucket: 'b' }
@@ -60,6 +65,15 @@ describe('assertScannedSize', () => {
         details: { field: 'size', declaredSize: declared, receivedSize: 10 },
       })
     }
+  })
+})
+
+describe('withBytesBody', () => {
+  /** A live stream needs no stand-in, so the caller's request is not copied. */
+  it('returns the request it was given for a live stream', () => {
+    const request = { key: 'k', body: new PassThrough(), contentType: 'text/plain' }
+
+    expect(withBytesBody(request)).toBe(request)
   })
 })
 
