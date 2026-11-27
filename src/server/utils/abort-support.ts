@@ -5,6 +5,7 @@
  * @layer server/utils
  */
 import { CreateMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3'
+import { PassThrough, type Readable } from 'node:stream'
 import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { assertAbortSignal } from './call-input'
@@ -222,28 +223,41 @@ async function waitUnlessAborted<T>(
  * would leave the request waiting for its timeout; the signal returned here aborts at once, and
  * `failure()` says what the body failed with so the caller can report that and not the abort.
  *
- * @param body - The body handed to the SDK.
+ * A stream is not handed to the SDK itself but through `body`, a relay that never errors, so an error
+ * of the source stays here and is not forwarded to streams the SDK wraps around its body.
+ *
+ * @param body - The body to upload.
  * @param signal - The caller's signal, if any.
- * @returns The signal to send with (the caller's when the body is not a stream) and the body's failure.
+ * @returns The body and signal to send with (both the caller's own when the body is not a stream) and
+ *   the body's failure.
  */
-export function abortOnBodyFailure(
-  body: unknown,
+export function abortOnBodyFailure<T>(
+  body: T,
   signal: AbortSignal | undefined,
-): { signal: AbortSignal | undefined; failure: () => unknown } {
-  const stream = body as Partial<NodeJS.ReadableStream> | null | undefined
+): { body: T | PassThrough; signal: AbortSignal | undefined; failure: () => unknown } {
+  const stream = body as Partial<Readable> | null | undefined
   if (typeof stream?.once !== 'function') {
-    return { signal, failure: () => undefined }
+    return { body, signal, failure: () => undefined }
   }
+  const source = stream as Readable
   const controller = new AbortController()
   let failure: unknown
-  stream.once('error', (err: unknown) => {
-    failure = err
+  const fail = (err: unknown): void => {
+    failure ??= err
+    controller.abort()
+  }
+  // Every error, not the first: one raised with nothing listening is uncaught.
+  source.on('error', fail)
+  source.once(SOURCE_LOST, () => {
     controller.abort()
   })
-  stream.once(SOURCE_LOST, () => {
-    controller.abort()
-  })
+  // A stream that failed or closed before this call may not report it again.
+  if (source.errored) fail(source.errored)
+  else if (source.destroyed && !source.readableEnded) controller.abort()
+  const relay = new PassThrough()
+  source.pipe(relay)
   return {
+    body: relay,
     signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
     failure: () => failure,
   }

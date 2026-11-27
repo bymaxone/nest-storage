@@ -76,6 +76,20 @@ export async function peekFirstBytes(
     : await verdictOf(teeAndPeek(body, maxBytes))
 }
 
+/** The streams whose later errors are already heard. */
+const HEARD = new WeakSet()
+
+/**
+ * Hears every later error of a stream for as long as it lives, since one raised with nothing
+ * listening is uncaught. One listener for each stream, however often this is asked. Anything
+ * without `on` is left alone.
+ */
+function hearErrors(stream: Partial<Readable>): void {
+  if (typeof stream.on !== 'function' || HEARD.has(stream)) return
+  HEARD.add(stream)
+  stream.on('error', () => undefined)
+}
+
 /**
  * Takes hold of a stream as an upload is handed it. One that already ended, failed or was destroyed
  * is replaced by a stream that has already failed. A live one is destroyed as soon as it reports an
@@ -86,6 +100,7 @@ export async function peekFirstBytes(
  * @returns The stream to upload: `source` itself, or the failed one in its place.
  */
 export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream {
+  hearErrors(source as Partial<Readable>)
   const failed = failedInPlaceOf(source)
   if (failed) {
     return failed
@@ -205,8 +220,8 @@ function failedInPlaceOf(source: NodeJS.ReadableStream): PassThrough | undefined
  * Readable and forwards the source's `'error'` to it; once a request has failed nothing listens to
  * that wrapper, so an error given here would crash the process from a stream this library cannot
  * reach. A close carries no error to forward. Destroying can still emit `'error'` when the stream's
- * own cleanup fails, so a no-op listener is attached first; the caller is already being rejected,
- * or has already been answered.
+ * own cleanup fails, so its errors are heard first (see `hearErrors`); the caller is already being
+ * rejected, or has already been answered.
  *
  * @param stream - The stream to release.
  */
@@ -216,7 +231,7 @@ export function destroyStream(stream: NodeJS.ReadableStream): void {
   if (!target) {
     return
   }
-  target.once?.('error', () => undefined)
+  hearErrors(target)
   const answered: unknown = target.destroy?.()
   // A host's own stream may answer with a promise. A Node stream answers with itself.
   if (answered !== target) {

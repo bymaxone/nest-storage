@@ -10,6 +10,7 @@ import {
   readStreamUpTo,
   bufferToReadable,
   getBodySize,
+  holdSource,
   isBufferLike,
   isReadable,
   peekFirstBytes,
@@ -589,10 +590,22 @@ describe('stream-utils', () => {
       expect(forwarded).not.toHaveBeenCalled()
     })
 
+    it('adds one error listener to a destroyed stream however often it is released', () => {
+      const failed = new Readable({ read() {} })
+      failed.destroy()
+      const before = failed.listenerCount('error')
+
+      holdSource(failed)
+      for (let call = 0; call < 12; call += 1) destroyStream(failed)
+
+      expect(failed.listenerCount('error') - before).toBe(1)
+    })
+
     it('ignores an absent body and a body that cannot be destroyed', () => {
       expect(() => {
         destroyStream(undefined as unknown as NodeJS.ReadableStream)
         destroyStream(Buffer.from('abc') as unknown as NodeJS.ReadableStream)
+        destroyStream('abc' as unknown as NodeJS.ReadableStream)
       }).not.toThrow()
     })
   })

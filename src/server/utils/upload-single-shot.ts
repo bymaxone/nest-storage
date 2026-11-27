@@ -49,12 +49,12 @@ export async function uploadSingleShot(
   // later read must not turn a stored object into a reported failure.
   const { onProgress, contentType, abortSignal } = options
   const total = options.size ?? getBodySize(options.body)
+  const watch = abortOnBodyFailure(normalizeSingleShotBody(options.body), abortSignal)
   const input: PutObjectCommandInput = {
     ...putObjectHeaders(options, context.options, finalKey, bucket),
-    Body: normalizeSingleShotBody(options.body),
+    Body: watch.body,
     ContentLength: total,
   }
-  const watch = abortOnBodyFailure(input.Body, abortSignal)
   try {
     const response = await verdictOf(
       context.s3Provider.getClient().send(new PutObjectCommand(input), sendOptions(watch.signal)),

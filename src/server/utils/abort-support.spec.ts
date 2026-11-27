@@ -202,6 +202,64 @@ describe('abort-support', () => {
       expect(watch.failure()).toBe(failure)
     })
 
+    it('hands the SDK a relay of the stream that carries its bytes', async () => {
+      const source = new PassThrough()
+      const watch = abortOnBodyFailure(source, undefined)
+      source.end('payload')
+
+      const chunks: Buffer[] = []
+      for await (const chunk of watch.body as AsyncIterable<Buffer>) chunks.push(chunk)
+
+      expect(watch.body).not.toBe(source)
+      expect(Buffer.concat(chunks).toString()).toBe('payload')
+      expect(watch.signal?.aborted).toBe(false)
+    })
+
+    it('keeps the first failure of a stream that reports two', () => {
+      const body = new PassThrough()
+      const watch = abortOnBodyFailure(body, undefined)
+      const first = new Error('first')
+
+      body.emit('error', first)
+      body.emit('error', new Error('second'))
+
+      expect(watch.failure()).toBe(first)
+    })
+
+    it('aborts at once, with the failure, for a stream that had already errored', () => {
+      const body = new PassThrough()
+      body.on('error', () => undefined)
+      const failure = new Error('earlier')
+      body.destroy(failure)
+
+      const watch = abortOnBodyFailure(body, undefined)
+
+      expect(watch.signal?.aborted).toBe(true)
+      expect(watch.failure()).toBe(failure)
+    })
+
+    it('aborts at once, with no failure, for a stream destroyed before its end', () => {
+      const body = new PassThrough()
+      body.destroy()
+
+      const watch = abortOnBodyFailure(body, undefined)
+
+      expect(watch.signal?.aborted).toBe(true)
+      expect(watch.failure()).toBeUndefined()
+    })
+
+    it('does not abort for a stream that was read to its end and destroyed', async () => {
+      const body = new PassThrough()
+      body.resume()
+      body.end()
+      await new Promise((resolve) => body.once('close', resolve))
+
+      const watch = abortOnBodyFailure(body, undefined)
+
+      expect(body.destroyed).toBe(true)
+      expect(watch.signal?.aborted).toBe(false)
+    })
+
     it('stays pending with no failure while the body is healthy', () => {
       const watch = abortOnBodyFailure(new PassThrough(), undefined)
 
