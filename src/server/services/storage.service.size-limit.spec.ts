@@ -7,7 +7,7 @@
  */
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo, Socket } from 'node:net'
-import { Readable } from 'node:stream'
+import { PassThrough, Readable } from 'node:stream'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { BymaxStorageModule } from '../bymax-storage.module'
 import type { BymaxStorageModuleOptions } from '../interfaces/storage-module-options.interface'
@@ -306,6 +306,51 @@ describe('upload size bound', () => {
     await expect(
       storage.upload({ key: 'edge.bin', body: stream, contentType: 'application/octet-stream' }),
     ).resolves.toMatchObject({ multipart: true })
+  })
+
+  describe('a declared stream whose source had already failed when the upload began', () => {
+    // The guard learns of a source through its events, and these are past by the time it is attached.
+    const failed = async (cause?: Error): Promise<PassThrough> => {
+      const source = new PassThrough()
+      source.once('error', () => undefined)
+      source.destroy(cause)
+      await new Promise((resolve) => setImmediate(resolve))
+      return source
+    }
+
+    it.each([
+      ['errored', 'single request', 500, undefined],
+      ['errored', 'single request, idle timer off', 500, 0],
+      ['destroyed', 'single request', 500, undefined],
+      ['destroyed', 'single request, idle timer off', 500, 0],
+      ['errored', 'multipart', 12 * MIB, 0],
+      ['destroyed', 'multipart', 12 * MIB, 0],
+    ])('rejects an already %s source (%s) instead of waiting for it', async (state, _path, size, idle) => {
+      const storage = await storageWith(idle === undefined ? {} : { uploadIdleTimeoutMs: idle })
+      const cause = state === 'errored' ? new Error('source failed') : undefined
+
+      const error: unknown = await storage
+        .upload({ key: 'k', body: await failed(cause), contentType: 'text/plain', size })
+        .catch((err: unknown) => err)
+
+      expect(error).toMatchObject({
+        code: size < 12 * MIB ? 'STORAGE_PROVIDER_ERROR' : 'STORAGE_MULTIPART_ABORTED',
+      })
+      expect(putBodies).toEqual([])
+    })
+  })
+
+  it('rejects a source destroyed in the same tick as the upload, before it has closed', async () => {
+    const storage = await storageWith({})
+    const source = new PassThrough()
+    source.destroy()
+
+    const error: unknown = await storage
+      .upload({ key: 'k', body: source, contentType: 'text/plain', size: 500 })
+      .catch((err: unknown) => err)
+
+    expect(error).toMatchObject({ code: 'STORAGE_PROVIDER_ERROR' })
+    expect(putBodies).toEqual([])
   })
 
   describe('a single-shot stream whose declared size is wrong', () => {

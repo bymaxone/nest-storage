@@ -63,6 +63,11 @@ export class SizeShortfallError extends Error {
   }
 }
 
+/** The error Node reports for a stream that closed before its end. */
+function prematureClose(): Error {
+  return Object.assign(new Error('Premature close'), { code: 'ERR_STREAM_PREMATURE_CLOSE' })
+}
+
 /**
  * Wraps a stream whose size the caller declared so that the provider is never handed an object of
  * another length. More than `declaredBytes` fails with {@link SizeLimitError} and fewer with
@@ -102,7 +107,8 @@ export function withExactSize(source: NodeJS.ReadableStream, declaredBytes: numb
   // library is releasing it), `pipeline` fails the guard with a premature-close error, which the SDK
   // forwards to its own wrappers of the body with nothing listening. Here the guard closes quietly
   // then, and an error of the source itself still fails the guard.
-  let ended = false
+  const { errored, destroyed, readableEnded } = source as Partial<Readable>
+  let ended = readableEnded === true
   source.once('end', () => {
     ended = true
   })
@@ -116,6 +122,9 @@ export function withExactSize(source: NodeJS.ReadableStream, declaredBytes: numb
     destroyStream(source)
   })
   guard.on('error', () => undefined)
+  // A source that failed before this call will not report it again, and one destroyed before its end
+  // was read has nothing more to give.
+  if (errored || (destroyed && !ended)) guard.destroy(errored ?? prematureClose())
   source.pipe(guard)
   return guard
 }
