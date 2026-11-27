@@ -114,7 +114,11 @@ export async function bufferStreamForScan(
     }
     throw strategy === 'multipart'
       ? mapMultipartError(err, { ...context, op: 'upload-multipart' })
-      : mapAwsError(err, { ...context, op: 'upload-single' })
+      : // The single request reports the abort of its send, not what the stream raised.
+        mapAwsError(new DOMException('The stream failed', 'AbortError'), {
+          ...context,
+          op: 'upload-single',
+        })
   }
   if (buffered === undefined) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {

@@ -414,6 +414,61 @@ describe('an upload of a stream in each state it can be in', () => {
     expect(stored).toEqual([0])
   })
 
+  /**
+   * Whatever the failing stream reports, a scan that reads it must answer as the upload does
+   * without one: the same code, status and details, on the single-request and multipart strategies.
+   */
+  it.each(
+    Object.entries({
+      'a reset connection': () => Object.assign(new Error('aborted'), { code: 'ECONNRESET' }),
+      'a timeout': () => new DOMException('timed out', 'TimeoutError'),
+      'an error named NotFound': () => Object.assign(new Error('gone'), { name: 'NotFound' }),
+    }).flatMap(([name, make]) =>
+      [3, undefined].flatMap((size) =>
+        [false, true].map((early) => [name, size, early, make] as const),
+      ),
+    ),
+  )('answers %s alike with and without a scan (declared %s, early %s)', async (_n, size, early, make) => {
+    const answer = async (scan: boolean): Promise<unknown> => {
+      let reads = 0
+      const body = new Readable({
+        read: () => {
+          reads += 1
+          if (reads > 1) return
+          body.push('ab')
+          if (!early) setImmediate(() => body.destroy(make()))
+        },
+      })
+      body.on('error', () => undefined)
+      if (early) body.destroy(make())
+      const storage = await storageWith(
+        { name: 'none', validate: () => Promise.resolve({ ok: true }) },
+        100,
+        scan,
+      )
+      const answered = await storage
+        .upload({
+          key: 'k',
+          body,
+          contentType: 'text/plain',
+          ...(size === undefined ? {} : { size }),
+        })
+        .then(String, (error: StorageException) => ({
+          status: error.getStatus(),
+          response: error.getResponse(),
+        }))
+      await moduleRef?.close()
+      return answered
+    }
+
+    // One module at a time: the helper keeps a single module to close.
+    const unscanned = await answer(false)
+    const scanned = await answer(true)
+
+    expect(unscanned).toMatchObject({ response: { error: { details: { key: 'k' } } } })
+    expect(scanned).toEqual(unscanned)
+  })
+
   /** A validator that rejects leaves the replacement with no reader, whose error must not go unheard. */
   it.each(['destroyed earlier', 'errored in the same tick'] as const)(
     'raises nothing unheard when the validator rejects a %s source',
