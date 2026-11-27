@@ -358,4 +358,14 @@ describe('withSizeLimit on a source that reports its error after it was destroye
     expect(errors).toEqual([expect.objectContaining({ code: 'ERR_STREAM_PREMATURE_CLOSE' })])
     expect(source.errored).toMatchObject({ message: 'late' })
   })
+  it('keeps the failure of a source destroyed unread from going unhandled when nobody reads the guard', async () => {
+    const source = new PassThrough()
+    source.end('abc')
+    source.destroy()
+
+    const guard = withSizeLimit(source, 500, 'declared')
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(guard.errored).toMatchObject({ code: 'ERR_STREAM_PREMATURE_CLOSE' })
+  })
 })

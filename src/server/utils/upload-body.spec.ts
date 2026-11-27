@@ -3,6 +3,7 @@
  * a body read into memory for a pre-upload scan is compared with the size its caller declared.
  * @layer server/utils
  */
+import { once } from 'node:events'
 import { PassThrough, Readable } from 'node:stream'
 import type { StorageException } from '../errors/storage-exception'
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
@@ -118,6 +119,17 @@ describe('boundStreamSize', () => {
 
     expect(shorter.error).toMatchObject({ name: 'SizeShortfallError', declaredBytes: THRESHOLD + 500, receivedBytes: 120 })
     expect(longer.error).toMatchObject({ name: 'SizeLimitError', kind: 'declared' })
+  })
+
+  it('passes a multipart-sized declared stream through as it arrives, holding nothing back', async () => {
+    const source = new PassThrough()
+    const guarded = boundStreamSize(source, THRESHOLD * 5, options()) as Readable
+    source.write(Buffer.alloc(100))
+
+    const [first] = (await once(guarded, 'data')) as [Buffer]
+
+    expect(first.byteLength).toBe(100)
+    source.destroy()
   })
 
   it('caps a stream with no declared size at the maximum', async () => {
