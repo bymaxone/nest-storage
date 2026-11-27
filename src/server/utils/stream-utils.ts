@@ -104,6 +104,26 @@ export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream
  */
 export const SOURCE_LOST = Symbol('source-lost')
 
+/**
+ * Calls `lost` when a source is destroyed before its end, which with no error to report only its
+ * `'close'` says. Node marks a stream destroyed before it closes it, so a `'close'` emitted by hand on
+ * a live source is not a loss. Every `'close'` is heard, since a real one may follow such a one.
+ * `lost` may be called again, and after an error the caller already handled.
+ *
+ * @param source - The caller's stream.
+ * @param ended - Whether the source reached its end.
+ * @param lost - What to do about the loss.
+ */
+export function onSourceLost(
+  source: NodeJS.ReadableStream,
+  ended: () => boolean,
+  lost: () => void,
+): void {
+  source.on('close', () => {
+    if ((source as Partial<Readable>).destroyed === true && !ended()) lost()
+  })
+}
+
 /** The error Node reports for a stream that closed before its end. */
 export function prematureClose(): Error {
   return Object.assign(new Error('Premature close'), { code: 'ERR_STREAM_PREMATURE_CLOSE' })
@@ -174,23 +194,14 @@ function releaseSourceOnEarlyClose(
 }
 
 /**
- * A source destroyed with no error reports only `'close'`. Both sides of a tee end then, and quietly:
- * an `'error'` on the upload side would reach whatever wraps the request body.
+ * What a tee does about a lost source: both sides end, and quietly, since an `'error'` on the upload
+ * side would reach whatever wraps the request body.
  */
-function endWithLostSource(
-  source: NodeJS.ReadableStream,
-  sourceEnded: () => boolean,
-  closePeek: () => void,
-  replacement: PassThrough,
-): void {
-  source.once('close', () => {
-    // A `'close'` the source emits by hand leaves it live, and its data still to come.
-    const { destroyed } = source as Partial<Readable>
-    if (destroyed && !sourceEnded()) {
-      closePeek()
-      replacement.destroy()
-    }
-  })
+function endQuietly(closePeek: () => void, replacement: PassThrough): () => void {
+  return () => {
+    closePeek()
+    replacement.destroy()
+  }
 }
 
 /**
@@ -240,7 +251,7 @@ async function teeAndPeek(
     uploadPT.end()
   })
   releaseSourceOnEarlyClose(source, uploadPT, () => sourceEnded)
-  endWithLostSource(source, () => sourceEnded, closePeek, uploadPT)
+  onSourceLost(source, () => sourceEnded, endQuietly(closePeek, uploadPT))
   source.on('error', (err: Error) => {
     // End the peek side gracefully so the head resolves with whatever arrived,
     // and surface the failure on the upload side for the consumer to handle.

@@ -521,20 +521,25 @@ describe('an upload of a stream in each state it can be in', () => {
   })
 
   /**
-   * A `'close'` the caller emits on a live stream does not lose the source: its bytes are stored. A
-   * scan reading such a stream itself is left out, as Node's iterator takes the event for the end.
+   * A `'close'` the caller emits on a live stream does not lose the source: its bytes are stored, and a
+   * destroy that follows is still noticed. A scan reading such a stream itself is left out, as Node's
+   * iterator takes the event for the end.
    */
-  it.each(Object.entries(PATHS).filter(([, through]) => through.reads || !through.scan))(
-    'stores a source that emits close without being destroyed, through %s',
-    async (_path, through) => {
-      let done = false
+  it.each(
+    Object.entries(PATHS)
+      .filter(([, through]) => through.reads || !through.scan)
+      .flatMap(([path, through]) => [3, undefined].map((size) => [path, size, through] as const)),
+  )('reads on past a hand-emitted close, through %s (declared %s)', async (_path, size, through) => {
+    for (const thenDestroyed of [false, true]) {
+      let reads = 0
       const body: Readable = new Readable({
         read: () => {
-          if (done) return
-          done = true
+          reads += 1
+          if (reads > 1) return
           body.push('abc')
-          body.push(null)
+          if (!thenDestroyed) body.push(null)
           body.emit('close')
+          if (thenDestroyed) setImmediate(() => body.destroy())
         },
       })
       const storage = await storageWith(
@@ -549,11 +554,21 @@ describe('an upload of a stream in each state it can be in', () => {
         through.scan,
       )
 
-      await storage.upload({ key: 'k', body, contentType: 'text/plain' })
+      const answered = await storage
+        .upload({
+          key: 'k',
+          body,
+          contentType: 'text/plain',
+          ...(size === undefined ? {} : { size }),
+        })
+        .then(() => 'stored', code)
 
+      const lost = size === undefined ? aborted : provider
+      expect(answered).toBe(thenDestroyed ? lost : 'stored')
       expect(stored).toEqual([3])
-    },
-  )
+      await moduleRef?.close()
+    }
+  })
 
   /**
    * A source that delivers more than its declared size is too long whatever it does next, and a
