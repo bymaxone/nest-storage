@@ -117,6 +117,28 @@ const STATES = {
 
 type StateName = keyof typeof STATES
 
+/** A drained source whose cleanup has not finished, and the call that makes the cleanup fail. */
+async function drainedWithCleanupPending(): Promise<{ source: Readable; fail: () => void }> {
+  let finish: (error: Error) => void = () => undefined
+  const source = new Readable({
+    read: () => undefined,
+    destroy: (_error, done) => {
+      finish = done
+    },
+  })
+  source.push('abc')
+  source.push(null)
+  source.resume()
+  await once(source, 'end')
+  await tick()
+  return {
+    source,
+    fail: () => {
+      finish(new Error('cleanup failed'))
+    },
+  }
+}
+
 const SHAPES = {
   'a declared size': { size: 3, maxSizeBytes: undefined },
   'a maximum only': { size: undefined, maxSizeBytes: 100 },
@@ -289,6 +311,19 @@ describe('peekFirstBytes on a spent source', () => {
 
     await expect(readStream(replacementBody as Readable)).rejects.toThrow('after EOF')
     expect(source.destroyed).toBe(true)
+  })
+
+  /** A drained source can still be cleaning up, and a failure of that must find a listener too. */
+  it('hears a cleanup failure of a drained source', async () => {
+    const { source, fail } = await drainedWithCleanupPending()
+
+    const { replacementBody } = await peekFirstBytes(source, 2)
+    fail()
+    await tick()
+    await tick()
+
+    expect(source.errored).toMatchObject({ message: 'cleanup failed' })
+    await expect(readStream(replacementBody as Readable)).resolves.toHaveLength(0)
   })
 
   /** A destroy that reports its error later must find a listener, or the process fails. */

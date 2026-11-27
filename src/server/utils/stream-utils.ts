@@ -93,6 +93,8 @@ function teeOfSpentSource(
   }
   const replacement = new PassThrough()
   if (readableEnded && !errored) {
+    // Its cleanup may still be pending, and a failure of that would otherwise go unheard.
+    source.once('error', () => undefined)
     replacement.end()
   } else {
     // No consumer may be attached yet (a validator can reject first); an unheard error would crash.
