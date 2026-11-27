@@ -13,6 +13,8 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+## [1.1.27] - 2026-11-27
+
 ### Fixed
 
 - An old-style stream, one with no boolean `destroyed` property, that closed before its end could be waited for, and
@@ -29,6 +31,10 @@ note on each entry is the compatibility contract — read it, not the number.
 - With `uploadIdleTimeoutMs` on (it follows `requestTimeoutMs` unless set), a source silent for that long during a
   pre-upload scan or a `readBytes` read is refused with `STORAGE_TIMEOUT` (`details.phase: 'source-idle'`). A source
   that pauses longer than that and then resumes used to be waited for; raise the value, or set `0` to wait as before.
+
+**Apply to a derived backend:** nothing to change to compile. If your upload source can pause for longer than
+`uploadIdleTimeoutMs` while a pre-upload scan or a `readBytes` read waits for it, raise the value or set `0`. No
+public declaration changes.
 
 ## [1.1.26] - 2026-11-27
 
@@ -1549,4 +1555,5 @@ have regressed from. They are kept because the reasoning is worth having.
 [1.1.24]: https://github.com/bymaxone/nest-storage/compare/v1.1.23...v1.1.24
 [1.1.25]: https://github.com/bymaxone/nest-storage/compare/v1.1.24...v1.1.25
 [1.1.26]: https://github.com/bymaxone/nest-storage/compare/v1.1.25...v1.1.26
-[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.26...HEAD
+[1.1.27]: https://github.com/bymaxone/nest-storage/compare/v1.1.26...v1.1.27
+[Unreleased]: https://github.com/bymaxone/nest-storage/compare/v1.1.27...HEAD
