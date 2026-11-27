@@ -15,7 +15,7 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ### Fixed
 
-- A stream with a declared `size` below the multipart threshold whose source had already errored or been destroyed when the
+- A stream with a declared `size` below the multipart threshold whose source had already been destroyed when the
   upload began was waited for, until the idle timeout or, with `uploadIdleTimeoutMs: 0`, until the caller aborted. The
   upload now fails at once.
 
