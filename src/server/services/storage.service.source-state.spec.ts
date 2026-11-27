@@ -7,7 +7,7 @@
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { PassThrough, Readable } from 'node:stream'
+import { PassThrough, Readable, Stream } from 'node:stream'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { BymaxStorageModule } from '../bymax-storage.module'
 import type { StorageException } from '../errors/storage-exception'
@@ -204,7 +204,10 @@ const PATHS = {
 }
 
 const SCANNING: Pick<BymaxStorageModuleOptions, 'scanner'> = {
-  scanner: { mode: 'pre-upload', impl: { scan: () => Promise.resolve({ status: 'clean', engine: 'none' }) } },
+  scanner: {
+    mode: 'pre-upload',
+    impl: { scan: () => Promise.resolve({ status: 'clean', engine: 'none' }) },
+  },
 }
 
 const refused = 'STORAGE_VALIDATION_FAILED'
@@ -236,9 +239,7 @@ const rows = Object.entries(PATHS).flatMap(([path, through]) =>
   Object.entries(SHAPES).flatMap(([shape, limits], column) =>
     (Object.keys(STATES) as StateName[])
       .filter(() => !through.scan || limits.scanned !== undefined)
-      .map(
-        (state) => [path, state, shape, through, limits, OUTCOMES[state][column]] as const,
-      ),
+      .map((state) => [path, state, shape, through, limits, OUTCOMES[state][column]] as const),
   ),
 )
 
@@ -431,46 +432,49 @@ describe('an upload of a stream in each state it can be in', () => {
         [false, true].map((early) => [name, size, early, make] as const),
       ),
     ),
-  )('answers %s alike with and without a scan (declared %s, early %s)', async (_n, size, early, make) => {
-    const answer = async (scan: boolean): Promise<unknown> => {
-      let reads = 0
-      const body = new Readable({
-        read: () => {
-          reads += 1
-          if (reads > 1) return
-          body.push('ab')
-          if (!early) setImmediate(() => body.destroy(make()))
-        },
-      })
-      body.on('error', () => undefined)
-      if (early) body.destroy(make())
-      const storage = await storageWith(
-        { name: 'none', validate: () => Promise.resolve({ ok: true }) },
-        100,
-        scan,
-      )
-      const answered = await storage
-        .upload({
-          key: 'k',
-          body,
-          contentType: 'text/plain',
-          ...(size === undefined ? {} : { size }),
+  )(
+    'answers %s alike with and without a scan (declared %s, early %s)',
+    async (_n, size, early, make) => {
+      const answer = async (scan: boolean): Promise<unknown> => {
+        let reads = 0
+        const body = new Readable({
+          read: () => {
+            reads += 1
+            if (reads > 1) return
+            body.push('ab')
+            if (!early) setImmediate(() => body.destroy(make()))
+          },
         })
-        .then(String, (error: unknown) => ({
-          status: (error as StorageException).getStatus(),
-          response: (error as StorageException).getResponse(),
-        }))
-      await moduleRef?.close()
-      return answered
-    }
+        body.on('error', () => undefined)
+        if (early) body.destroy(make())
+        const storage = await storageWith(
+          { name: 'none', validate: () => Promise.resolve({ ok: true }) },
+          100,
+          scan,
+        )
+        const answered = await storage
+          .upload({
+            key: 'k',
+            body,
+            contentType: 'text/plain',
+            ...(size === undefined ? {} : { size }),
+          })
+          .then(String, (error: unknown) => ({
+            status: (error as StorageException).getStatus(),
+            response: (error as StorageException).getResponse(),
+          }))
+        await moduleRef?.close()
+        return answered
+      }
 
-    // One module at a time: the helper keeps a single module to close.
-    const unscanned = await answer(false)
-    const scanned = await answer(true)
+      // One module at a time: the helper keeps a single module to close.
+      const unscanned = await answer(false)
+      const scanned = await answer(true)
 
-    expect(unscanned).toMatchObject({ response: { error: { details: { key: 'k' } } } })
-    expect(scanned).toEqual(unscanned)
-  })
+      expect(unscanned).toMatchObject({ response: { error: { details: { key: 'k' } } } })
+      expect(scanned).toEqual(unscanned)
+    },
+  )
 
   /**
    * A source destroyed with no error has nothing to report, and the upload must still end, with and
@@ -479,99 +483,154 @@ describe('an upload of a stream in each state it can be in', () => {
   it.each(
     Object.entries(PATHS).flatMap(([path, through]) =>
       [3, 12 * MIB, undefined].flatMap((size) =>
-        (['before the call', 'in a validator', 'mid-read', 'after the request is out'] as const).map(
-          (when) => [path, size, when, through] as const,
-        ),
+        (
+          ['before the call', 'in a validator', 'mid-read', 'after the request is out'] as const
+        ).map((when) => [path, size, when, through] as const),
       ),
     ),
-  )('settles a source destroyed with no error (%s, declared %s, %s)', async (_p, size, when, through) => {
-    let reads = 0
-    const body: Readable = new Readable({
-      read: () => {
-        reads += 1
-        if (reads > 1) return
-        body.push('ab')
-        if (when === 'mid-read') setImmediate(() => body.destroy())
-        if (when === 'after the request is out') setTimeout(() => body.destroy(), 100)
-      },
-    })
-    if (when === 'before the call') body.destroy()
-    const storage = await storageWith(
-      {
-        name: 'slow',
-        validate: async ({ readBytes }) => {
-          if (through.reads) await readBytes?.(2)
-          if (when === 'in a validator') body.destroy()
-          await tick()
-          return { ok: true }
-        },
-      },
-      20 * MIB,
-      through.scan,
-    )
-
-    await expect(
-      storage
-        .upload({
-          key: 'k',
-          body,
-          contentType: 'text/plain',
-          ...(size === undefined ? {} : { size }),
-        })
-        .then(String, code),
-    ).resolves.toBe(size === 3 ? provider : aborted)
-    expect(stored).toEqual([])
-  })
-
-  /**
-   * A `'close'` the caller emits on a live stream does not lose the source: its bytes are stored, and a
-   * destroy that follows is still noticed. A scan reading such a stream itself is left out, as Node's
-   * iterator takes the event for the end.
-   */
-  it.each(
-    Object.entries(PATHS)
-      .filter(([, through]) => through.reads || !through.scan)
-      .flatMap(([path, through]) => [3, undefined].map((size) => [path, size, through] as const)),
-  )('reads on past a hand-emitted close, through %s (declared %s)', async (_path, size, through) => {
-    for (const thenDestroyed of [false, true]) {
+  )(
+    'settles a source destroyed with no error (%s, declared %s, %s)',
+    async (_p, size, when, through) => {
       let reads = 0
       const body: Readable = new Readable({
         read: () => {
           reads += 1
           if (reads > 1) return
-          body.push('abc')
-          if (!thenDestroyed) body.push(null)
-          body.emit('close')
-          if (thenDestroyed) setImmediate(() => body.destroy())
+          body.push('ab')
+          if (when === 'mid-read') setImmediate(() => body.destroy())
+          if (when === 'after the request is out') setTimeout(() => body.destroy(), 100)
         },
       })
+      if (when === 'before the call') body.destroy()
       const storage = await storageWith(
         {
-          name: 'magic',
+          name: 'slow',
           validate: async ({ readBytes }) => {
             if (through.reads) await readBytes?.(2)
+            if (when === 'in a validator') body.destroy()
+            await tick()
             return { ok: true }
           },
         },
-        100,
+        20 * MIB,
         through.scan,
       )
 
-      const answered = await storage
-        .upload({
-          key: 'k',
-          body,
-          contentType: 'text/plain',
-          ...(size === undefined ? {} : { size }),
-        })
-        .then(() => 'stored', code)
+      await expect(
+        storage
+          .upload({
+            key: 'k',
+            body,
+            contentType: 'text/plain',
+            ...(size === undefined ? {} : { size }),
+          })
+          .then(String, code),
+      ).resolves.toBe(size === 3 ? provider : aborted)
+      expect(stored).toEqual([])
+    },
+  )
 
-      const lost = size === undefined ? aborted : provider
-      expect(answered).toBe(thenDestroyed ? lost : 'stored')
-      expect(stored).toEqual([3])
-      await moduleRef?.close()
-    }
+  /**
+   * An old-style stream has no `destroyed` flag. A `'close'` after its end changes nothing; one
+   * before the end, with a validator still running, ends the upload with an error.
+   * The source starts to deliver when it is resumed, as `form-data` does.
+   */
+  it.each(
+    Object.entries(PATHS).flatMap(([path, through]) =>
+      (['ends', 'ends and closes', 'closes early'] as const).map(
+        (then) => [path, then, through] as const,
+      ),
+    ),
+  )('settles an old-style source, through %s (one that %s)', async (_path, then, through) => {
+    let started = false
+    const body: Stream = Object.assign(new Stream(), {
+      readable: true,
+      pause: () => undefined,
+      resume: () => {
+        if (started) return
+        started = true
+        setTimeout(() => {
+          body.emit('data', Buffer.from(then === 'closes early' ? 'a' : 'abc'))
+          if (then !== 'closes early') body.emit('end')
+          if (then !== 'ends') body.emit('close')
+        }, 20)
+      },
+    })
+    const storage = await storageWith(
+      {
+        name: 'slow',
+        validate: async ({ readBytes }) => {
+          // A validator that reads has the bytes before the close; the others are still running then.
+          if (through.reads) await readBytes?.(then === 'closes early' ? 1 : 3)
+          await new Promise((resolve) => setTimeout(resolve, 60))
+          return { ok: true }
+        },
+      },
+      100,
+      through.scan,
+    )
+
+    const answered = await storage
+      .upload({ key: 'k', body: body as unknown as Readable, contentType: 'text/plain', size: 3 })
+      .then(() => 'stored', code)
+
+    const whole = then !== 'closes early'
+    expect(answered).toBe(whole ? 'stored' : provider)
+    expect(stored).toEqual(whole ? [3] : [])
   })
+
+  /**
+   * A `'close'` emitted by hand does not lose a live source. One that had already been given its end
+   * is stored whole; on one that had not, a destroy that follows is still noticed. A scan reading
+   * such a stream itself is left out, as Node's iterator takes the event for the end.
+   */
+  it.each(
+    Object.entries(PATHS)
+      .filter(([, through]) => through.reads || !through.scan)
+      .flatMap(([path, through]) => [3, undefined].map((size) => [path, size, through] as const)),
+  )(
+    'reads on past a hand-emitted close, through %s (declared %s)',
+    async (_path, size, through) => {
+      for (const thenDestroyed of [false, true]) {
+        let reads = 0
+        const body: Readable = new Readable({
+          read: () => {
+            reads += 1
+            if (reads > 1) return
+            body.push('abc')
+            if (!thenDestroyed) body.push(null)
+            body.emit('close')
+            if (thenDestroyed) setImmediate(() => body.destroy())
+          },
+        })
+        const storage = await storageWith(
+          {
+            name: 'magic',
+            validate: async ({ readBytes }) => {
+              if (through.reads) await readBytes?.(2)
+              return { ok: true }
+            },
+          },
+          100,
+          through.scan,
+        )
+
+        const answered = await storage
+          .upload({
+            key: 'k',
+            body,
+            contentType: 'text/plain',
+            ...(size === undefined ? {} : { size }),
+          })
+          .then(() => 'stored', code)
+
+        const lost = size === undefined ? aborted : provider
+        expect(answered).toBe(thenDestroyed ? lost : 'stored')
+        expect(stored).toEqual([3])
+        await moduleRef?.close()
+      }
+    },
+  )
 
   /**
    * A source that delivers more than its declared size is too long whatever it does next, and a
@@ -583,29 +642,32 @@ describe('an upload of a stream in each state it can be in', () => {
         (['ends', 'fails', 'is destroyed'] as const).map((then) => [scan, length, then] as const),
       ),
     ),
-  )('refuses a source over its declared size (scan %s, %s bytes, then %s)', async (scan, length, then) => {
-    let reads = 0
-    const body: Readable = new Readable({
-      read: () => {
-        reads += 1
-        if (reads > 1) return
-        body.push('a'.repeat(length))
-        if (then === 'ends') body.push(null)
-        else setImmediate(() => body.destroy(then === 'fails' ? new Error('boom') : undefined))
-      },
-    })
-    body.on('error', () => undefined)
-    const storage = await storageWith(
-      { name: 'none', validate: () => Promise.resolve({ ok: true }) },
-      100,
-      scan,
-    )
+  )(
+    'refuses a source over its declared size (scan %s, %s bytes, then %s)',
+    async (scan, length, then) => {
+      let reads = 0
+      const body: Readable = new Readable({
+        read: () => {
+          reads += 1
+          if (reads > 1) return
+          body.push('a'.repeat(length))
+          if (then === 'ends') body.push(null)
+          else setImmediate(() => body.destroy(then === 'fails' ? new Error('boom') : undefined))
+        },
+      })
+      body.on('error', () => undefined)
+      const storage = await storageWith(
+        { name: 'none', validate: () => Promise.resolve({ ok: true }) },
+        100,
+        scan,
+      )
 
-    await expect(
-      storage.upload({ key: 'k', body, contentType: 'text/plain', size: 3 }).then(String, code),
-    ).resolves.toBe('STORAGE_SIZE_EXCEEDED')
-    expect(stored).toEqual([])
-  })
+      await expect(
+        storage.upload({ key: 'k', body, contentType: 'text/plain', size: 3 }).then(String, code),
+      ).resolves.toBe('STORAGE_SIZE_EXCEEDED')
+      expect(stored).toEqual([])
+    },
+  )
 
   /** A validator that rejects leaves the replacement with no reader, whose error must not go unheard. */
   it.each(['destroyed earlier', 'errored in the same tick'] as const)(

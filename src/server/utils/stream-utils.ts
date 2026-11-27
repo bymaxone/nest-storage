@@ -10,7 +10,7 @@ import { StorageException } from '../errors/storage-exception'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { absorb } from './absorb'
 import { stepOf, verdictOf } from './settle-or-cut'
-import { assertCleanRoot, settles } from './prototype-guard'
+import { assertCleanRoot, settles, follow, INTRINSIC_PROMISE } from './prototype-guard'
 
 /** Every shape accepted as an upload body. */
 export type UploadBody = Buffer | NodeJS.ReadableStream | Uint8Array
@@ -58,11 +58,14 @@ export function getBodySize(body: UploadBody): number | undefined {
  *
  * @param body - The polymorphic upload body.
  * @param maxBytes - The maximum number of leading bytes to read.
+ * @param idleMs - Longest silence of a stream while its head is read; `0` waits without limit.
  * @returns The peeked head and the body to use for the upload.
+ * @throws StorageException `STORAGE_TIMEOUT` (`details.phase: 'source-idle'`) for a silent source.
  */
 export async function peekFirstBytes(
   body: UploadBody,
   maxBytes: number,
+  idleMs = 0,
 ): Promise<{ head: Buffer; replacementBody: UploadBody }> {
   if (isBufferLike(body)) {
     const buf = Buffer.isBuffer(body) ? body : Buffer.from(body)
@@ -73,11 +76,24 @@ export async function peekFirstBytes(
   const failed = failedInPlaceOf(body)
   return failed
     ? settles({ head: Buffer.alloc(0), replacementBody: failed })
-    : await verdictOf(teeAndPeek(body, maxBytes))
+    : await verdictOf(teeAndPeek(body, maxBytes, idleMs))
 }
+
+/** The engine's `Promise` constructor, captured at load, so a replaced global is not read. */
+const NativePromise: PromiseConstructor = INTRINSIC_PROMISE
 
 /** The streams whose later errors are already heard. */
 const HEARD = new WeakSet()
+
+/** The live streams already set to be destroyed on their first error. */
+const HELD = new WeakSet()
+
+/** Whether `stream` is new to `seen`, which it joins: so a listener is added once for each stream. */
+function firstTime(seen: WeakSet<object>, stream: object): boolean {
+  const first = !seen.has(stream)
+  seen.add(stream)
+  return first
+}
 
 /**
  * Hears every later error of a stream for as long as it lives, since one raised with nothing
@@ -85,8 +101,7 @@ const HEARD = new WeakSet()
  * without `on` is left alone.
  */
 function hearErrors(stream: Partial<Readable>): void {
-  if (typeof stream.on !== 'function' || HEARD.has(stream)) return
-  HEARD.add(stream)
+  if (typeof stream.on !== 'function' || !firstTime(HEARD, stream)) return
   stream.on('error', () => undefined)
 }
 
@@ -106,10 +121,60 @@ export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream
     return failed
   }
   // Destroyed without an error, as `destroyStream` explains.
-  ;(source as Partial<Readable>).once?.('error', () => {
-    destroyStream(source)
-  })
+  if (firstTime(HELD, source)) {
+    ;(source as Partial<Readable>).once?.('error', () => {
+      destroyStream(source)
+    })
+  }
   return source
+}
+
+/**
+ * Brings an old-style stream, one with no boolean `destroyed` property, to a Node `Readable`, so that
+ * its end, error and close are heard from the call on. An `'error'` is a loss, and a `'close'` one
+ * only before the end; Node's `Readable.prototype.wrap` destroys on every one, dropping the bytes it still holds. The
+ * source is resumed, since one such as `form-data` delivers nothing until then.
+ *
+ * @param source - The caller's stream.
+ * @returns `source` itself when it has the flag, otherwise the `Readable` that reads it.
+ */
+export function asReadable(source: NodeJS.ReadableStream): NodeJS.ReadableStream {
+  if (typeof (source as Partial<Readable>).destroyed === 'boolean') {
+    return source
+  }
+  let ended = false
+  let paused = false
+  const adapter = new Readable({
+    read: () => {
+      if (paused) {
+        paused = false
+        source.resume()
+      }
+    },
+    // An upload that gives the adapter up before the end releases the source too.
+    destroy: (error, done) => {
+      if (!ended) destroyStream(source)
+      done(error)
+    },
+  })
+  source.on('data', (chunk) => {
+    if (!adapter.push(chunk)) {
+      paused = true
+      source.pause()
+    }
+  })
+  source.on('end', () => {
+    ended = true
+    adapter.push(null)
+  })
+  // Both give the adapter up with no error: releasing the source can raise either, and an error then
+  // reaches a request body nothing listens to.
+  source.on('error', () => adapter.destroy())
+  source.on('close', () => {
+    if (!ended) adapter.destroy()
+  })
+  source.resume()
+  return adapter
 }
 
 /**
@@ -219,6 +284,57 @@ function endQuietly(closePeek: () => void, replacement: PassThrough): () => void
   }
 }
 
+/** Longest silence of a read, and what it rejects with. */
+interface SilenceBound {
+  ms: number
+  error: Error
+}
+
+/** No bound: with `ms` at `0` no clock starts, so the error is never used. */
+// Stryker disable next-line ObjectLiteral: with no `ms` no clock starts either.
+const UNBOUNDED: SilenceBound = { ms: 0, error: new Error() }
+
+interface Silence {
+  heard: () => void
+  stop: () => void
+}
+
+/**
+ * The clock of a source read ahead of any request, restarted by `heard()`: after `idleMs` of silence it
+ * calls `silent`. `0` starts none.
+ */
+function watchSilence(idleMs: number, silent: () => void): Silence {
+  const timer = idleMs > 0 ? setTimeout(silent, idleMs) : undefined
+  return {
+    heard: () => {
+      timer?.refresh()
+    },
+    stop: () => {
+      clearTimeout(timer)
+    },
+  }
+}
+
+/** Gives up the head of a silent source: the read of it rejects `STORAGE_TIMEOUT`, and nothing is sent. */
+function cutSilentPeek(peek: PassThrough, upload: PassThrough, idleMs: number): void {
+  const details = { op: 'upload', phase: 'source-idle', idleMs }
+  peek.destroy(new StorageException(STORAGE_ERROR_CODES.STORAGE_TIMEOUT, undefined, details))
+  upload.destroy()
+}
+
+/**
+ * The source's `'error'`: the peek side ends, so the head resolves with whatever arrived, and the
+ * failure is surfaced on the upload side for the consumer to handle.
+ */
+function failBothSides(closePeek: () => void, upload: PassThrough): (error: Error) => void {
+  return (error) => {
+    closePeek()
+    // No consumer may be attached yet (a validator can reject first); an unheard error would crash.
+    upload.once('error', () => undefined)
+    upload.destroy(error)
+  }
+}
+
 /**
  * Tees a source stream: the peek side receives at most `maxBytes`, the upload
  * side receives the full stream.
@@ -233,18 +349,25 @@ function endQuietly(closePeek: () => void, replacement: PassThrough): () => void
 async function teeAndPeek(
   source: NodeJS.ReadableStream,
   maxBytes: number,
+  idleMs: number,
 ): Promise<{ head: Buffer; replacementBody: UploadBody }> {
   const peekPT = new PassThrough()
   const uploadPT = new PassThrough()
   let peeked = 0
   let isPeekClosed = false
+  // Runs only while the head is awaited: the send that follows has clocks of its own.
+  const silence = watchSilence(idleMs, () => {
+    cutSilentPeek(peekPT, uploadPT, idleMs)
+  })
   const closePeek = (): void => {
     // Reached more than once; ending an ended PassThrough does nothing.
     isPeekClosed = true
+    silence.stop()
     peekPT.end()
   }
   source.on('data', (chunk: Buffer | string) => {
     const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
+    silence.heard()
     if (peeked < maxBytes) {
       const slice = buf.subarray(0, maxBytes - peeked)
       peekPT.write(slice)
@@ -267,14 +390,7 @@ async function teeAndPeek(
   })
   releaseSourceOnEarlyClose(source, uploadPT, () => sourceEnded)
   onSourceLost(source, () => sourceEnded, endQuietly(closePeek, uploadPT))
-  source.on('error', (err: Error) => {
-    // End the peek side gracefully so the head resolves with whatever arrived,
-    // and surface the failure on the upload side for the consumer to handle.
-    closePeek()
-    // No consumer may be attached yet (a validator can reject first); an unheard error would crash.
-    uploadPT.once('error', () => undefined)
-    uploadPT.destroy(err)
-  })
+  source.on('error', failBothSides(closePeek, uploadPT))
   // A `'data'` listener does not restart a source its caller had paused.
   source.resume()
   const head = await verdictOf(collectStream(peekPT))
@@ -330,24 +446,56 @@ export function bufferToReadable(buf: Buffer | Uint8Array): Readable {
 }
 
 /**
+ * Reads `source` through `take`, and gives it up after `idle.ms` with no chunk: it is destroyed and the
+ * read rejects with `idle.error`, without waiting for a `destroy()` that may never finish. `0` waits.
+ */
+function readUnlessSilent(
+  source: NodeJS.ReadableStream,
+  idle: SilenceBound,
+  take: (chunk: unknown) => boolean,
+): Promise<undefined> {
+  return new NativePromise<undefined>((resolve, reject) => {
+    const silence = watchSilence(idle.ms, () => {
+      reject(idle.error)
+      destroyStream(source)
+    })
+    const read = eachChunk(source, (chunk) => {
+      silence.heard()
+      return take(chunk)
+    })
+    // The clock is stopped first, however the read ends.
+    follow(read, silence.stop, silence.stop)
+    follow(
+      read,
+      () => {
+        resolve(undefined)
+      },
+      reject,
+    )
+  })
+}
+
+/**
  * Reads a stream into one `Buffer`, counting bytes as they arrive and stopping at
  * the first chunk that takes the total past `maxBytes`, so an oversized or endless
  * stream is never held in memory.
  *
  * @param source - The stream to drain.
  * @param maxBytes - The most bytes accepted.
+ * @param idle - Gives a source silent for `ms` up: it is destroyed and the read rejects with `error`.
  * @returns The whole body, or `undefined` when it is longer than `maxBytes` (the
  *   stream is destroyed in that case).
  */
 export async function readStreamUpTo(
   source: NodeJS.ReadableStream,
   maxBytes: number,
+  idle: SilenceBound = UNBOUNDED,
 ): Promise<Buffer | undefined> {
   const chunks: Buffer[] = []
   let total = 0
   let within = true as boolean
   await verdictOf(
-    eachChunk(source, (chunk) => {
+    readUnlessSilent(source, idle, (chunk) => {
       const buf = typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer)
       total += buf.byteLength
       within = total <= maxBytes

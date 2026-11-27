@@ -108,7 +108,9 @@ export class ValidationService {
     let body: UploadBody = input.body
     for (const validator of this.validators) {
       const readBytes = async (maxBytes: number): Promise<Buffer> => {
-        const { head, replacementBody } = await verdictOf(peekFirstBytes(body, maxBytes))
+        const { head, replacementBody } = await verdictOf(
+          peekFirstBytes(body, maxBytes, this.options.uploadIdleTimeoutMs),
+        )
         body = replacementBody
         return settles(head)
       }

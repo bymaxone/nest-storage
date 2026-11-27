@@ -600,6 +600,17 @@ describe('stream-utils', () => {
       expect(failed.listenerCount('error') - before).toBe(1)
     })
 
+    /** Holding one live stream many times adds the same listeners as holding it once. */
+    it('adds its listeners to a live stream once, however often it is held', () => {
+      const live = new PassThrough()
+      holdSource(live)
+      const once = live.listenerCount('error')
+
+      for (let held = 0; held < 11; held += 1) holdSource(live)
+
+      expect(live.listenerCount('error')).toBe(once)
+    })
+
     it('ignores an absent body and a body that cannot be destroyed', () => {
       expect(() => {
         destroyStream(undefined as unknown as NodeJS.ReadableStream)

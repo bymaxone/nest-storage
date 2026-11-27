@@ -5,6 +5,7 @@
  */
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
+import { SourceIdleError } from './idle-timeout'
 import { withExactSize, withSizeLimit } from './size-limit'
 import { pickUploadStrategy } from './upload-strategy'
 import { withFields } from './read-once'
@@ -15,6 +16,7 @@ import { mapMultipartError } from '../errors/multipart-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
 import {
+  asReadable,
   destroyStream,
   holdSource,
   isBufferLike,
@@ -28,7 +30,7 @@ import { verdictOf } from './settle-or-cut'
  * Brings an untyped body to bytes: a string becomes its UTF-8 bytes and an `ArrayBuffer` or other
  * view becomes a `Buffer`. A buffer has one size, its own length, which replaces any size the
  * caller declared, so the limit check, the strategy, `Content-Length` and the result agree. A
- * stream is taken hold of here, before anything is awaited (see `holdSource`).
+ * stream is taken hold of here, before anything is awaited (see `asReadable` and `holdSource`).
  *
  * @param options - The upload request as the caller passed it.
  * @returns The request with its body in an accepted shape and a buffer's size set to its length.
@@ -38,9 +40,9 @@ export function withBytesBody(options: UploadOptions): UploadOptions {
   if (isBufferLike(body)) {
     return withFields(options, { body, size: body.byteLength })
   }
-  // A stream that is still live is returned as it was given, and so is the request.
-  const held = holdSource(body)
-  return held === body ? options : withFields(options, { body: held })
+  // A live stream with a `destroyed` flag is returned as it was given, and so is the request.
+  const held = holdSource(asReadable(body))
+  return held === options.body ? options : withFields(options, { body: held })
 }
 
 /**
@@ -72,6 +74,19 @@ export function boundStreamSize(
     return withExactSize(body, declaredSize)
   }
   return withSizeLimit(body, limit, declaredSize === undefined ? 'max' : 'declared')
+}
+
+/** What `upload()` rejects with when the stream failed, or fell silent, while a scan read it. */
+function scanReadFailure(
+  err: unknown,
+  strategy: ReturnType<typeof pickUploadStrategy>,
+  context: Record<string, unknown>,
+): StorageException {
+  const op = strategy === 'multipart' ? 'upload-multipart' : 'upload-single'
+  // The single request reports the abort of its send, not what the stream raised.
+  return strategy === 'multipart' || err instanceof SourceIdleError
+    ? mapMultipartError(err, { ...context, op })
+    : mapAwsError(new DOMException(undefined, 'AbortError'), { ...context, op })
 }
 
 /**
@@ -107,19 +122,16 @@ export async function bufferStreamForScan(
   let buffered: Buffer | undefined
   try {
     // A declared size above the maximum is refused before this point, so it is the lower bound.
-    buffered = await verdictOf(readStreamUpTo(body, declaredSize ?? maxSizeBytes))
+    // No request is in flight while the stream is read here, so a silent source is given up by this clock.
+    const ms = options.uploadIdleTimeoutMs
+    const idle = { ms, error: new SourceIdleError(ms) }
+    buffered = await verdictOf(readStreamUpTo(body, declaredSize ?? maxSizeBytes, idle))
   } catch (err) {
     // A refusal of the runtime check is not a failure of the stream: it keeps its own code.
     if (isRootRefusal(err)) {
       throw err
     }
-    throw strategy === 'multipart'
-      ? mapMultipartError(err, { ...context, op: 'upload-multipart' })
-      : // The single request reports the abort of its send, not what the stream raised.
-        mapAwsError(new DOMException(undefined, 'AbortError'), {
-          ...context,
-          op: 'upload-single',
-        })
+    throw scanReadFailure(err, strategy, context)
   }
   if (buffered === undefined) {
     // Refused at the first byte over, as the send refuses it, whatever the stream would do next.
