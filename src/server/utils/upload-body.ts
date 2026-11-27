@@ -8,11 +8,15 @@ import type { UploadOptions } from '../interfaces/upload-options.interface'
 import { withExactSize, withSizeLimit } from './size-limit'
 import { pickUploadStrategy } from './upload-strategy'
 import { withFields } from './read-once'
+import { isRootRefusal } from './prototype-guard'
 import { declaredSizeMismatch } from '../errors/size-limit-exception'
+import { mapAwsError } from '../errors/aws-error-mapper'
+import { mapMultipartError } from '../errors/multipart-error-mapper'
 import { STORAGE_ERROR_CODES } from '../../shared/constants/error-codes.constants'
 import { StorageException } from '../errors/storage-exception'
 import {
   destroyStream,
+  holdSource,
   isBufferLike,
   readStreamUpTo,
   toUploadBody,
@@ -23,15 +27,20 @@ import { verdictOf } from './settle-or-cut'
 /**
  * Brings an untyped body to bytes: a string becomes its UTF-8 bytes and an `ArrayBuffer` or other
  * view becomes a `Buffer`. A buffer has one size, its own length, which replaces any size the
- * caller declared, so the limit check, the strategy, `Content-Length` and the result agree.
+ * caller declared, so the limit check, the strategy, `Content-Length` and the result agree. A
+ * stream is taken hold of here, before anything is awaited (see `holdSource`).
  *
  * @param options - The upload request as the caller passed it.
  * @returns The request with its body in an accepted shape and a buffer's size set to its length.
  */
 export function withBytesBody(options: UploadOptions): UploadOptions {
   const body = toUploadBody(options.body)
-  // A body that is not bytes is returned as it was given: `toUploadBody` hands back the same stream.
-  return isBufferLike(body) ? withFields(options, { body, size: body.byteLength }) : options
+  if (isBufferLike(body)) {
+    return withFields(options, { body, size: body.byteLength })
+  }
+  // A stream that is still live is returned as it was given, and so is the request.
+  const held = holdSource(body)
+  return held === body ? options : withFields(options, { body: held })
 }
 
 /**
@@ -68,18 +77,23 @@ export function boundStreamSize(
 /**
  * Reads a stream body into one `Buffer` so a pre-upload scan and the upload see the same bytes. A
  * stream with no bound is refused, and so is one longer than the bound; both release the stream.
+ * A stream that fails while it is read is reported as the upload that would have sent it reports it.
  *
  * @param body - The stream body.
  * @param context - The caller's own identifiers, for the error details (see `callDetails`).
- * @param maxSizeBytes - `validation.maxSizeBytes`, the bound on the buffer.
+ * @param declaredSize - The size the caller declared, if any.
+ * @param options - The resolved module options: `validation.maxSizeBytes` and the multipart threshold.
  * @returns The buffered body.
- * @throws StorageException `STORAGE_VALIDATION_FAILED` when there is no bound or the stream exceeds it.
+ * @throws StorageException `STORAGE_VALIDATION_FAILED` when there is no bound or the stream exceeds
+ *   it; `STORAGE_PROVIDER_ERROR` or `STORAGE_MULTIPART_ABORTED` when the stream fails.
  */
 export async function bufferStreamForScan(
   body: NodeJS.ReadableStream,
   context: Record<string, unknown>,
-  maxSizeBytes: number | undefined,
+  declaredSize: number | undefined,
+  options: ResolvedBymaxStorageOptions,
 ): Promise<Buffer> {
+  const maxSizeBytes = options.validation?.maxSizeBytes
   if (maxSizeBytes === undefined) {
     destroyStream(body)
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
@@ -88,7 +102,20 @@ export async function bufferStreamForScan(
         'Pre-upload scanning of a stream needs validation.maxSizeBytes to bound the buffer; set it or use scanner mode post-upload',
     })
   }
-  const buffered = await verdictOf(readStreamUpTo(body, maxSizeBytes))
+  // Read before the first byte: the strategy is the one the caller's stream would have been sent with.
+  const strategy = pickUploadStrategy(body, declaredSize, options.multipart.thresholdBytes)
+  let buffered: Buffer | undefined
+  try {
+    buffered = await verdictOf(readStreamUpTo(body, maxSizeBytes))
+  } catch (err) {
+    // A refusal of the runtime check is not a failure of the stream: it keeps its own code.
+    if (isRootRefusal(err)) {
+      throw err
+    }
+    throw strategy === 'multipart'
+      ? mapMultipartError(err, { ...context, op: 'upload-multipart' })
+      : mapAwsError(err, { ...context, op: 'upload-single' })
+  }
   if (buffered === undefined) {
     throw new StorageException(STORAGE_ERROR_CODES.STORAGE_VALIDATION_FAILED, undefined, {
       ...context,

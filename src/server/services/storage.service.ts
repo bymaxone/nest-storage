@@ -239,9 +239,8 @@ export class StorageService {
     // Validation pipeline: MIME → size → custom validators.
     const input = validationInput(options, finalKey)
     const validated = await abortable(this.validation.validate(input), signal, context)
-    // A stream cannot be read by the scanner and then sent: buffer it first, bounded.
     const scanned = await abortable(
-      this.bufferForPreUploadScan(validated.body, context),
+      this.bufferForPreUploadScan(validated.body, options.size, context),
       signal,
       context,
     )
@@ -263,6 +262,7 @@ export class StorageService {
    */
   private async bufferForPreUploadScan(
     body: UploadBody,
+    declaredSize: number | undefined,
     context: Record<string, unknown>,
   ): Promise<UploadBody> {
     if (!this.scanner.isEnabled() || this.scanner.getMode() !== 'pre-upload') {
@@ -273,9 +273,7 @@ export class StorageService {
     if (isBufferLike(body)) {
       return settles(Buffer.from(body))
     }
-    return await verdictOf(
-      bufferStreamForScan(body, context, this.options.validation?.maxSizeBytes),
-    )
+    return await verdictOf(bufferStreamForScan(body, context, declaredSize, this.options))
   }
 
   /** Runs a pre-upload scan when configured; throws on infected. */

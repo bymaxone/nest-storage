@@ -70,8 +70,32 @@ export async function peekFirstBytes(
   }
   // The tee attaches a data listener to the caller's stream, which starts it flowing, so the root is checked first.
   assertCleanRoot()
-  const spent = teeOfSpentSource(body)
-  return spent ? settles(spent) : await verdictOf(teeAndPeek(body, maxBytes))
+  const failed = failedInPlaceOf(body)
+  return failed
+    ? settles({ head: Buffer.alloc(0), replacementBody: failed })
+    : await verdictOf(teeAndPeek(body, maxBytes))
+}
+
+/**
+ * Takes hold of a stream as an upload is handed it. One that already ended, failed or was destroyed
+ * is replaced by a stream that has already failed. A live one is destroyed as soon as it reports an
+ * error, so that a read which subscribes afterwards finds it failed instead of waiting for events
+ * that are past.
+ *
+ * @param source - The caller's stream.
+ * @returns The stream to upload: `source` itself, or the failed one in its place.
+ */
+export function holdSource(source: NodeJS.ReadableStream): NodeJS.ReadableStream {
+  const failed = failedInPlaceOf(source)
+  if (failed) {
+    return failed
+  }
+  // Destroyed without an error, as `destroyStream` explains. One `NodeJS.ReadableStream` shape or
+  // another may lack `once`; there is nothing to watch then.
+  ;(source as Partial<Readable>).once?.('error', () => {
+    destroyStream(source)
+  })
+  return source
 }
 
 /** The error Node reports for a stream that closed before its end. */
@@ -80,29 +104,23 @@ export function prematureClose(): Error {
 }
 
 /**
- * The tee of a source that had already ended, failed or been destroyed, whose `'data'`, `'end'` and `'error'`
- * are past or will not come: nothing to peek, and a replacement that is already ended, or already failed with
- * the source's error. `undefined` for any other source, one without these Node properties included.
+ * A stream that has already failed, to stand for a source whose bytes are past: one that ended (they
+ * went to whoever read it), failed or was destroyed. Its `'data'`, `'end'` and `'error'` are past or
+ * will not come. It carries the source's own error when there is one. `undefined` for any other
+ * source, one without these Node properties included.
  */
-function teeOfSpentSource(
-  source: NodeJS.ReadableStream,
-): { head: Buffer; replacementBody: UploadBody } | undefined {
+function failedInPlaceOf(source: NodeJS.ReadableStream): PassThrough | undefined {
   const { errored, destroyed, readableEnded } = source as Partial<Readable>
   if (!errored && !destroyed && !readableEnded) {
     return undefined
   }
   const replacement = new PassThrough()
-  if (readableEnded && !errored) {
-    // Its cleanup may still be pending, and a failure of that would otherwise go unheard.
-    source.once('error', () => undefined)
-    replacement.end()
-  } else {
-    // No consumer may be attached yet (a validator can reject first); an unheard error would crash.
-    replacement.once('error', () => undefined)
-    replacement.destroy(errored ?? prematureClose())
-    destroyStream(source)
-  }
-  return { head: Buffer.alloc(0), replacementBody: replacement }
+  // No consumer may be attached yet (a validator can reject first); an unheard error would crash.
+  replacement.once('error', () => undefined)
+  replacement.destroy(errored ?? prematureClose())
+  // Also hears a cleanup of the source that fails later.
+  destroyStream(source)
+  return replacement
 }
 
 /**
