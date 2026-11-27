@@ -372,9 +372,9 @@ Uploads are automatically routed to multipart when `size >= multipart.thresholdB
 
 ### Known limits of a stream body
 
-Two kinds of source can leave an upload unsettled. Pass an `abortSignal` (see [Cancelling a call](#cancelling-a-call-abortsignal)) to end it with `STORAGE_REQUEST_ABORTED`.
+These sources can leave an upload unsettled. Pass an `abortSignal` (see [Cancelling a call](#cancelling-a-call-abortsignal)) to end it with `STORAGE_REQUEST_ABORTED`.
 
-- A source that calls `push(null)` and then `destroy()` inside its `read()`, uploaded with no `size` or with one at or above the multipart threshold, when no custom validator reads it.
+- A source that calls `push(null)` then `destroy()` in `read()`, its `size` at or above the multipart threshold, or absent under `maxSizeBytes`, read by no validator or scanner.
 - A source created with `emitClose: false` and destroyed with no error during the upload: it reports nothing to wait for.
 
 ### Idempotency
