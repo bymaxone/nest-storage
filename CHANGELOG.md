@@ -13,6 +13,23 @@ note on each entry is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
 
+### Fixed
+
+- An old-style stream, one with no boolean `destroyed` property, that closed before its end could be waited for, and
+  with a pre-upload scanner none could be stored. It is now resumed and read through a `Readable`: a close before the
+  end or an error fails the upload. The library releases it with `destroy()` and no error, and the error the source
+  raised is not forwarded to your listeners through the `Readable`.
+- A stream holds one destroy listener however often the library holds it.
+- A stream that stopped delivering while a pre-upload scan or a validator's `readBytes` read it, ahead of any request,
+  could leave `upload()` unsettled until an `abortSignal` fired: a `busboy` file stream fed with `req.pipe` does that
+  when the client goes away. `uploadIdleTimeoutMs` now bounds those reads, on both upload paths.
+
+### Changed
+
+- With `uploadIdleTimeoutMs` on (it follows `requestTimeoutMs` unless set), a source silent for that long during a
+  pre-upload scan or a `readBytes` read is refused with `STORAGE_TIMEOUT` (`details.phase: 'source-idle'`). A source
+  that pauses longer than that and then resumes used to be waited for; raise the value, or set `0` to wait as before.
+
 ## [1.1.26] - 2026-11-27
 
 ### Fixed
@@ -40,9 +57,6 @@ note on each entry is the compatibility contract — read it, not the number.
   aborted: one with a declared `size` below the multipart threshold while it was being sent, and one a custom validator
   had read with `readBytes`. The upload now fails: `STORAGE_PROVIDER_ERROR` in one request,
   `STORAGE_MULTIPART_ABORTED` in parts.
-- An old-style stream, one with no boolean `destroyed` property, that closed before its end could be waited for, and
-  with a pre-upload scanner none could be stored. It is now resumed and read through a `Readable`: a close before the
-  end or an error fails the upload.
 - With a pre-upload scanner, a stream longer than its declared `size` could be answered `STORAGE_PROVIDER_ERROR` or
   `STORAGE_VALIDATION_FAILED`. It is now refused with `STORAGE_SIZE_EXCEEDED`, as with no scanner.
 

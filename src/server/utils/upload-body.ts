@@ -5,6 +5,7 @@
  */
 import type { ResolvedBymaxStorageOptions } from '../config/resolved-options'
 import type { UploadOptions } from '../interfaces/upload-options.interface'
+import { SourceIdleError } from './idle-timeout'
 import { withExactSize, withSizeLimit } from './size-limit'
 import { pickUploadStrategy } from './upload-strategy'
 import { withFields } from './read-once'
@@ -75,6 +76,19 @@ export function boundStreamSize(
   return withSizeLimit(body, limit, declaredSize === undefined ? 'max' : 'declared')
 }
 
+/** What `upload()` rejects with when the stream failed, or fell silent, while a scan read it. */
+function scanReadFailure(
+  err: unknown,
+  strategy: ReturnType<typeof pickUploadStrategy>,
+  context: Record<string, unknown>,
+): StorageException {
+  const op = strategy === 'multipart' ? 'upload-multipart' : 'upload-single'
+  // The single request reports the abort of its send, not what the stream raised.
+  return strategy === 'multipart' || err instanceof SourceIdleError
+    ? mapMultipartError(err, { ...context, op })
+    : mapAwsError(new DOMException(undefined, 'AbortError'), { ...context, op })
+}
+
 /**
  * Reads a stream body into one `Buffer` so a pre-upload scan and the upload see the same bytes. A
  * stream with no bound is refused, and so is one longer than the bound; both release the stream.
@@ -108,19 +122,16 @@ export async function bufferStreamForScan(
   let buffered: Buffer | undefined
   try {
     // A declared size above the maximum is refused before this point, so it is the lower bound.
-    buffered = await verdictOf(readStreamUpTo(body, declaredSize ?? maxSizeBytes))
+    // No request is in flight while the stream is read here, so a silent source is given up by this clock.
+    const ms = options.uploadIdleTimeoutMs
+    const idle = { ms, error: new SourceIdleError(ms) }
+    buffered = await verdictOf(readStreamUpTo(body, declaredSize ?? maxSizeBytes, idle))
   } catch (err) {
     // A refusal of the runtime check is not a failure of the stream: it keeps its own code.
     if (isRootRefusal(err)) {
       throw err
     }
-    throw strategy === 'multipart'
-      ? mapMultipartError(err, { ...context, op: 'upload-multipart' })
-      : // The single request reports the abort of its send, not what the stream raised.
-        mapAwsError(new DOMException(undefined, 'AbortError'), {
-          ...context,
-          op: 'upload-single',
-        })
+    throw scanReadFailure(err, strategy, context)
   }
   if (buffered === undefined) {
     // Refused at the first byte over, as the send refuses it, whatever the stream would do next.

@@ -112,8 +112,9 @@ export interface BymaxStorageModuleOptions {
   /** Per-attempt timeout until the response headers arrive. An integer from `1` to `2147483647` (the longest a timer holds). Default: `30000` ms. */
   requestTimeoutMs?: number
   /**
-   * Longest silence, in milliseconds, tolerated from a stream body while a multipart upload
-   * waits for its next bytes; past it the upload is aborted and rejects `STORAGE_TIMEOUT`.
+   * Longest silence, in milliseconds, tolerated from a stream body while a multipart upload,
+   * a pre-upload scan or a validator's `readBytes` waits for its next bytes; past it the
+   * upload is aborted and rejects `STORAGE_TIMEOUT`.
    * An integer from `0` to `2147483647` (the longest a timer holds); `0` turns the guard off. Default: `requestTimeoutMs`.
    */
   uploadIdleTimeoutMs?: number
