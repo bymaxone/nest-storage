@@ -345,7 +345,9 @@ describe('withSizeLimit on a source that reports its error after it was destroye
   it.each(['declared', 'max'] as const)('hears the late error of a %s source', async (kind) => {
     const source = new Readable({
       read: () => undefined,
-      destroy: (_error, callback) => void process.nextTick(callback, new Error('late')),
+      destroy: (_error, callback) => {
+        process.nextTick(callback, new Error('late'))
+      },
     })
     source.destroy()
     const errors: unknown[] = []
