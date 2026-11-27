@@ -340,6 +340,19 @@ describe('upload size bound', () => {
     })
   })
 
+  it('rejects a source destroyed in the same tick as the upload, before it has closed', async () => {
+    const storage = await storageWith({})
+    const source = new PassThrough()
+    source.destroy()
+
+    const error: unknown = await storage
+      .upload({ key: 'k', body: source, contentType: 'text/plain', size: 500 })
+      .catch((err: unknown) => err)
+
+    expect(error).toMatchObject({ code: 'STORAGE_PROVIDER_ERROR' })
+    expect(putBodies).toEqual([])
+  })
+
   describe('a single-shot stream whose declared size is wrong', () => {
     // A provider stores an object once it has received `Content-Length` bytes, so a 5000-byte stream declared
     // as 500 would leave a 500-byte object; the last byte is held back so that no request completes.

@@ -179,6 +179,24 @@ describe('withExactSize', () => {
 })
 
 describe('withExactSize on a source that had already failed', () => {
+  // `close` has not fired yet here. The assertion is on the `error` event: a reading loop would report a
+  // premature close for a guard that was destroyed quietly too.
+  it.each([
+    ['without an error', undefined, { code: 'ERR_STREAM_PREMATURE_CLOSE' }],
+    ['with an error', new Error('source failed'), { message: 'source failed' }],
+  ])('fails a source destroyed %s just before the call', async (_how, cause, expected) => {
+    const source = new PassThrough()
+    source.once('error', () => undefined)
+    source.destroy(cause)
+    const guard = withExactSize(source, 500)
+    const errors: unknown[] = []
+    guard.on('error', (err) => errors.push(err))
+
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(errors).toEqual([expect.objectContaining(expected)])
+  })
+
   it('reports the shortfall of a source already read to its end', async () => {
     const source = Readable.from([Buffer.from('abc')])
     for await (const _chunk of source) {

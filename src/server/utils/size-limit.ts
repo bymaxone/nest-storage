@@ -3,7 +3,7 @@
  * the moment the count exceeds a limit, destroying the source so nothing more is pulled from it.
  * @layer server/utils
  */
-import { Transform, finished, pipeline, type Readable } from 'node:stream'
+import { Transform, pipeline, type Readable } from 'node:stream'
 import { destroyStream } from './stream-utils'
 
 /** Which bound a stream crossed: the configured maximum, or the size its caller declared. */
@@ -63,16 +63,6 @@ export class SizeShortfallError extends Error {
   }
 }
 
-/** Fails `guard` for a source that failed before it was attached, whose events will not fire. */
-function relayPastFailure(source: NodeJS.ReadableStream, guard: Transform): void {
-  const { errored, destroyed } = source as Partial<Readable>
-  if (errored) guard.destroy(errored)
-  else if (destroyed)
-    finished(source, (err) => {
-      if (err) guard.destroy(err)
-    })
-}
-
 /**
  * Wraps a stream whose size the caller declared so that the provider is never handed an object of
  * another length. More than `declaredBytes` fails with {@link SizeLimitError} and fewer with
@@ -108,7 +98,11 @@ export function withExactSize(source: NodeJS.ReadableStream, declaredBytes: numb
       callback(null, held)
     },
   })
-  // Not `pipeline`: when the caller's stream is destroyed without an error (the upload failed and the
+  // A source that failed before this call may not emit again. `pipeline` still reports one that was
+  // destroyed without an error, closed or not.
+  const { errored, destroyed } = source as Partial<Readable>
+  if (destroyed && !errored) return pipeline(source, guard, () => undefined)
+  // Not `pipeline` otherwise: when the caller's stream is destroyed without an error (the upload failed and the
   // library is releasing it), `pipeline` fails the guard with a premature-close error, which the SDK
   // forwards to its own wrappers of the body with nothing listening. Here the guard closes quietly
   // then, and an error of the source itself still fails the guard.
@@ -126,7 +120,7 @@ export function withExactSize(source: NodeJS.ReadableStream, declaredBytes: numb
     destroyStream(source)
   })
   guard.on('error', () => undefined)
-  relayPastFailure(source, guard)
+  if (errored) guard.destroy(errored)
   source.pipe(guard)
   return guard
 }
