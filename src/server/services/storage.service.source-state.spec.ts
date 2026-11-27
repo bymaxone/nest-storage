@@ -453,9 +453,9 @@ describe('an upload of a stream in each state it can be in', () => {
           contentType: 'text/plain',
           ...(size === undefined ? {} : { size }),
         })
-        .then(String, (error: StorageException) => ({
-          status: error.getStatus(),
-          response: error.getResponse(),
+        .then(String, (error: unknown) => ({
+          status: (error as StorageException).getStatus(),
+          response: (error as StorageException).getResponse(),
         }))
       await moduleRef?.close()
       return answered
