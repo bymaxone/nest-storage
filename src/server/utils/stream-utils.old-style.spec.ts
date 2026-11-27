@@ -100,4 +100,31 @@ describe('asReadable', () => {
 
     expect(resume).toHaveBeenCalledTimes(2)
   })
+
+  // Only a pause it made is undone: a read with no pause, before or after one, resumes nothing.
+  it('resumes the source only after it paused it', async () => {
+    const settle = (): Promise<unknown> => new Promise((resolve) => setImmediate(resolve))
+    const open = (): { resume: jest.Mock; source: Stream; adapter: Readable } => {
+      const resume = jest.fn()
+      const source = oldStyle({ resume })
+      const adapter = asReadable(source as unknown as NodeJS.ReadableStream) as unknown as Readable
+      return { resume, source, adapter }
+    }
+
+    const flowing = open()
+    flowing.adapter.on('data', () => undefined)
+    await settle()
+    flowing.source.emit('data', Buffer.from('a'))
+    await settle()
+    expect(flowing.resume).toHaveBeenCalledTimes(1)
+
+    const held = open()
+    held.source.emit('data', Buffer.alloc(held.adapter.readableHighWaterMark))
+    held.adapter.on('data', () => undefined)
+    await settle()
+    expect(held.resume).toHaveBeenCalledTimes(2)
+    held.source.emit('data', Buffer.from('b'))
+    await settle()
+    expect(held.resume).toHaveBeenCalledTimes(2)
+  })
 })

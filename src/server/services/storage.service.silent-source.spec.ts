@@ -157,6 +157,14 @@ describe('a source read ahead of the request', () => {
     })
   })
 
+  it('names the upload when the silence is in the head a validator reads', async () => {
+    const storage = await storageWith(peeked)
+
+    await expect(upload(storage, silent(), 64)).rejects.toMatchObject({
+      response: { error: { details: { op: 'upload' } } },
+    })
+  })
+
   it('stores nothing when a validator swallows the refusal of its read', async () => {
     const storage = await storageWith({
       validation: {
