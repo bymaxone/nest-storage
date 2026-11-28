@@ -3,9 +3,9 @@ import base from './jest.config.ts'
 
 /**
  * Coverage gate configuration (`test:cov:all`). Enforces 100%
- * line/branch/function/statement coverage on every implemented file and folds in
- * the lines exercised by the end-to-end suite. Index barrels are excluded
- * because they only re-export and carry no executable branches.
+ * line/branch/function/statement coverage on every implemented file from the
+ * unit specs. Index barrels are excluded because they only re-export and carry
+ * no executable branches.
  */
 const config: Config = {
   ...base,

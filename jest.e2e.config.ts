@@ -7,7 +7,7 @@ import base from './jest.config.ts'
  * is mapped to the source entry points so fixtures consume the public API
  * exactly as a downstream app would. Worker count stays capped at 50% (from the
  * base config) so only one container is exercised at a time. A run that selects no
- * test fails where `CI` is `true`.
+ * test fails.
  */
 const config: Config = {
   ...base,

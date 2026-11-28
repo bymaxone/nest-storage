@@ -75,10 +75,9 @@ describe('mimeMatches', () => {
     expect(mimeMatches('application/pdf', ['*/*'])).toBe(true)
   })
 
-  it('handles a non-string input coerced via a type assertion', () => {
+  it('returns false for a non-string input', () => {
     // defensive: a non-string input should return false, not throw
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- intentional coercion test
-    expect(mimeMatches(null as any as string, ['image/*'])).toBe(false)
+    expect(Reflect.apply(mimeMatches, undefined, [null, ['image/*']])).toBe(false)
   })
 
   it('returns false when the pattern contains no slash', () => {
