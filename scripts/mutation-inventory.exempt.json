@@ -66,5 +66,9 @@
   {
     "file": "src/mutation-inventory-parity.spec.ts",
     "reason": "Reads jest.stryker.config.ts, the exempt list and the file tree as text and imports no module of src/ that a mutant could change, so no mutant selects it."
+  },
+  {
+    "file": "src/release-workflow.spec.ts",
+    "reason": "Reads .github/workflows/release.yml and package.json as text and imports no module of src/ that a mutant could change, so no mutant selects it."
   }
 ]
