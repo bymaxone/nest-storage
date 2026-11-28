@@ -71,12 +71,8 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: reflect-metadata
         update-types: [version-update:semver-major]
-      # TypeScript majors break the typecheck gate and are intentionally held back
-      # until revisited. ESLint is deliberately NOT held, and the asymmetry is the
-      # point: a hold is silent, so a held dependency whose current line reaches
-      # end of life produces no pull request and no signal that it needs moving.
-      # A major that does break a gate announces itself as a red check on its own
-      # pull request, which is a better failure than silence.
+      # Held for the whole 1.x line: a major here is a dependency migration, and those are
+      # taken in 2.0.
       - dependency-name: typescript
         update-types: [version-update:semver-major]
       # `@types/node` majors track the Node release line. `engines` declares
@@ -124,11 +120,8 @@ updates:
       # `agents-sync.yml` is the one Bymax reusable a caller pins to a commit: it is handed the sync
       # App's private key (see "agents-sync" in the README of bymaxone/.github). This group moves
       # that SHA in a pull request of its own, to the newest release of the same major. The other
-      # Bymax reusables stay on `@v1`, which Dependabot leaves alone.
+      # Bymax reusables are referenced as `@v1`. A new major of any of them is proposed as a pull
+      # request and is migrated by hand.
       bymax-agents-sync:
         patterns:
           - 'bymaxone/.github/.github/workflows/agents-sync.yml'
-    ignore:
-      # A new major is a deliberate migration, never an automatic bump.
-      - dependency-name: 'bymaxone/.github*'
-        update-types: ['version-update:semver-major']
