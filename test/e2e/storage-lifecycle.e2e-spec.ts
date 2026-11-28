@@ -49,19 +49,19 @@ describe('Storage E2E — bucket lifecycle', () => {
     await minio.container.stop()
   })
 
-  it('reads an empty set from a bucket with no lifecycle configuration', async () => {
-    // NoSuchLifecycleConfiguration from the real server is an empty set, not an error.
-    await expect(lifecycle.get()).resolves.toEqual([])
-  })
-
-  it('applies the rule once and keeps unrelated rules through upsert and remove', async () => {
-    // Seed two rules this library did not write, one of them filtered by tag, through the raw client.
+  /** Writes two rules this library did not write, one filtered by tag, through the raw client. */
+  async function seedForeignRules(): Promise<void> {
     await rawClient.send(
       new PutBucketLifecycleConfigurationCommand({
         Bucket: minio.bucket,
         LifecycleConfiguration: {
           Rules: [
-            { ID: 'keep-reports', Status: 'Enabled', Filter: { Prefix: 'reports/' }, Expiration: { Days: 365 } },
+            {
+              ID: 'keep-reports',
+              Status: 'Enabled',
+              Filter: { Prefix: 'reports/' },
+              Expiration: { Days: 365 },
+            },
             {
               ID: 'keep-tagged',
               Status: 'Enabled',
@@ -72,6 +72,15 @@ describe('Storage E2E — bucket lifecycle', () => {
         },
       }),
     )
+  }
+
+  it('reads an empty set from a bucket with no lifecycle configuration', async () => {
+    // NoSuchLifecycleConfiguration from the real server is an empty set, not an error.
+    await expect(lifecycle.get()).resolves.toEqual([])
+  })
+
+  it('applies the rule once and keeps unrelated rules through upsert and remove', async () => {
+    await seedForeignRules()
     const seeded = await lifecycle.get()
     expect(seeded.map((r) => r.ID).sort()).toEqual(['keep-reports', 'keep-tagged'])
 
@@ -80,7 +89,11 @@ describe('Storage E2E — bucket lifecycle', () => {
     await lifecycle.upsert(owned)
     await lifecycle.upsert(owned)
     const afterUpsert = await lifecycle.get()
-    expect(afterUpsert.map((r) => r.ID).sort()).toEqual(['expire-tmp', 'keep-reports', 'keep-tagged'])
+    expect(afterUpsert.map((r) => r.ID).sort()).toEqual([
+      'expire-tmp',
+      'keep-reports',
+      'keep-tagged',
+    ])
     for (const rule of seeded) {
       expect(afterUpsert.find((r) => r.ID === rule.ID)).toEqual(rule)
     }
@@ -122,7 +135,9 @@ describe('Storage E2E — bucket lifecycle', () => {
       .catch((err: unknown) => err)
 
     expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_REJECTED', status: 422 })
-    expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).toContain('InvalidArgument')
+    expect(JSON.stringify((error as { getResponse(): unknown }).getResponse())).toContain(
+      'InvalidArgument',
+    )
     await expect(lifecycle.get()).resolves.toEqual(before)
     await lifecycle.remove('expire-kept')
   })
