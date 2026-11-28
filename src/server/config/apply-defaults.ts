@@ -42,12 +42,12 @@ function definedOnly<T extends object, const K extends readonly (keyof T)[]>(
   // No prototype: a key planted on `Object.prototype` must not read as a value of a group that never set it.
   const picked = Object.create(null) as Partial<T>
   for (const key of keys) {
-    const value = group === undefined ? undefined : (readField(group, key as string) as T[keyof T] | undefined)
+    const value =
+      group === undefined ? undefined : (readField(group, key as string) as T[keyof T] | undefined)
     if (value !== undefined && value !== null) picked[key] = value
   }
   return picked
 }
-
 
 /**
  * Merges the signed-URL options over their defaults and caps `maxTtlSeconds` at the
@@ -90,6 +90,36 @@ function attachCredentials(
 }
 
 /**
+ * The settings that have no default: each is present only when the options configure it.
+ *
+ * @param options - The validated consumer options.
+ * @returns The configured ones among `validation`, `scanner`, `serverSideEncryption` and `kmsKeyId`.
+ */
+function optionalSettings(
+  options: BymaxStorageModuleOptions,
+): Partial<
+  Pick<ResolvedBymaxStorageOptions, 'validation' | 'scanner' | 'serverSideEncryption' | 'kmsKeyId'>
+> {
+  return {
+    ...(options.validation !== undefined
+      ? { validation: definedOnly(options.validation, VALIDATION_KEYS) }
+      : {}),
+    // A group is an object or it is not configured. `forRoot` refuses a `null` scanner before this runs; if one reaches here it adds no scanner.
+    ...(options.scanner
+      ? {
+          scanner: definedOnly(options.scanner, SCANNER_KEYS) as NonNullable<
+            BymaxStorageModuleOptions['scanner']
+          >,
+        }
+      : {}),
+    ...(options.serverSideEncryption !== undefined
+      ? { serverSideEncryption: options.serverSideEncryption }
+      : {}),
+    ...(options.kmsKeyId !== undefined ? { kmsKeyId: options.kmsKeyId } : {}),
+  }
+}
+
+/**
  * Produces the resolved options consumed by every service. Optional fields
  * without a default (`cdnBaseUrl`, `validation`, `scanner`,
  * `serverSideEncryption`, `kmsKeyId`) are included only when provided so the
@@ -100,7 +130,10 @@ function attachCredentials(
  */
 export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymaxStorageOptions {
   // No prototype: a key planted on `Object.prototype` must not read as a credential that was never given.
-  const credentials = Object.assign(Object.create(null) as typeof options.credentials, options.credentials)
+  const credentials = Object.assign(
+    Object.create(null) as typeof options.credentials,
+    options.credentials,
+  )
   const hasCredentials = Boolean(credentials.accessKeyId) && Boolean(credentials.secretAccessKey)
 
   const publicBaseUrl =
@@ -121,15 +154,7 @@ export function applyDefaults(options: BymaxStorageModuleOptions): ResolvedBymax
     defaultContentDisposition: options.defaultContentDisposition ?? DEFAULT_CONTENT_DISPOSITION,
     signedUrls: resolveSignedUrls(options.signedUrls),
     multipart: { ...DEFAULT_MULTIPART, ...definedOnly(options.multipart, MULTIPART_KEYS) },
-    ...(options.validation !== undefined ? { validation: definedOnly(options.validation, VALIDATION_KEYS) } : {}),
-    // A group is an object or it is not configured. `forRoot` refuses a `null` scanner before this runs; if one reaches here it adds no scanner.
-    ...(options.scanner
-      ? { scanner: definedOnly(options.scanner, SCANNER_KEYS) as NonNullable<BymaxStorageModuleOptions['scanner']> }
-      : {}),
-    ...(options.serverSideEncryption !== undefined
-      ? { serverSideEncryption: options.serverSideEncryption }
-      : {}),
-    ...(options.kmsKeyId !== undefined ? { kmsKeyId: options.kmsKeyId } : {}),
+    ...optionalSettings(options),
     requestChecksumCalculation: options.requestChecksumCalculation ?? DEFAULT_CHECKSUM_CALCULATION,
     responseChecksumValidation: options.responseChecksumValidation ?? DEFAULT_CHECKSUM_VALIDATION,
     maxAttempts: options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,

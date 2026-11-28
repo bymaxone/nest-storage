@@ -43,6 +43,44 @@ function textOf(entry: Entry): string {
     .join(' ')
 }
 
+/** A service whose post-upload scan finds a threat and whose cleanup delete is then refused. */
+function serviceWhoseScanCleanupFails(): StorageService {
+  const resolved = applyDefaults({
+    endpoint: 'https://s3.example.com',
+    region: 'us-east-1',
+    bucket: 'b',
+    credentials: { accessKeyId: 'k', secretAccessKey: 's' },
+    scanner: {
+      impl: { scan: () => Promise.resolve({ status: 'infected', engine: 'e' }) },
+      mode: 'post-upload',
+    },
+  })
+  const client = new S3Client({
+    region: 'us-east-1',
+    credentials: { accessKeyId: 'k', secretAccessKey: 's' },
+  })
+  // The upload's PutObject succeeds, then the cleanup DeleteObject is refused.
+  const send: jest.SpyInstance = jest.spyOn(client, 'send')
+  send.mockResolvedValueOnce({ ETag: '"e"' })
+  send.mockRejectedValueOnce(
+    Object.assign(new Error('denied\n2026 ERROR forged'), {
+      name: 'AccessDenied',
+      $metadata: { httpStatusCode: 403 },
+    }),
+  )
+  const provider = new S3ClientProvider(resolved)
+  jest.spyOn(provider, 'getClient').mockReturnValue(client)
+  jest.spyOn(provider, 'isConfigured').mockReturnValue(true)
+  return new StorageService(
+    resolved,
+    provider,
+    new KeyResolverService(resolved),
+    new IdempotencyCache(10, 1000, () => 0),
+    new ValidationService(resolved, []),
+    new FileScannerService(resolved, resolved.scanner?.impl ?? null),
+  )
+}
+
 describe('log lines carry caller text as one escaped token', () => {
   afterEach(() => {
     jest.restoreAllMocks()
@@ -64,7 +102,9 @@ describe('log lines carry caller text as one escaped token', () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const service = scannerService({ status: 'infected', engine: 'e\nx', threat: 'T\u001b[0m' })
 
-    await service.scan({ mode: 'post-upload', key: FORGED_KEY, bucket: 'b', contentType: 'text/plain' }).catch(() => undefined)
+    await service
+      .scan({ mode: 'post-upload', key: FORGED_KEY, bucket: 'b', contentType: 'text/plain' })
+      .catch(() => undefined)
 
     const entry = onlyEntry(warn)
     expect(entry).toEqual(
@@ -83,10 +123,17 @@ describe('log lines carry caller text as one escaped token', () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const service = scannerService({ status: 'unknown', engine: 'clamav' })
 
-    await service.scan({ mode: 'post-upload', key: FORGED_KEY, bucket: 'b', contentType: 'text/plain' })
+    await service.scan({
+      mode: 'post-upload',
+      key: FORGED_KEY,
+      bucket: 'b',
+      contentType: 'text/plain',
+    })
 
     const entry = onlyEntry(warn)
-    expect(entry).toEqual(expect.objectContaining({ event: 'STORAGE_SCAN_INCONCLUSIVE_ACCEPTED', engine: 'clamav' }))
+    expect(entry).toEqual(
+      expect.objectContaining({ event: 'STORAGE_SCAN_INCONCLUSIVE_ACCEPTED', engine: 'clamav' }),
+    )
     expect(textOf(entry)).not.toContain('a.txt')
     expect(entry).not.toHaveProperty('key')
     expect(holdsControl(textOf(entry))).toBe(false)
@@ -121,7 +168,9 @@ describe('log lines carry caller text as one escaped token', () => {
   it('the idempotent-delete warning leaves the key out of its entry', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const { service, send } = storage()
-    send.mockRejectedValue(Object.assign(new Error('gone'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } }))
+    send.mockRejectedValue(
+      Object.assign(new Error('gone'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } }),
+    )
 
     await service.delete(FORGED_KEY)
 
@@ -150,41 +199,18 @@ describe('log lines carry caller text as one escaped token', () => {
 
   it('the scan-cleanup error entry carries the stored key as one escaped token', async () => {
     const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
-    const resolved = applyDefaults({
-      endpoint: 'https://s3.example.com',
-      region: 'us-east-1',
-      bucket: 'b',
-      credentials: { accessKeyId: 'k', secretAccessKey: 's' },
-      scanner: { impl: { scan: () => Promise.resolve({ status: 'infected', engine: 'e' }) }, mode: 'post-upload' },
-    })
-    const client = new S3Client({
-      region: 'us-east-1',
-      credentials: { accessKeyId: 'k', secretAccessKey: 's' },
-    })
-    // The upload's PutObject succeeds, then the cleanup DeleteObject is refused.
-    const send: jest.SpyInstance = jest.spyOn(client, 'send')
-    send.mockResolvedValueOnce({ ETag: '"e"' })
-    send.mockRejectedValueOnce(
-      Object.assign(new Error('denied\n2026 ERROR forged'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }),
-    )
-    const provider = new S3ClientProvider(resolved)
-    jest.spyOn(provider, 'getClient').mockReturnValue(client)
-    jest.spyOn(provider, 'isConfigured').mockReturnValue(true)
-    const service = new StorageService(
-      resolved,
-      provider,
-      new KeyResolverService(resolved),
-      new IdempotencyCache(10, 1000, () => 0),
-      new ValidationService(resolved, []),
-      new FileScannerService(resolved, resolved.scanner?.impl ?? null),
-    )
+    const service = serviceWhoseScanCleanupFails()
 
     await service
       .upload({ key: FORGED_KEY, body: Buffer.from('x'), contentType: 'text/plain' })
       .catch(() => undefined)
 
     expect(error).toHaveBeenCalledTimes(1)
-    const entry = error.mock.calls[0]?.[0] as { event: string; storedKey: string; cleanupFailure: string }
+    const entry = error.mock.calls[0]?.[0] as {
+      event: string
+      storedKey: string
+      cleanupFailure: string
+    }
     expect(entry.event).toBe('STORAGE_SCAN_CLEANUP_FAILED')
     expect(entry.storedKey).toBe(ESCAPED_KEY)
     expect(holdsControl(`${entry.storedKey}${entry.cleanupFailure}`)).toBe(false)

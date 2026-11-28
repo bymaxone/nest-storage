@@ -13,7 +13,6 @@ import {
   type S3Client,
 } from '@aws-sdk/client-s3'
 import { BucketLifecycleService } from './bucket-lifecycle.service'
-import type { LifecycleRuleInput } from '../interfaces/lifecycle-options.interface'
 import type { S3ClientProvider } from '../providers/s3-client.provider'
 import { KeyResolverService } from './key-resolver.service'
 import { applyDefaults } from '../config/apply-defaults'
@@ -24,7 +23,10 @@ interface Harness {
   send: jest.Mock
 }
 
-function makeService(overrides: Partial<BymaxStorageModuleOptions> = {}, configured = true): Harness {
+function makeService(
+  overrides: Partial<BymaxStorageModuleOptions> = {},
+  configured = true,
+): Harness {
   const resolved = applyDefaults({
     endpoint: 'https://s3.example.com',
     region: 'us-east-1',
@@ -37,7 +39,10 @@ function makeService(overrides: Partial<BymaxStorageModuleOptions> = {}, configu
     isConfigured: (): boolean => configured,
     getClient: (): S3Client => ({ send }) as unknown as S3Client,
   } as unknown as S3ClientProvider
-  return { service: new BucketLifecycleService(resolved, s3Provider, new KeyResolverService(resolved)), send }
+  return {
+    service: new BucketLifecycleService(resolved, s3Provider, new KeyResolverService(resolved)),
+    send,
+  }
 }
 
 /** Rules the service does not own: every one carries an action or filter it never writes. */
@@ -59,7 +64,13 @@ function foreignRules(): LifecycleRule[] {
     {
       ID: 'tagged-scratch',
       Status: 'Disabled',
-      Filter: { And: { Prefix: 'scratch/', Tags: [{ Key: 'tier', Value: 'tmp' }], ObjectSizeGreaterThan: 10 } },
+      Filter: {
+        And: {
+          Prefix: 'scratch/',
+          Tags: [{ Key: 'tier', Value: 'tmp' }],
+          ObjectSizeGreaterThan: 10,
+        },
+      },
       NoncurrentVersionExpiration: { NoncurrentDays: 5, NewerNoncurrentVersions: 2 },
     },
   ]
@@ -74,12 +85,15 @@ function noSuchLifecycle(): Error {
 }
 
 function inputs(send: jest.Mock): Record<string, unknown>[] {
-  return (send.mock.calls as [{ input: Record<string, unknown> }][]).map(([command]) => command.input)
+  return (send.mock.calls as [{ input: Record<string, unknown> }][]).map(
+    ([command]) => command.input,
+  )
 }
 
 /** The `details` object of a thrown `StorageException`. */
 function detailsOf(error: unknown): Record<string, unknown> {
-  return (error as { getResponse(): { error: { details: Record<string, unknown> } } }).getResponse().error.details
+  return (error as { getResponse(): { error: { details: Record<string, unknown> } } }).getResponse()
+    .error.details
 }
 
 async function rejection(promise: Promise<unknown>): Promise<unknown> {
@@ -149,7 +163,11 @@ describe('BucketLifecycleService.get', () => {
     send.mockResolvedValueOnce({
       Rules: [
         { ID: 'simple', Status: 'Enabled', Filter: { Prefix: 'tenant-a/x/' } },
-        { ID: 'and', Status: 'Enabled', Filter: { And: { Prefix: 'tenant-a/y/', ObjectSizeGreaterThan: 5 } } },
+        {
+          ID: 'and',
+          Status: 'Enabled',
+          Filter: { And: { Prefix: 'tenant-a/y/', ObjectSizeGreaterThan: 5 } },
+        },
         { ID: 'outside', Status: 'Enabled', Filter: { Prefix: 'tenant-b/x/' } },
         { ID: 'whole-bucket', Status: 'Enabled', Filter: { Prefix: '' } },
         { ID: 'tag-only', Status: 'Enabled', Filter: { Tag: { Key: 'k', Value: 'v' } } },
@@ -160,9 +178,19 @@ describe('BucketLifecycleService.get', () => {
     await expect(service.get()).resolves.toEqual([
       { ID: 'simple', Status: 'Enabled', Filter: { Prefix: 'x/' } },
       { ID: 'and', Status: 'Enabled', Filter: { And: { Prefix: 'y/', ObjectSizeGreaterThan: 5 } } },
-      { ID: 'outside', Status: 'Enabled', Filter: { Prefix: 'tenant-b/x/' }, isOutsideKeyPrefix: true },
+      {
+        ID: 'outside',
+        Status: 'Enabled',
+        Filter: { Prefix: 'tenant-b/x/' },
+        isOutsideKeyPrefix: true,
+      },
       { ID: 'whole-bucket', Status: 'Enabled', Filter: { Prefix: '' }, isOutsideKeyPrefix: true },
-      { ID: 'tag-only', Status: 'Enabled', Filter: { Tag: { Key: 'k', Value: 'v' } }, isOutsideKeyPrefix: true },
+      {
+        ID: 'tag-only',
+        Status: 'Enabled',
+        Filter: { Tag: { Key: 'k', Value: 'v' } },
+        isOutsideKeyPrefix: true,
+      },
       { ID: 'legacy-inside', Status: 'Enabled', Prefix: 'z/' },
       { ID: 'legacy-outside', Status: 'Enabled', Prefix: 'tenant-b/z/', isOutsideKeyPrefix: true },
     ])
@@ -172,11 +200,20 @@ describe('BucketLifecycleService.get', () => {
     // Rules written before Filter existed carry Prefix at the rule level; inside the namespace they are ours to replace.
     const { service, send } = makeService({ keyPrefix: 'tenant-a' })
     send
-      .mockResolvedValueOnce({ Rules: [{ ID: 'expire-tmp', Status: 'Enabled', Prefix: 'tenant-a/old/', Expiration: { Days: 1 } }] })
+      .mockResolvedValueOnce({
+        Rules: [
+          { ID: 'expire-tmp', Status: 'Enabled', Prefix: 'tenant-a/old/', Expiration: { Days: 1 } },
+        ],
+      })
       .mockResolvedValueOnce({})
     await service.upsert({ id: 'expire-tmp', prefix: 'expiring/', expirationDays: 7 })
     expect(putRules(send)).toEqual([
-      { ID: 'expire-tmp', Status: 'Enabled', Filter: { Prefix: 'tenant-a/expiring/' }, Expiration: { Days: 7 } },
+      {
+        ID: 'expire-tmp',
+        Status: 'Enabled',
+        Filter: { Prefix: 'tenant-a/expiring/' },
+        Expiration: { Days: 7 },
+      },
     ])
   })
 
@@ -196,7 +233,12 @@ describe('BucketLifecycleService.get', () => {
   it('does not alter the rules a later write sends back (the stored shape is untouched)', async () => {
     // The de-prefixed view is for callers only; upsert must write other rules with their stored prefixes.
     const { service, send } = makeService({ keyPrefix: 'tenant-a' })
-    const stored: LifecycleRule = { ID: 'keep', Status: 'Enabled', Filter: { Prefix: 'tenant-a/keep/' }, Expiration: { Days: 9 } }
+    const stored: LifecycleRule = {
+      ID: 'keep',
+      Status: 'Enabled',
+      Filter: { Prefix: 'tenant-a/keep/' },
+      Expiration: { Days: 9 },
+    }
     send.mockResolvedValueOnce({ Rules: [stored] }).mockResolvedValueOnce({})
     await service.upsert({ id: 'new', prefix: 'n/', expirationDays: 1 })
     expect(putRules(send, 1)[0]).toEqual(stored)
@@ -224,14 +266,25 @@ describe('BucketLifecycleService.get', () => {
   it('maps a provider that does not implement the API to STORAGE_LIFECYCLE_UNSUPPORTED', async () => {
     const { service, send } = makeService()
     send.mockRejectedValueOnce(
-      Object.assign(new Error('not implemented'), { name: 'NotImplemented', $metadata: { httpStatusCode: 501 } }),
+      Object.assign(new Error('not implemented'), {
+        name: 'NotImplemented',
+        $metadata: { httpStatusCode: 501 },
+      }),
     )
-    await expect(service.get()).rejects.toMatchObject({ code: 'STORAGE_LIFECYCLE_UNSUPPORTED', status: 501 })
+    await expect(service.get()).rejects.toMatchObject({
+      code: 'STORAGE_LIFECYCLE_UNSUPPORTED',
+      status: 501,
+    })
   })
 
   it('maps any other read failure to STORAGE_PROVIDER_ERROR', async () => {
     const { service, send } = makeService()
-    send.mockRejectedValueOnce(Object.assign(new Error('denied'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }))
+    send.mockRejectedValueOnce(
+      Object.assign(new Error('denied'), {
+        name: 'AccessDenied',
+        $metadata: { httpStatusCode: 403 },
+      }),
+    )
     const error = await rejection(service.get({ bucket: 'other' }))
     expect(error).toMatchObject({ code: 'STORAGE_PROVIDER_ERROR' })
     expect(detailsOf(error)).toMatchObject({ bucket: 'other', op: 'lifecycle.get' })
@@ -245,11 +298,21 @@ describe('BucketLifecycleService.upsert', () => {
     const { service, send } = makeService()
     send.mockRejectedValueOnce(noSuchLifecycle()).mockResolvedValueOnce({})
     await service.upsert(rule)
-    expect(commandTypes(send)).toEqual([GetBucketLifecycleConfigurationCommand, PutBucketLifecycleConfigurationCommand])
+    expect(commandTypes(send)).toEqual([
+      GetBucketLifecycleConfigurationCommand,
+      PutBucketLifecycleConfigurationCommand,
+    ])
     expect(inputs(send)[1]).toEqual({
       Bucket: 'test-bucket',
       LifecycleConfiguration: {
-        Rules: [{ ID: 'expire-tmp', Status: 'Enabled', Filter: { Prefix: 'expiring/' }, Expiration: { Days: 7 } }],
+        Rules: [
+          {
+            ID: 'expire-tmp',
+            Status: 'Enabled',
+            Filter: { Prefix: 'expiring/' },
+            Expiration: { Days: 7 },
+          },
+        ],
       },
     })
   })
@@ -278,7 +341,12 @@ describe('BucketLifecycleService.upsert', () => {
     send.mockResolvedValueOnce({ Rules: existing }).mockResolvedValueOnce({})
     await service.upsert(rule)
     const written = putRules(send)
-    expect(written.map((r) => r.ID)).toEqual(['archive-reports', 'expire-tmp', 'abort-stale-uploads', 'tagged-scratch'])
+    expect(written.map((r) => r.ID)).toEqual([
+      'archive-reports',
+      'expire-tmp',
+      'abort-stale-uploads',
+      'tagged-scratch',
+    ])
     expect(written[1]).toEqual({
       ID: 'expire-tmp',
       Status: 'Enabled',
@@ -302,10 +370,15 @@ describe('BucketLifecycleService.upsert', () => {
     // Omitting it on put would reset transition behaviour for rules this service does not own.
     const { service, send } = makeService()
     send
-      .mockResolvedValueOnce({ Rules: foreignRules(), TransitionDefaultMinimumObjectSize: 'varies_by_storage_class' })
+      .mockResolvedValueOnce({
+        Rules: foreignRules(),
+        TransitionDefaultMinimumObjectSize: 'varies_by_storage_class',
+      })
       .mockResolvedValueOnce({})
     await service.upsert(rule)
-    expect(inputs(send)[1]).toMatchObject({ TransitionDefaultMinimumObjectSize: 'varies_by_storage_class' })
+    expect(inputs(send)[1]).toMatchObject({
+      TransitionDefaultMinimumObjectSize: 'varies_by_storage_class',
+    })
   })
 
   it('sends no default-minimum-object-size setting when the provider reported none', async () => {
@@ -331,30 +404,42 @@ describe('BucketLifecycleService.upsert', () => {
 
   it('maps a configuration the provider refuses to STORAGE_LIFECYCLE_REJECTED', async () => {
     const { service, send } = makeService()
-    send
-      .mockResolvedValueOnce({ Rules: [] })
-      .mockRejectedValueOnce(
-        Object.assign(new Error('The XML you provided was not well-formed'), {
-          name: 'MalformedXML',
-          $metadata: { httpStatusCode: 400, requestId: 'req-9' },
-        }),
-      )
+    send.mockResolvedValueOnce({ Rules: [] }).mockRejectedValueOnce(
+      Object.assign(new Error('The XML you provided was not well-formed'), {
+        name: 'MalformedXML',
+        $metadata: { httpStatusCode: 400, requestId: 'req-9' },
+      }),
+    )
     const error = await rejection(service.upsert(rule, { bucket: 'asked-bucket' }))
     expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_REJECTED', status: 422 })
-    expect(detailsOf(error)).toMatchObject({ bucket: 'asked-bucket', op: 'lifecycle.upsert', requestId: 'req-9' })
+    expect(detailsOf(error)).toMatchObject({
+      bucket: 'asked-bucket',
+      op: 'lifecycle.upsert',
+      requestId: 'req-9',
+    })
   })
 
   it('maps a write to a provider without the API to STORAGE_LIFECYCLE_UNSUPPORTED', async () => {
     const { service, send } = makeService()
-    send
-      .mockResolvedValueOnce({ Rules: [] })
-      .mockRejectedValueOnce(Object.assign(new Error('nope'), { name: 'NotImplemented', $metadata: { httpStatusCode: 501 } }))
-    await expect(service.upsert(rule)).rejects.toMatchObject({ code: 'STORAGE_LIFECYCLE_UNSUPPORTED' })
+    send.mockResolvedValueOnce({ Rules: [] }).mockRejectedValueOnce(
+      Object.assign(new Error('nope'), {
+        name: 'NotImplemented',
+        $metadata: { httpStatusCode: 501 },
+      }),
+    )
+    await expect(service.upsert(rule)).rejects.toMatchObject({
+      code: 'STORAGE_LIFECYCLE_UNSUPPORTED',
+    })
   })
 
   it('does not write anything when the read fails', async () => {
     const { service, send } = makeService()
-    send.mockRejectedValueOnce(Object.assign(new Error('boom'), { name: 'InternalError', $metadata: { httpStatusCode: 500 } }))
+    send.mockRejectedValueOnce(
+      Object.assign(new Error('boom'), {
+        name: 'InternalError',
+        $metadata: { httpStatusCode: 500 },
+      }),
+    )
     await expect(service.upsert(rule)).rejects.toMatchObject({ code: 'STORAGE_PROVIDER_ERROR' })
     expect(send).toHaveBeenCalledTimes(1)
   })
@@ -393,33 +478,77 @@ describe('BucketLifecycleService.upsert', () => {
 
     it('still adds a rule with a new id and sends the outside rule back exactly as stored', async () => {
       const { service, send } = makeService({ keyPrefix: 'tenant-a' })
-      send.mockResolvedValueOnce({ Rules: [{ ...outside, ID: 'theirs' }] }).mockResolvedValueOnce({})
+      send
+        .mockResolvedValueOnce({ Rules: [{ ...outside, ID: 'theirs' }] })
+        .mockResolvedValueOnce({})
       await service.upsert(rule)
       expect(putRules(send)[0]).toEqual({ ...outside, ID: 'theirs' })
-      expect(putRules(send)[1]).toMatchObject({ ID: 'expire-tmp', Filter: { Prefix: 'tenant-a/expiring/' } })
+      expect(putRules(send)[1]).toMatchObject({
+        ID: 'expire-tmp',
+        Filter: { Prefix: 'tenant-a/expiring/' },
+      })
     })
   })
 
   describe('input validation', () => {
     it.each([
       ['an empty id', { ...rule, id: '' }, 'Rule id must be a non-empty string'],
-      ['an id longer than 255 characters', { ...rule, id: 'x'.repeat(256) }, 'Rule id must be at most 255 characters'],
-      ['a non-string id', { ...rule, id: 7 as unknown as string }, 'Rule id must be a non-empty string'],
+      [
+        'an id longer than 255 characters',
+        { ...rule, id: 'x'.repeat(256) },
+        'Rule id must be at most 255 characters',
+      ],
+      [
+        'a non-string id',
+        { ...rule, id: 7 as unknown as string },
+        'Rule id must be a non-empty string',
+      ],
       ['an empty prefix', { ...rule, prefix: '' }, 'Prefix must be a non-empty string'],
-      ['a non-string prefix', { ...rule, prefix: 12 as unknown as string }, 'Prefix must be a non-empty string'],
-      ['zero days', { ...rule, expirationDays: 0 }, 'expirationDays must be an integer of at least 1'],
-      ['negative days', { ...rule, expirationDays: -3 }, 'expirationDays must be an integer of at least 1'],
-      ['fractional days', { ...rule, expirationDays: 1.5 }, 'expirationDays must be an integer of at least 1'],
-      ['NaN days', { ...rule, expirationDays: Number.NaN }, 'expirationDays must be an integer of at least 1'],
-      ['Infinity days', { ...rule, expirationDays: Number.POSITIVE_INFINITY }, 'expirationDays must be an integer of at least 1'],
-      ['string days', { ...rule, expirationDays: '7' as unknown as number }, 'expirationDays must be an integer of at least 1'],
-    ])('rejects %s with STORAGE_LIFECYCLE_RULE_INVALID and says why, before touching S3', async (_label, input, reason) => {
-      const { service, send } = makeService()
-      const error = await rejection(service.upsert(input))
-      expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_RULE_INVALID', status: 400 })
-      expect(detailsOf(error)).toEqual({ reason })
-      expect(send).not.toHaveBeenCalled()
-    })
+      [
+        'a non-string prefix',
+        { ...rule, prefix: 12 as unknown as string },
+        'Prefix must be a non-empty string',
+      ],
+      [
+        'zero days',
+        { ...rule, expirationDays: 0 },
+        'expirationDays must be an integer of at least 1',
+      ],
+      [
+        'negative days',
+        { ...rule, expirationDays: -3 },
+        'expirationDays must be an integer of at least 1',
+      ],
+      [
+        'fractional days',
+        { ...rule, expirationDays: 1.5 },
+        'expirationDays must be an integer of at least 1',
+      ],
+      [
+        'NaN days',
+        { ...rule, expirationDays: Number.NaN },
+        'expirationDays must be an integer of at least 1',
+      ],
+      [
+        'Infinity days',
+        { ...rule, expirationDays: Number.POSITIVE_INFINITY },
+        'expirationDays must be an integer of at least 1',
+      ],
+      [
+        'string days',
+        { ...rule, expirationDays: '7' as unknown as number },
+        'expirationDays must be an integer of at least 1',
+      ],
+    ])(
+      'rejects %s with STORAGE_LIFECYCLE_RULE_INVALID and says why, before touching S3',
+      async (_label, input, reason) => {
+        const { service, send } = makeService()
+        const error = await rejection(service.upsert(input))
+        expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_RULE_INVALID', status: 400 })
+        expect(detailsOf(error)).toEqual({ reason })
+        expect(send).not.toHaveBeenCalled()
+      },
+    )
 
     it('accepts a 255-character id and a one-day expiration', async () => {
       // The inclusive boundaries of both limits.
@@ -435,153 +564,32 @@ describe('BucketLifecycleService.upsert', () => {
       ['a null byte', 'exp\0iring/'],
     ])('runs the prefix through the key guard and rejects %s', async (_label, prefix) => {
       const { service, send } = makeService()
-      await expect(service.upsert({ ...rule, prefix })).rejects.toMatchObject({ code: 'STORAGE_KEY_INVALID' })
+      await expect(service.upsert({ ...rule, prefix })).rejects.toMatchObject({
+        code: 'STORAGE_KEY_INVALID',
+      })
       expect(send).not.toHaveBeenCalled()
     })
-  })
-})
-
-describe('BucketLifecycleService.upsert, multipart-abort rules', () => {
-  const abort = { id: 'abort-stale', prefix: 'uploads/', abortIncompleteMultipartDays: 7 }
-
-  it('writes an AbortIncompleteMultipartUpload rule and no expiration', async () => {
-    const { service, send } = makeService()
-    send.mockRejectedValueOnce(noSuchLifecycle()).mockResolvedValueOnce({})
-
-    await service.upsert(abort)
-
-    expect(putRules(send)).toEqual([
-      {
-        ID: 'abort-stale',
-        Status: 'Enabled',
-        Filter: { Prefix: 'uploads/' },
-        AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 },
-      },
-    ])
-  })
-
-  it('keeps every other rule field for field, and replaces an expiration rule that has the same id', async () => {
-    const { service, send } = makeService()
-    const existing = [
-      ...foreignRules(),
-      { ID: 'abort-stale', Status: 'Enabled', Filter: { Prefix: 'old/' }, Expiration: { Days: 3 } },
-    ]
-    send.mockResolvedValueOnce({ Rules: existing }).mockResolvedValueOnce({})
-
-    await service.upsert(abort)
-
-    const written = putRules(send)
-    expect(written.slice(0, 3)).toEqual(foreignRules())
-    expect(written[3]).toEqual({
-      ID: 'abort-stale',
-      Status: 'Enabled',
-      Filter: { Prefix: 'uploads/' },
-      AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 },
-    })
-    expect(written[3]).not.toHaveProperty('Expiration')
-  })
-
-  it('preserves an existing multipart-abort rule when an expiration rule is added', async () => {
-    const { service, send } = makeService()
-    const stored: LifecycleRule = {
-      ID: 'theirs',
-      Status: 'Enabled',
-      Filter: { Prefix: '' },
-      AbortIncompleteMultipartUpload: { DaysAfterInitiation: 2 },
-    }
-    send.mockResolvedValueOnce({ Rules: [stored] }).mockResolvedValueOnce({})
-
-    await service.upsert({ id: 'expire-tmp', prefix: 'expiring/', expirationDays: 7 })
-
-    expect(putRules(send)[0]).toEqual(stored)
-  })
-
-  it('accepts an empty prefix, which means the whole bucket without a keyPrefix', async () => {
-    // Aborting stale uploads deletes no object, so the whole-bucket form AWS documents is allowed.
-    const { service, send } = makeService()
-    send.mockRejectedValueOnce(noSuchLifecycle()).mockResolvedValueOnce({})
-
-    await service.upsert({ ...abort, prefix: '' })
-
-    expect(putRules(send)[0]).toMatchObject({ Filter: { Prefix: '' } })
-  })
-
-  it('maps an empty prefix to the keyPrefix namespace, and prefixes a non-empty one', async () => {
-    const { service, send } = makeService({ keyPrefix: 'tenant-a' })
-    send.mockRejectedValueOnce(noSuchLifecycle()).mockResolvedValueOnce({})
-    await service.upsert({ ...abort, prefix: '' })
-    expect(putRules(send)[0]).toMatchObject({ Filter: { Prefix: 'tenant-a/' } })
-
-    const second = makeService({ keyPrefix: 'tenant-a' })
-    second.send.mockRejectedValueOnce(noSuchLifecycle()).mockResolvedValueOnce({})
-    await second.service.upsert(abort)
-    expect(putRules(second.send)[0]).toMatchObject({ Filter: { Prefix: 'tenant-a/uploads/' } })
-  })
-
-  it.each([
-    ['zero days', { ...abort, abortIncompleteMultipartDays: 0 }, 'abortIncompleteMultipartDays must be an integer of at least 1'],
-    ['fractional days', { ...abort, abortIncompleteMultipartDays: 1.5 }, 'abortIncompleteMultipartDays must be an integer of at least 1'],
-    ['string days', { ...abort, abortIncompleteMultipartDays: '7' as unknown as number }, 'abortIncompleteMultipartDays must be an integer of at least 1'],
-    ['a non-string prefix', { ...abort, prefix: 5 as unknown as string }, 'Prefix must be a string'],
-    ['both day counts', { ...abort, expirationDays: 3 } as unknown as LifecycleRuleInput, 'Give exactly one of expirationDays and abortIncompleteMultipartDays'],
-    ['an empty id', { ...abort, id: '' }, 'Rule id must be a non-empty string'],
-  ])('rejects %s before touching S3', async (_label, input, reason) => {
-    const { service, send } = makeService()
-
-    const error = await rejection(service.upsert(input))
-
-    expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_RULE_INVALID' })
-    expect(detailsOf(error)).toEqual({ reason })
-    expect(send).not.toHaveBeenCalled()
-  })
-
-  it('still rejects an expiration rule with an empty prefix and with no day count', async () => {
-    const { service, send } = makeService()
-
-    const empty = await rejection(service.upsert({ id: 'x', prefix: '', expirationDays: 7 }))
-    const none = await rejection(service.upsert({ id: 'x', prefix: 'p/' } as unknown as LifecycleRuleInput))
-
-    expect(detailsOf(empty)).toEqual({ reason: 'Prefix must be a non-empty string' })
-    expect(detailsOf(none)).toEqual({ reason: 'expirationDays must be an integer of at least 1' })
-    expect(send).not.toHaveBeenCalled()
-  })
-
-  it('refuses to replace an abort rule that keyPrefix does not confine', async () => {
-    const { service, send } = makeService({ keyPrefix: 'tenant-a' })
-    send.mockResolvedValueOnce({
-      Rules: [{ ID: 'abort-stale', Status: 'Enabled', Filter: { Prefix: 'tenant-b/' }, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 } }],
-    })
-
-    const error = await rejection(service.upsert(abort))
-
-    expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_RULE_INVALID' })
-    expect(send).toHaveBeenCalledTimes(1)
-  })
-
-  it('removes an abort rule by id like any other rule', async () => {
-    const { service, send } = makeService()
-    send
-      .mockResolvedValueOnce({
-        Rules: [
-          ...foreignRules(),
-          { ID: 'abort-stale', Status: 'Enabled', Filter: { Prefix: 'uploads/' }, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 } },
-        ],
-      })
-      .mockResolvedValueOnce({})
-
-    await expect(service.remove('abort-stale')).resolves.toBe(true)
-
-    expect(putRules(send)).toEqual(foreignRules())
   })
 })
 
 describe('BucketLifecycleService.remove', () => {
   it('removes only the rule with that id and keeps the rest field for field', async () => {
     const { service, send } = makeService()
-    const withOwned = [...foreignRules(), { ID: 'expire-tmp', Status: 'Enabled', Filter: { Prefix: 'expiring/' }, Expiration: { Days: 7 } }]
+    const withOwned = [
+      ...foreignRules(),
+      {
+        ID: 'expire-tmp',
+        Status: 'Enabled',
+        Filter: { Prefix: 'expiring/' },
+        Expiration: { Days: 7 },
+      },
+    ]
     send.mockResolvedValueOnce({ Rules: withOwned }).mockResolvedValueOnce({})
     await expect(service.remove('expire-tmp')).resolves.toBe(true)
-    expect(commandTypes(send)).toEqual([GetBucketLifecycleConfigurationCommand, PutBucketLifecycleConfigurationCommand])
+    expect(commandTypes(send)).toEqual([
+      GetBucketLifecycleConfigurationCommand,
+      PutBucketLifecycleConfigurationCommand,
+    ])
     expect(putRules(send)).toEqual(foreignRules())
   })
 
@@ -589,19 +597,40 @@ describe('BucketLifecycleService.remove', () => {
     // PutBucketLifecycleConfiguration with zero rules is invalid; DeleteBucketLifecycle is the only way to end up empty.
     const { service, send } = makeService()
     send
-      .mockResolvedValueOnce({ Rules: [{ ID: 'expire-tmp', Status: 'Enabled', Filter: { Prefix: 'expiring/' }, Expiration: { Days: 7 } }] })
+      .mockResolvedValueOnce({
+        Rules: [
+          {
+            ID: 'expire-tmp',
+            Status: 'Enabled',
+            Filter: { Prefix: 'expiring/' },
+            Expiration: { Days: 7 },
+          },
+        ],
+      })
       .mockResolvedValueOnce({})
     await expect(service.remove('expire-tmp')).resolves.toBe(true)
-    expect(commandTypes(send)).toEqual([GetBucketLifecycleConfigurationCommand, DeleteBucketLifecycleCommand])
+    expect(commandTypes(send)).toEqual([
+      GetBucketLifecycleConfigurationCommand,
+      DeleteBucketLifecycleCommand,
+    ])
     expect(inputs(send)[1]).toEqual({ Bucket: 'test-bucket' })
   })
 
   it('refuses to remove a rule that keyPrefix does not confine, and writes nothing', async () => {
     const { service, send } = makeService({ keyPrefix: 'tenant-a' })
     send.mockResolvedValueOnce({
-      Rules: [{ ID: 'theirs', Status: 'Enabled', Filter: { Prefix: 'tenant-b/' }, Expiration: { Days: 3 } }],
+      Rules: [
+        {
+          ID: 'theirs',
+          Status: 'Enabled',
+          Filter: { Prefix: 'tenant-b/' },
+          Expiration: { Days: 3 },
+        },
+      ],
     })
-    await expect(service.remove('theirs')).rejects.toMatchObject({ code: 'STORAGE_LIFECYCLE_RULE_INVALID' })
+    await expect(service.remove('theirs')).rejects.toMatchObject({
+      code: 'STORAGE_LIFECYCLE_RULE_INVALID',
+    })
     expect(send).toHaveBeenCalledTimes(1)
   })
 
@@ -622,17 +651,34 @@ describe('BucketLifecycleService.remove', () => {
   it('echoes back the default-minimum-object-size setting on the put', async () => {
     const { service, send } = makeService()
     send
-      .mockResolvedValueOnce({ Rules: [...foreignRules(), { ID: 'gone', Status: 'Enabled', Filter: { Prefix: 'g/' }, Expiration: { Days: 2 } }], TransitionDefaultMinimumObjectSize: 'all_storage_classes_128K' })
+      .mockResolvedValueOnce({
+        Rules: [
+          ...foreignRules(),
+          { ID: 'gone', Status: 'Enabled', Filter: { Prefix: 'g/' }, Expiration: { Days: 2 } },
+        ],
+        TransitionDefaultMinimumObjectSize: 'all_storage_classes_128K',
+      })
       .mockResolvedValueOnce({})
     await service.remove('gone')
-    expect(inputs(send)[1]).toMatchObject({ TransitionDefaultMinimumObjectSize: 'all_storage_classes_128K' })
+    expect(inputs(send)[1]).toMatchObject({
+      TransitionDefaultMinimumObjectSize: 'all_storage_classes_128K',
+    })
   })
 
   it('maps a failed delete to a typed error', async () => {
     const { service, send } = makeService()
     send
-      .mockResolvedValueOnce({ Rules: [{ ID: 'only', Status: 'Enabled', Filter: { Prefix: 'o/' }, Expiration: { Days: 2 } }] })
-      .mockRejectedValueOnce(Object.assign(new Error('nope'), { name: 'MethodNotAllowed', $metadata: { httpStatusCode: 405 } }))
+      .mockResolvedValueOnce({
+        Rules: [
+          { ID: 'only', Status: 'Enabled', Filter: { Prefix: 'o/' }, Expiration: { Days: 2 } },
+        ],
+      })
+      .mockRejectedValueOnce(
+        Object.assign(new Error('nope'), {
+          name: 'MethodNotAllowed',
+          $metadata: { httpStatusCode: 405 },
+        }),
+      )
     const error = await rejection(service.remove('only', { bucket: 'asked-bucket' }))
     expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_UNSUPPORTED' })
     expect(detailsOf(error)).toMatchObject({ bucket: 'asked-bucket', op: 'lifecycle.remove' })
@@ -640,7 +686,9 @@ describe('BucketLifecycleService.remove', () => {
 
   it('honours a per-call bucket', async () => {
     const { service, send } = makeService()
-    send.mockResolvedValueOnce({ Rules: [{ ID: 'a', Status: 'Enabled' }] }).mockResolvedValueOnce({})
+    send
+      .mockResolvedValueOnce({ Rules: [{ ID: 'a', Status: 'Enabled' }] })
+      .mockResolvedValueOnce({})
     await service.remove('a', { bucket: 'other' })
     expect(inputs(send).map((i) => i.Bucket)).toEqual(['other', 'other'])
   })
@@ -649,13 +697,16 @@ describe('BucketLifecycleService.remove', () => {
     ['an empty id', '', 'Rule id must be a non-empty string'],
     ['a non-string id', 5 as unknown as string, 'Rule id must be a non-empty string'],
     ['an id longer than 255 characters', 'x'.repeat(256), 'Rule id must be at most 255 characters'],
-  ])('rejects %s with STORAGE_LIFECYCLE_RULE_INVALID and says why, before touching S3', async (_label, id, reason) => {
-    const { service, send } = makeService()
-    const error = await rejection(service.remove(id))
-    expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_RULE_INVALID' })
-    expect(detailsOf(error)).toEqual({ reason })
-    expect(send).not.toHaveBeenCalled()
-  })
+  ])(
+    'rejects %s with STORAGE_LIFECYCLE_RULE_INVALID and says why, before touching S3',
+    async (_label, id, reason) => {
+      const { service, send } = makeService()
+      const error = await rejection(service.remove(id))
+      expect(error).toMatchObject({ code: 'STORAGE_LIFECYCLE_RULE_INVALID' })
+      expect(detailsOf(error)).toEqual({ reason })
+      expect(send).not.toHaveBeenCalled()
+    },
+  )
 
   it('throws STORAGE_NOT_CONFIGURED without credentials', async () => {
     const { service, send } = makeService({}, false)
