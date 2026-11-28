@@ -5,9 +5,7 @@ import type { Config } from 'jest'
  * CommonJS-flavored `tsconfig.jest.json`. Worker count is capped at 50% to keep
  * memory bounded in CI and local runs. The global coverage threshold is 100% so
  * the per-PR `pnpm test:cov` gate enforces the same floor as the release gate,
- * with no drift. `passWithNoTests` keeps the gate green on an empty scaffold,
- * and `collectCoverageFrom` is scoped so the threshold never trips on zero
- * collected files.
+ * with no drift. A run that selects no test fails where `CI` is `true`.
  */
 const config: Config = {
   rootDir: '.',
@@ -29,7 +27,9 @@ const config: Config = {
   },
   clearMocks: true,
   restoreMocks: true,
-  passWithNoTests: true,
+  passWithNoTests: process.env['CI'] !== 'true',
+  // Stryker sandboxes hold copies of the package and its specs.
+  modulePathIgnorePatterns: ['<rootDir>/.stryker-tmp/'],
   maxWorkers: '50%',
   collectCoverageFrom: ['src/**/*.ts', '!**/index.ts', '!**/*.spec.ts'],
   coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
